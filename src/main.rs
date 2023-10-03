@@ -2,6 +2,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::mem;
 
+mod elf_utils;
+
+use elf_utils::read_text_instructions;
+
 fn n_bit_mask(num_bits: u64) -> u64 {
     (1 << num_bits) - 1
 }
@@ -57,9 +61,6 @@ fn imm_stype(instr: u32) -> i16 {
     }
     unsafe { mem::transmute(unsigned) }
 }
-
-
-
 
 #[derive(Debug)]
 struct Memory {
@@ -224,14 +225,14 @@ impl Cpu {
                 self.registers.set(rd, mem_value);
             }
             35 => {
-		let rs1 = rs1(instr);
-		let rs1_value = self.registers.get(rs1) as i64;
-		let rs2 = rs2(instr);
-		let rs2_value = self.registers.get(rs2);
-		let imm = imm_stype(instr);
-		let addr = rs1_value.wrapping_add(imm as i64) as usize;
+                let rs1 = rs1(instr);
+                let rs1_value = self.registers.get(rs1) as i64;
+                let rs2 = rs2(instr);
+                let rs2_value = self.registers.get(rs2);
+                let imm = imm_stype(instr);
+                let addr = rs1_value.wrapping_add(imm as i64) as usize;
                 println!("sd *(x{rs1} + {imm}) = x{rs2}");
-		self.data.write_doubleword(addr, rs2_value);
+                self.data.write_doubleword(addr, rs2_value);
             }
             51 => {
                 let rd = rd(instr);
@@ -282,17 +283,18 @@ impl fmt::Display for Cpu {
                 write!(f, " x{n}={}", self.registers.get(n))?;
             }
         }
-	writeln!(f, "\naddr.   instr.      data")?;
-	for addr in (0..32).step_by(4) {
+        writeln!(f, "\naddr.   instr.      data")?;
+        for addr in (0..32).step_by(4) {
             let instruction = self.instructions.read_word(addr);
-	    let data = self.data.read_word(addr);
+            let data = self.data.read_word(addr);
             writeln!(f, " {addr:02x}    {instruction:08x}   {data:08x}")?;
         }
-	Ok(())
+        Ok(())
     }
 }
 
 fn main() {
+
     let mut cpu = Cpu::new();
 
     cpu.write_data(0 * 8, 10);
@@ -300,11 +302,13 @@ fn main() {
     cpu.write_data(2 * 8, 3);
     cpu.write_data(3 * 8, 4);
 
-    cpu.write_instruction(0, 0x00003083); // ld x1, 0(x0)
-    cpu.write_instruction(4, 0xffe0b103); // ld x2, -2(x1)
-    cpu.write_instruction(8, 0x00208233); // add x4, x1, x2
-    cpu.write_instruction(12, 0x401201b3); // sub x3, x4, x1
-    cpu.write_instruction(16, 0x001131a3); // sd x1, 3(x2)
+    let instructions = read_text_instructions(&format!("asm/add_memory.out"));
+
+    let mut addr = 0;
+    for instr in instructions { 
+	cpu.write_instruction(addr, instr);
+	addr += 4;
+    }
 
     // cpu.write_instruction(8, 0x403100b3); // sub x1, x2, x3
     // cpu.write_instruction(12, 0x003170b3); // and x1, x2, x3
