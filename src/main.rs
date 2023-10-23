@@ -26,9 +26,13 @@ fn main() {
     // Set the program counter to the function
     cpu.set_program_counter(sym_offset.try_into().unwrap());
     println!("{cpu}");
+
+    println!("PROGRAM EXECUTION STARTS HERE ------------------");
     
-    for _ in 0..sym_size {
+    for _ in (0..sym_size).step_by(4) {
         cpu.execute_instruction();
         println!("{cpu}");
     }
+
+    println!("END --------------------------------------------");
 }

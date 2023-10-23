@@ -133,6 +133,8 @@ impl Cpu {
 		let target_address = 0xfffffffffffffff7 & rs1_value_plus_imm;
 		self.pc = target_address;
 		println!("jalr, x{rd} = pc + 4, pc = x{rs1} + {imm} = {target_address}");
+		// Return to avoid incrementing program counter
+		return;
 		
 	    },
             _ => unimplemented!("Missing implementation for opcode {op} of {instr:x}"),
