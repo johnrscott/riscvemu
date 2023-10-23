@@ -1,12 +1,13 @@
 use crate::register_file::RegisterFile;
 use std::fmt;
+use std::mem;
 
 use crate::{fields, memory::Memory};
 
 #[derive(Debug)]
 pub struct Cpu {
     registers: RegisterFile,
-    pc: usize,
+    pc: u64,
     instructions: Memory,
     data: Memory,
 }
@@ -21,7 +22,7 @@ impl Cpu {
         }
     }
 
-    pub fn set_program_counter(&mut self, pc: usize) {
+    pub fn set_program_counter(&mut self, pc: u64) {
         if pc % 4 != 0 {
             panic!("Program counter {pc} is not a multiple of 4");
         }
@@ -47,7 +48,7 @@ impl Cpu {
 
     pub fn execute_instruction(&mut self) {
         // Read the next instruction
-        let instr = self.instructions.read_word(self.pc);
+        let instr = self.instructions.read_word(self.pc.try_into().unwrap());
 
         // Check which instruction is being executed
         let op = fields::opcode(instr);
@@ -102,9 +103,39 @@ impl Cpu {
                 }
             }
             99 => {
-                println!("beq")
-            }
-            _ => unimplemented!("Missing implementation for opcode {op} of {instr}"),
+                println!("beq -- not doing anything yet")
+            },
+	    19 => {
+		let rd = fields::rd(instr);
+		let rs1 = fields::rs1(instr);
+		let rs1_value = self.registers.get(rs1);
+		let imm = fields::imm_itype(instr);
+		match fields::funct3(instr) {
+		    0 => {
+			println!("addi, x{rd} = x{rs1} + {imm}");
+			// Need immediate as unsigned to do the register addition. First let
+			// rust convert i16 to i64, which will sign extended, then just pretend
+			// it is u64.
+			let imm_sign_extended_unsigned = unsafe { mem::transmute(imm as i64) };
+			self.registers.set(rd, rs1_value.wrapping_add(imm_sign_extended_unsigned));
+		    },
+		    _ => unimplemented!("Missing implementation for funct3 {} of {instr}", fields::funct3(instr)),
+		}
+	    },
+	    103 => {
+		let rd = fields::rd(instr);
+		self.registers.set(rd, self.pc + 4);
+		let rs1 = fields::rs1(instr);
+		let rs1_value = self.registers.get(rs1);
+		let imm = fields::imm_itype(instr);
+		let imm_sign_extended_unsigned = unsafe { mem::transmute(imm as i64) };
+		let rs1_value_plus_imm = rs1_value.wrapping_add(imm_sign_extended_unsigned);
+		let target_address = 0xfffffffffffffff7 & rs1_value_plus_imm;
+		self.pc = target_address;
+		println!("jalr, x{rd} = pc + 4, pc = x{rs1} + {imm} = {target_address}");
+		
+	    },
+            _ => unimplemented!("Missing implementation for opcode {op} of {instr:x}"),
         }
 
         // Increment program counter
@@ -114,7 +145,7 @@ impl Cpu {
 
 impl fmt::Display for Cpu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CPU pc={}", self.pc);
+        write!(f, "CPU pc={:x}", self.pc);
         for n in 0..32 {
             let value = self.registers.get(n);
             if value != 0 {

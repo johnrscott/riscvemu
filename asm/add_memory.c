@@ -10,3 +10,8 @@ void add_memory() {
     // Add up the contents of a and b and place in c
     *c = *a + *b;
 }
+
+void set_memory() {
+    volatile long *a = (long*)8;
+    *a = 11;
+}

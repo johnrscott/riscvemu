@@ -34,7 +34,9 @@ pub fn read_text_instructions(file_path: &String) -> Vec<u32> {
     instructions
 }
 
-pub fn read_all_symbols(file_path: &String) {
+/// Returns offset, assumed .text section currently. Returns the symbol start address
+/// and the length of the symbol (the number of bytes of .text it occupies)
+pub fn find_function_symbol(file_path: &String, symbol_name: &String) -> Option<(usize, usize)> {
     let path = std::path::PathBuf::from(file_path);
     let file_data = std::fs::read(path).expect("Could not read file.");
     let slice = file_data.as_slice();
@@ -45,16 +47,18 @@ pub fn read_all_symbols(file_path: &String) {
         .expect("symbol table to parse")
         .expect("symbol table to be present");
 
-    println!("{:?}", symtab);
-    
-    let common = file.find_common_data().expect("shdrs should parse");
-    // let dynsyms = common.dynsyms.unwrap();
-    // let strtab = common.dynsyms_strs.unwrap();
-    let hash_table = common.gnu_hash.unwrap();
-    // Use the hash table to find a given symbol in it.
-    let name = b"memset";
-    let (sym_idx, sym) = hash_table.find(name, &symtab, &strtab)
-	.expect("hash table and symbols should parse").unwrap();
+    for entry in symtab.iter() {
+        if entry.st_symtype() == elf::abi::STT_FUNC {
+            let name_strtab_index = entry.st_name;
+            let name = strtab
+                .get(name_strtab_index.try_into().unwrap())
+                .expect("Valid string table entry at index");
+            if name == symbol_name {
+                return Some((entry.st_value.try_into().unwrap(), entry.st_size.try_into().unwrap()));
+            }
+        }
+    }
+    None
 }
 
 pub fn load_text_section(cpu: &mut Cpu, elf_file_path: &String) {
