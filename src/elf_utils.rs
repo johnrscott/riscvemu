@@ -61,10 +61,10 @@ pub fn find_function_symbol(file_path: &String, symbol_name: &String) -> Option<
     None
 }
 
-pub fn load_text_section(cpu: &mut Cpu, elf_file_path: &String) {
+pub fn load_text_section(cpu: &mut Cpu, elf_file_path: &String, text_load_offset: usize) {
     let instructions = read_text_instructions(elf_file_path);
 
-    let mut addr = 0;
+    let mut addr = text_load_offset;
     for instr in instructions {
         cpu.write_instruction(addr, instr);
         addr += 4;

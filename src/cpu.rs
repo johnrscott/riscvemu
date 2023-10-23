@@ -46,10 +46,15 @@ impl Cpu {
         }
     }
 
-    pub fn execute_instruction(&mut self) {
+    pub fn execute_instruction(&mut self) -> Result<(), &'static str> {
         // Read the next instruction
         let instr = self.instructions.read_word(self.pc.try_into().unwrap());
 
+	// Check of zero instruction
+	if instr == 0 {
+	    return Err("Encountered illegal zero instruction");
+	}
+	
         // Check which instruction is being executed
         let op = fields::opcode(instr);
         match op {
@@ -134,7 +139,7 @@ impl Cpu {
 		self.pc = target_address;
 		println!("jalr, x{rd} = pc + 4, pc = x{rs1} + {imm} = {target_address}");
 		// Return to avoid incrementing program counter
-		return;
+		return Ok(());
 		
 	    },
             _ => unimplemented!("Missing implementation for opcode {op} of {instr:x}"),
@@ -142,6 +147,7 @@ impl Cpu {
 
         // Increment program counter
         self.pc += 4;
+	Ok(())
     }
 }
 
