@@ -66,7 +66,7 @@ pub fn load_text_section(cpu: &mut Cpu, elf_file_path: &String, text_load_offset
 
     let mut addr = text_load_offset;
     for instr in instructions {
-        cpu.write_instruction(addr, instr);
+        cpu.write_instruction(addr.try_into().unwrap(), instr);
         addr += 4;
     }
 }

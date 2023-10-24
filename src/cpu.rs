@@ -29,11 +29,11 @@ impl Cpu {
         self.pc = pc;
     }
 
-    pub fn write_instruction(&mut self, pc: usize, instr: u32) {
+    pub fn write_instruction(&mut self, pc: u64, instr: u32) {
         if pc % 4 != 0 {
             panic!("Program counter {pc} is not a multiple of 4");
         }
-        self.instructions.write_word(pc, instr);
+        self.instructions.write_word(pc.try_into().unwrap(), instr);
     }
 
     pub fn write_data(&mut self, addr: usize, value: u64, value_byte_width: usize) {
