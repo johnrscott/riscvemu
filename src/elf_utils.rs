@@ -54,7 +54,10 @@ pub fn find_function_symbol(file_path: &String, symbol_name: &String) -> Option<
                 .get(name_strtab_index.try_into().unwrap())
                 .expect("Valid string table entry at index");
             if name == symbol_name {
-                return Some((entry.st_value.try_into().unwrap(), entry.st_size.try_into().unwrap()));
+                return Some((
+                    entry.st_value.try_into().unwrap(),
+                    entry.st_size.try_into().unwrap(),
+                ));
             }
         }
     }
