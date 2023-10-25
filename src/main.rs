@@ -14,6 +14,7 @@ use elf_utils::load_text_section;
 
 use instr_encode::*;
 use instr_opcodes::*;
+use instr_decode::*;
 
 use crate::{cpu::Cpu, elf_utils::find_function_symbol, memory_patterns::write_constant_vector};
 
@@ -30,6 +31,10 @@ fn main() -> Result<(), &'static str> {
     let j = srai!(x2, x4, 3);
 
     println!("{a:x},{b:x},{c:x},{d:x},{e:x},{f:x},{g:x},{h:x},{i:x},{j:x}");
+
+    let x = Instr::from(g);
+    println!("{x}");
+	
     return Ok(());
 
     let mut cpu = Cpu::new();
