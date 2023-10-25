@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::{instr_encode::*, instr_opcodes::*};
+use std::fmt;
 
 /// RISC-V Instructions
 ///
@@ -62,8 +62,8 @@ macro_rules! opcode {
 
 macro_rules! rd {
     ($instr:expr) => {{
-	let rd: u8 = extract_field!($instr, 11, 7).try_into().unwrap();
-	rd
+        let rd: u8 = extract_field!($instr, 11, 7).try_into().unwrap();
+        rd
     }};
 }
 
@@ -71,6 +71,25 @@ macro_rules! lui_u_immediate {
     ($instr:expr) => {
         extract_field!($instr, 31, 12)
     };
+}
+
+/// Interpret the n least significant bits of
+/// value (u32) as signed (i32) by manually
+/// sign-extending based on bit n-1 and casting
+/// to a signed type.
+macro_rules! interpret_as_signed {
+    ($value:expr, $n:expr) => {{
+        let sign_bit = 1 & ($value >> ($n - 1));
+        let sign_extended = if sign_bit == 1 {
+            let sign_extension = (mask!(32 - $n) << $n);
+            sign_extension | $value
+        } else {
+            $value
+        };
+	unsafe {
+	    std::mem::transmute::<u32, i32>(sign_extended)
+	}
+    }};
 }
 
 impl Instr {
@@ -81,17 +100,20 @@ impl Instr {
                 let dest = rd!(instr);
                 let u_immediate = lui_u_immediate!(instr);
                 Self::Lui { dest, u_immediate }
-            },
-	    _ => unimplemented!("Opcode 0b{op:b} is not yet implemented")
+            }
+            _ => unimplemented!("Opcode 0b{op:b} is not yet implemented"),
         }
     }
 }
 
 impl fmt::Display for Instr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-	match &self {
-	    Self::Lui{dest, u_immediate} => write!(f, "lui x{dest}, {u_immediate}"),
-	    _ => unimplemented!("Missing Display implementation for {:?}", &self),
-	}
+        match &self {
+            Self::Lui { dest, u_immediate } => {
+                let u_immediate_signed = interpret_as_signed!(*u_immediate, 20);
+                write!(f, "lui x{dest}, {u_immediate_signed}")
+            }
+            _ => unimplemented!("Missing Display implementation for {:?}", &self),
+        }
     }
 }
