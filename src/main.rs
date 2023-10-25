@@ -14,11 +14,21 @@ use instr::*;
 
 use crate::{cpu::Cpu, elf_utils::find_function_symbol, memory_patterns::write_constant_vector};
 
-fn main() {
+fn main() -> Result<(), &'static str> {
 
-    let a = addi!(x0, 1, 23);
-    println!("{a:x}");
-    return;
+    let a = addi!(x0, x1, -23);
+    let b = slti!(x0, x1, -23);
+    let c = add!(x2, x1, x5);
+    let d = sb!(x2, x4, -4);
+    let e = beq!(x7, x23, -8);
+    let f = jal!(x7, -24);
+    let g = lui!(x7, -24);
+    let h = auipc!(x8, -25);
+    let i = slli!(x2, x4, 3);
+    let j = srai!(x2, x4, 3);
+    
+    println!("{a:x},{b:x},{c:x},{d:x},{e:x},{f:x},{g:x},{h:x},{i:x},{j:x}");
+    return Ok(());
 
     let mut cpu = Cpu::new();
 
