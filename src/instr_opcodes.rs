@@ -1,0 +1,12 @@
+const OP_LUI: u32 = 0b0110111;
+const OP_AUIPC: u32 = 0b0010111;
+const OP_JAL: u32 = 0b1101111;
+const OP_JALR: u32 = 0b1100111;
+const OP_IMM: u32 = 0b0010011;
+const OP: u32 = 0b0110011;
+const OP_32: u32 = 0b0111011;
+const OP_BRANCH: u32 = 0b1100011;
+const OP_LOAD: u32 = 0b0000011;
+const OP_STORE: u32 = 0b0100011;
+const OP_MISC_MEM: u32 = 0b0001111;
+const OP_SYSTEM: u32 = 0b1110011;
