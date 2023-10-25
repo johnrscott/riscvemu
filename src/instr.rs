@@ -245,9 +245,9 @@ macro_rules! utype_instr {
 }
 
 
-/// Instruction listing is in chapter 19 of RISC-V specification
 
-//// R32I
+// === RV32I and RV64I ===
+// (Instruction listing is in chapter 19 of RISC-V specification)
 
 utype_instr!(lui, 0b0110111);
 utype_instr!(auipc, 0b0010111);
@@ -329,3 +329,21 @@ rtype_instr!(sraw, 0b0100000, 0b101, 0b0111011);
 // csrrwi
 // csrrsi
 // csrrci
+
+// === RV32M and RV64M ===
+
+// Multiplication and division
+rtype_instr!(mul, 0b0000001, 0b000, 0b0110011);
+rtype_instr!(mulh, 0b0000001, 0b001, 0b0110011);
+rtype_instr!(mulhsu, 0b0000001, 0b010, 0b0110011);
+rtype_instr!(mulhu, 0b0000001, 0b011, 0b0110011);
+rtype_instr!(div, 0b0000001, 0b100, 0b0110011);
+rtype_instr!(divu, 0b0000001, 0b101, 0b0110011);
+rtype_instr!(rem, 0b0000001, 0b110, 0b0110011);
+rtype_instr!(remu, 0b0000001, 0b111, 0b0110011);
+// 64-bit
+rtype_instr!(mul, 0b0000001, 0b000, 0b0111011);
+rtype_instr!(div, 0b0000001, 0b100, 0b0111011);
+rtype_instr!(divu, 0b0000001, 0b101, 0b0111011);
+rtype_instr!(rem, 0b0000001, 0b110, 0b0111011);
+rtype_instr!(remu, 0b0000001, 0b111, 0b0111011);
