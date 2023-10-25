@@ -244,8 +244,6 @@ macro_rules! utype_instr {
     }
 }
 
-
-
 // === RV32I and RV64I ===
 // (Instruction listing is in chapter 19 of RISC-V specification)
 

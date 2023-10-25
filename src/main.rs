@@ -3,14 +3,14 @@ use std::fmt;
 mod cpu;
 mod elf_utils;
 mod fields;
-mod instr;
+mod instr_encode;
 mod memory;
 mod memory_patterns;
 mod register_file;
 
 use elf_utils::load_text_section;
 
-use instr::*;
+use instr_encode::*;
 
 use crate::{cpu::Cpu, elf_utils::find_function_symbol, memory_patterns::write_constant_vector};
 
