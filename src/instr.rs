@@ -113,14 +113,6 @@ macro_rules! itype_instr {
     }
 }
 
-/// Integer register-immediate instructions
-itype_instr!(addi, 0b000, 0b0010011);
-itype_instr!(slti, 0b010, 0b0010011);
-itype_instr!(sltiu, 0b011, 0b0010011);
-itype_instr!(xori, 0b100, 0b0010011);
-itype_instr!(ori, 0b110, 0b0010011);
-itype_instr!(andi, 0b111, 0b0010011);
-
 /// Here, upper is the only special value, which is always zero
 /// apart from in srai, where it is 0b0100000. 
 macro_rules! shift_instr {
@@ -137,9 +129,6 @@ macro_rules! shift_instr {
     }
 }
 
-shift_instr!(slli, 0b0000000, 0b001, 0b0010011);
-shift_instr!(srai, 0b0100000, 0b101, 0b0010011);
-
 macro_rules! rtype_instr {
     ($instruction:ident, $funct7:expr, $funct3:expr, $opcode:expr) => {
 	macro_rules! $instruction {
@@ -153,10 +142,6 @@ macro_rules! rtype_instr {
 	pub(crate) use $instruction;
     }
 }
-
-/// Integer register-register instructions
-rtype_instr!(add, 0b0000000, 0b000, 0b0110011);
-rtype_instr!(sub, 0b0100000, 0b000, 0b0110011);
 
 macro_rules! stype_instr {
     ($instruction:ident, $funct3:expr, $opcode:expr) => {
@@ -173,8 +158,6 @@ macro_rules! stype_instr {
 	pub(crate) use $instruction;
     }
 }
-
-stype_instr!(sb, 0b000, 0b010011);
 
 /// The shift-by-immediate instructions use I-type,
 /// but with a special encoding of the immediate that
@@ -236,9 +219,6 @@ macro_rules! btype_instr {
     }
 }
 
-/// Conditional branches
-btype_instr!(beq, 0b000, 0b1100011);
-
 macro_rules! jal {
     ($rd:expr, $imm:expr) => {{
 	let rd = reg_num!($rd);
@@ -264,5 +244,88 @@ macro_rules! utype_instr {
     }
 }
 
+
+/// Instruction listing is in chapter 19 of RISC-V specification
+
+//// R32I
+
 utype_instr!(lui, 0b0110111);
 utype_instr!(auipc, 0b0010111);
+// jal is defined above
+itype_instr!(jalr, 0b000, 0b1100111);
+
+// Conditional branches
+btype_instr!(beq, 0b000, 0b1100011);
+btype_instr!(bne, 0b001, 0b1100011);
+btype_instr!(blt, 0b100, 0b1100011);
+btype_instr!(bge, 0b101, 0b1100011);
+btype_instr!(bltu, 0b110, 0b1100011);
+btype_instr!(bltu, 0b110, 0b1100011);
+btype_instr!(bgeu, 0b111, 0b1100011);
+
+// Loads
+itype_instr!(lb, 0b000, 0b0000011);
+itype_instr!(lh, 0b001, 0b0000011);
+itype_instr!(lw, 0b010, 0b0000011);
+itype_instr!(lbu, 0b100, 0b0000011);
+itype_instr!(lhu, 0b101, 0b0000011);
+// 64-bi
+itype_instr!(lwu, 0b110, 0b0000011);
+itype_instr!(ld, 0b011, 0b0000011);
+
+// Stores
+stype_instr!(sb, 0b000, 0b0100011);
+stype_instr!(sh, 0b001, 0b0100011);
+stype_instr!(sw, 0b010, 0b0100011);
+// 64-bit
+stype_instr!(sd, 0b011, 0b0100011);
+
+/// Integer register-immediate instructions
+itype_instr!(addi, 0b000, 0b0010011);
+itype_instr!(slti, 0b010, 0b0010011);
+itype_instr!(sltiu, 0b011, 0b0010011);
+itype_instr!(xori, 0b100, 0b0010011);
+itype_instr!(ori, 0b110, 0b0010011);
+itype_instr!(andi, 0b111, 0b0010011);
+// 64-bit
+itype_instr!(addiw, 0b000, 0b0011011);
+
+// Shift-by-immediate instructions. When using the 64-bit
+// instruction set, these become 64-bit
+shift_instr!(slli, 0b0000000, 0b001, 0b0010011);
+shift_instr!(srli, 0b0000000, 0b101, 0b0010011);
+shift_instr!(srai, 0b0100000, 0b101, 0b0010011);
+// 64-bit
+shift_instr!(slliw, 0b0000000, 0b001, 0b0011011);
+shift_instr!(srliw, 0b0000000, 0b101, 0b0011011);
+shift_instr!(sraiw, 0b0100000, 0b101, 0b0011011);
+
+/// Integer register-register instructions
+rtype_instr!(add, 0b0000000, 0b000, 0b0110011);
+rtype_instr!(sub, 0b0100000, 0b000, 0b0110011);
+rtype_instr!(sll, 0b0000000, 0b001, 0b0110011);
+rtype_instr!(slt, 0b0000000, 0b010, 0b0110011);
+rtype_instr!(sltu, 0b0000000, 0b011, 0b0110011);
+rtype_instr!(xor, 0b0000000, 0b100, 0b0110011);
+rtype_instr!(srl, 0b0000000, 0b101, 0b0110011);
+rtype_instr!(sra, 0b0100000, 0b101, 0b0110011);
+rtype_instr!(or, 0b0000000, 0b110, 0b0110011);
+rtype_instr!(and, 0b0000000, 0b111, 0b0110011);
+// 64-bit
+rtype_instr!(addw, 0b0000000, 0b000, 0b0111011);
+rtype_instr!(subw, 0b0100000, 0b000, 0b0111011);
+rtype_instr!(sllw, 0b0000000, 0b001, 0b0111011);
+rtype_instr!(srlw, 0b0000000, 0b101, 0b0111011);
+rtype_instr!(sraw, 0b0100000, 0b101, 0b0111011);
+
+// fence
+// fence.i
+// ecall
+// ebreak
+
+// csrrw
+// csrrs
+// csrrc
+// csrrwi
+// csrrsi
+// csrrci
