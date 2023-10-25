@@ -1,8 +1,11 @@
-/// In the fields below, references to registers
-/// provide the index of the register, not its value.
+/// RISC-V Instructions
+///
+/// Field names below correspond to the names in the
+/// instruction set reference.
 enum Instr {
-    /// Load imm into the high 20 bits of rd
-    Lui { rd: u8, imm: u32 },
+    /// Load u_immediate into the high 20 bits of dest,
+    /// filling the low 12 bits with zeros.
+    Lui { dest: u8, u_immediate: u32 },
     /// Load imm into the high 20 bits of the pc
     Auipc { rd: u8, imm: u32 },
     /// Store the current pc+4 in rd, and set
@@ -32,7 +35,7 @@ enum Instr {
     /// imm is a multiple of two, treating the
     /// contents of rs1 and rs2 as unsigned;
     /// else do nothing.
-    Bltu { rs1: u8, rs2: u8, imm: u32 },
+    Bgeu { rs1: u8, rs2: u8, imm: u32 },
     /// Load the byte at address rs1 + imm into rd
     Lb { rd: u8, rs1: u8, imm: u32 },
     /// Load the halfword at address rs1 + imm into rd

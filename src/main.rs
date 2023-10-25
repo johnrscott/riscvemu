@@ -13,6 +13,7 @@ mod register_file;
 use elf_utils::load_text_section;
 
 use instr_encode::*;
+use instr_opcodes::*;
 
 use crate::{cpu::Cpu, elf_utils::find_function_symbol, memory_patterns::write_constant_vector};
 

@@ -1,5 +1,3 @@
-use crate::instr_opcodes::*;
-
 /// Make a bit-mask of n bits using mask!(n)
 macro_rules! mask {
     ($n:expr) => {
