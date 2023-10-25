@@ -258,7 +258,6 @@ btype_instr!(bne, 0b001, 0b1100011);
 btype_instr!(blt, 0b100, 0b1100011);
 btype_instr!(bge, 0b101, 0b1100011);
 btype_instr!(bltu, 0b110, 0b1100011);
-btype_instr!(bltu, 0b110, 0b1100011);
 btype_instr!(bgeu, 0b111, 0b1100011);
 
 // Loads
@@ -340,8 +339,8 @@ rtype_instr!(divu, 0b0000001, 0b101, 0b0110011);
 rtype_instr!(rem, 0b0000001, 0b110, 0b0110011);
 rtype_instr!(remu, 0b0000001, 0b111, 0b0110011);
 // 64-bit
-rtype_instr!(mul, 0b0000001, 0b000, 0b0111011);
-rtype_instr!(div, 0b0000001, 0b100, 0b0111011);
-rtype_instr!(divu, 0b0000001, 0b101, 0b0111011);
-rtype_instr!(rem, 0b0000001, 0b110, 0b0111011);
-rtype_instr!(remu, 0b0000001, 0b111, 0b0111011);
+rtype_instr!(mulw, 0b0000001, 0b000, 0b0111011);
+rtype_instr!(divw, 0b0000001, 0b100, 0b0111011);
+rtype_instr!(divuw, 0b0000001, 0b101, 0b0111011);
+rtype_instr!(remw, 0b0000001, 0b110, 0b0111011);
+rtype_instr!(remuw, 0b0000001, 0b111, 0b0111011);
