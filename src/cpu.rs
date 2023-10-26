@@ -156,7 +156,7 @@ impl Cpu {
 
 impl fmt::Display for Cpu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CPU pc={:x}", self.pc);
+        write!(f, "CPU pc={:x}", self.pc)?;
         for n in 0..32 {
             let value = self.registers.get(n);
             if value != 0 {

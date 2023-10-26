@@ -7,57 +7,148 @@ use std::fmt;
 /// instruction set reference.
 #[derive(Debug)]
 pub enum Instr {
-    /// Load u_immediate into the high 20 bits of dest,
-    /// filling the low 12 bits with zeros.
+    /// In RV32I and RV64I, load u_immediate into dest[31:12] bits of
+    /// dest, filling the low 12 bits with zeros. In RV64I, also sign
+    /// extend the result to the high bits of dest. u_immediate is 20
+    /// bits long.
     Lui { dest: u8, u_immediate: u32 },
-    /// Load imm into the high 20 bits of the pc
-    Auipc { rd: u8, imm: u32 },
-    /// Store the current pc+4 in rd, and set
-    /// pc = pc + imm, where imm is a multiple of 2.
-    Jal { rd: u8, imm: u32 },
-    /// Store the current pc+4 in rd, and set
-    /// pc = rs1 + imm (imm is a multiple of 2)
-    Jalr { rd: u8, rs1: u8, imm: u32 },
-    /// If rs1 == rs2, set pc = pc + imm, where
-    /// imm is a multiple of two; else do nothing.
-    Beq { rs1: u8, rs2: u8, imm: u32 },
-    /// If rs1 != rs2, set pc = pc + imm, where
-    /// imm is a multiple of two; else do nothing.
-    Bne { rs1: u8, rs2: u8, imm: u32 },
-    /// If rs1 < rs2, set pc = pc + imm, where
-    /// imm is a multiple of two; else do nothing.
-    Blt { rs1: u8, rs2: u8, imm: u32 },
-    /// If rs1 >= rs2, set pc = pc + imm, where
-    /// imm is a multiple of two; else do nothing.
-    Bge { rs1: u8, rs2: u8, imm: u32 },
-    /// If rs1 < rs2, set pc = pc + imm, where
-    /// imm is a multiple of two, treating the
-    /// contents of rs1 and rs2 as unsigned;
-    /// else do nothing.
-    Bltu { rs1: u8, rs2: u8, imm: u32 },
-    /// If rs1 >= rs2, set pc = pc + imm, where
-    /// imm is a multiple of two, treating the
-    /// contents of rs1 and rs2 as unsigned;
-    /// else do nothing.
-    Bgeu { rs1: u8, rs2: u8, imm: u32 },
-    /// Load the byte at address rs1 + imm into rd
-    Lb { rd: u8, rs1: u8, imm: u32 },
-    /// Load the halfword at address rs1 + imm into rd
-    Lh { rd: u8, rs1: u8, imm: u32 },
-    /// Load the word at address rs1 + imm into rd
-    Lw { rd: u8, rs1: u8, imm: u32 },
-    /// Store the byte in rs1 to address rs1 + imm
-    Sb { rs1: u8, rs2: u8, imm: u32 },
-    /// Store the halfword in rs1 to address rs1 + imm
-    Sh { rs1: u8, rs2: u8, imm: u32 },
-    /// Store the word in rs1 to address rs1 + imm
-    Sw { rs1: u8, rs2: u8, imm: u32 },
+    /// In RV32I, concatenate u_immediate with 12 low-order zeros, add
+    /// the result the the pc, and place the result in dest. In RV64I,
+    /// sign extend the result before adding to the pc. u_immediate is
+    /// 20 bits long.
+    Auipc { dest: u8, u_immediate: u32 },
+    /// In RV32I and RV64I, store pc+4 in dest, and set pc = pc +
+    /// offset, where offset is a multiple of 2. Offset is 21 bits
+    /// long.
+    Jal { dest: u8, offset: u32 },
+    /// In RV32I and RV64I, store pc+4 in dest, compute base + offset,
+    /// set bit 0 to zero, and add the result to the pc. The offset is
+    /// 12 bits long (and may be even or odd).
+    Jalr { dest: u8, base: u8, offset: u16 },
+    /// In RV32I and RV64I, If branch is taken, set pc = pc + offset,
+    /// where offset is a multiple of two; else do nothing. The
+    /// offset is 13 bits long.
+    ///
+    /// The condition for branch taken depends on the value in
+    /// mnemonic, which is one of:
+    /// - "beq": src1 == src2
+    /// - "bne": src1 != src2
+    /// - "blt": src1 < src2 as signed integers
+    /// - "bge": src1 >= src2 as signed integers
+    /// - "bltu": src1 < src2 as unsigned integers
+    /// - "bgeu": src1 >= src2 as unsigned integers
+    ///
+    Branch { mnemonic: String, src1: u8, src2: u8, offset: u16 },
+    /// In RV32I and RV64I, load the data at address base + offset
+    /// into dest. The offset is 12 bits long.
+    ///
+    /// The size of data, and the way it is loaded into dest, depends
+    /// on the mnemonic, as follows:
+    ///
+    /// In RV32I:
+    /// - "lb": load a byte, sign extend in dest
+    /// - "lh": load a halfword, sign extend in dest
+    /// - "lw": load a word
+    /// - "lbu": load a byte, zero extend in dest
+    /// - "lhu": load a halfword, zero extend in dest
+    ///
+    /// In RV64I:
+    /// - "lw": load a word, sign extend in dest
+    /// - "lwu": load a word, zero extend in dest
+    /// - "ld": load a doubleword
+    ///
+    /// Loads do not need to be aligned
+    Load { mnemonic: String, dest: u8, base: u8, offset: u16 },
+    /// In RV32I and RV64I, load the data at src into address base +
+    /// offset. The offset is 12 bits long.
+    ///
+    /// The mnemonic determines the width of data that is stored to
+    /// memory:
+    ///
+    /// In RV32I:
+    /// - "sb": store a byte
+    /// - "sh": store a halfword
+    /// - "sw": store a word
+    ///
+    /// In RV64I:
+    /// - "sd": store a doubleword
+    ///
+    /// Stores do not need to be aligned
+    Store { mnemonic: String, src: u8, base: u8, offset: u16 },
+    /// In RV32I and RV64I, perform an operation between the value in
+    /// register src and the i_immediate and store the result in dest.
+    ///
+    /// The operation performed is determined by the mnemonic as follows:
+    /// - "addi": dest = src + i_immediate
+    /// - "slti": dest = (src < i_immediate) ? 1 : 0, signed comparison
+    /// - "sltiu": dest = (src < i_immediate) ? 1 : 0, unsigned comparison
+    /// - "andi": dest = src & i_immediate
+    /// - "ori": dest = src | i_immediate
+    /// - "xori": dest = src ^ i_immediate
+    ///
+    RegImm { mnemonic: String, dest: u8, src: u8, i_immediate: u16},
+    /// In RV32I and RV64I, perform an operation between the values in
+    /// src1 and src2 and place the result in dest
+    ///
+    /// In RV32I, the operation performed is determined by the mnemonic
+    /// as follows:
+    /// - "add": dest = src1 + src2
+    /// - "sub": dest = src1 + src2
+    /// - "slt": dest = (src1 < src2) ? 1 : 0, signed comparison
+    /// - "sltu": dest = (src1 < src2) ? 1 : 0, unsigned comparison
+    /// - "and": dest = src1 & src2
+    /// - "or": dest = src1 | src2
+    /// - "xor": dest = src1 ^ src2
+    /// - "sll": dest = src1 << (0x1f & src2)
+    /// - "srl": dest = src1 >> (0x1f & src2) (logical)
+    /// - "sra": dest = src1 >> (0x1f & src2) (arithmetic)
+    ///
+    /// In RV64I, the shift operators using the bottom 6 bits of
+    /// src2 as the shift amount: (0x3f & src2). In addition, the
+    /// following instructions operate on the low 32 bits of the
+    /// registers:
+    /// - "addw"
+    /// - "subw"
+    /// - "sllw"
+    /// - "srlw"
+    /// - "sraw"
+    ///
+    RegReg { mnemonic: String, dest: u8, src1: u8, src2: u8 }    
 }
 
 macro_rules! opcode {
     ($instr:expr) => {
         extract_field!($instr, 6, 0)
     };
+}
+
+macro_rules! funct3 {
+    ($instr:expr) => {
+        extract_field!($instr, 14, 12)
+    };
+}
+
+macro_rules! funct7 {
+    ($instr:expr) => {
+        extract_field!($instr, 31, 25)
+    };
+}
+
+macro_rules! imm_itype {
+    ($instr:expr) => {{
+	let imm: u16 = extract_field!($instr, 31, 20).try_into().unwrap();
+	imm
+    }};
+}
+
+macro_rules! imm_btype {
+    ($instr:expr) => {{
+        let imm12 = extract_field!($instr, 31, 31);
+    	let imm11 = extract_field!($instr, 7, 7);
+	let imm10_5 = extract_field!($instr, 30, 25);
+	let imm4_1 = extract_field!($instr, 11, 8);
+	(imm12 << 12) | (imm11 << 11) | (imm10_5 << 5) | (imm4_1 << 1)
+    }};
 }
 
 macro_rules! rd {
@@ -67,28 +158,56 @@ macro_rules! rd {
     }};
 }
 
+macro_rules! rs1 {
+    ($instr:expr) => {{
+        let rs1: u8 = extract_field!($instr, 19, 15).try_into().unwrap();
+        rs1
+    }};
+}
+
+macro_rules! rs2 {
+    ($instr:expr) => {{
+        let rs2: u8 = extract_field!($instr, 24, 20).try_into().unwrap();
+        rs2
+    }};
+}
+
+
 macro_rules! lui_u_immediate {
     ($instr:expr) => {
         extract_field!($instr, 31, 12)
     };
 }
 
+/// Return the offset including the least-significant
+/// zero (i.e. 21 bits long)
+macro_rules! jal_offset {
+    ($instr:expr) => {{
+        let imm20 = extract_field!($instr, 31, 31);
+	let imm19_12 = extract_field!($instr, 19, 12);
+	let imm11 = extract_field!($instr, 20, 20);
+    	let imm10_1 = extract_field!($instr, 30, 21);
+	(imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1)
+    }};
+}
+
 /// Interpret the n least significant bits of
 /// value (u32) as signed (i32) by manually
 /// sign-extending based on bit n-1 and casting
-/// to a signed type.
+/// to a signed type. When you use this macro,
+/// make sure to include the type of the result
+/// (e.g. x: i16 = interpret_as_signed!(...))
 macro_rules! interpret_as_signed {
     ($value:expr, $n:expr) => {{
         let sign_bit = 1 & ($value >> ($n - 1));
         let sign_extended = if sign_bit == 1 {
-            let sign_extension = (mask!(32 - $n) << $n);
+	    let all_ones = ((0*$value).wrapping_sub(1));
+            let sign_extension = all_ones - mask!($n);
             sign_extension | $value
         } else {
             $value
         };
-	unsafe {
-	    std::mem::transmute::<u32, i32>(sign_extended)
-	}
+        unsafe { std::mem::transmute(sign_extended) }
     }};
 }
 
@@ -101,6 +220,116 @@ impl Instr {
                 let u_immediate = lui_u_immediate!(instr);
                 Self::Lui { dest, u_immediate }
             }
+            OP_AUIPC => {
+                let dest = rd!(instr);
+                let u_immediate = lui_u_immediate!(instr);
+                Self::Auipc { dest, u_immediate }
+            }
+            OP_JAL => {
+                let dest = rd!(instr);
+                let offset = jal_offset!(instr);
+                Self::Jal { dest, offset }
+            }
+            OP_JALR => {
+                let dest = rd!(instr);
+		let base = rs1!(instr);
+                let offset = imm_itype!(instr);
+                Self::Jalr { dest, base, offset }
+            }
+            OP_BRANCH => {
+                let src1 = rs1!(instr);
+		let src2 = rs2!(instr);
+                let offset = imm_btype!(instr).try_into().unwrap();
+		let funct3 = funct3!(instr);
+		let mnemonic = match funct3 {
+		    FUNCT3_BEQ => format!("beq"),
+		    FUNCT3_BNE => format!("bne"),
+		    FUNCT3_BLT => format!("blt"),
+		    FUNCT3_BGE => format!("bge"),
+		    FUNCT3_BLTU => format!("bltu"),
+		    FUNCT3_BGEU => format!("bgeu"),
+		    _ => panic!("Should change this to enum")
+		};
+		Self::Branch { mnemonic, src1, src2, offset }
+            }
+            OP_LOAD => {
+                let dest = rd!(instr);
+		let base = rs1!(instr);
+                let offset = imm_itype!(instr);
+		let funct3 = funct3!(instr);
+		let mnemonic = match funct3 {
+		    FUNCT3_B => format!("lb"),
+		    FUNCT3_H => format!("lh"),
+		    FUNCT3_W => format!("lw"),
+		    FUNCT3_BU => format!("lbu"),
+		    FUNCT3_HU => format!("lhu"),
+		    FUNCT3_WU => format!("lwu"),
+		    FUNCT3_D => format!("ld"),
+		    _ => panic!("Should change this to enum")
+		};
+		Self::Load { mnemonic, dest, base, offset }
+            }
+            OP_STORE => {
+                let src = rs2!(instr);
+		let base = rs1!(instr);
+                let offset = imm_itype!(instr);
+		let funct3 = funct3!(instr);
+		let mnemonic = match funct3 {
+		    FUNCT3_B => format!("sb"),
+		    FUNCT3_H => format!("sh"),
+		    FUNCT3_W => format!("sw"),
+		    FUNCT3_D => format!("sd"),
+		    _ => panic!("Should change this to enum")
+		};
+		Self::Store { mnemonic, src, base, offset }
+            }
+            OP_IMM => {
+                let src = rs1!(instr);
+		let dest = rd!(instr);
+                let i_immediate = imm_itype!(instr);
+		let funct3 = funct3!(instr);
+		let mnemonic = match funct3 {
+		    FUNCT3_ADDI => format!("addi"),
+		    FUNCT3_SLTI => format!("slti"),
+		    FUNCT3_SLTIU => format!("sltiu"),
+		    FUNCT3_ANDI => format!("andi"),
+		    FUNCT3_ORI => format!("ori"),
+		    FUNCT3_XORI => format!("xori"),
+		    _ => panic!("Should change this to enum")
+		};
+		Self::RegImm { mnemonic, dest, src, i_immediate }
+            }
+            OP => {
+                let src1 = rs1!(instr);
+		let src2 = rs2!(instr);
+		let dest = rd!(instr);
+		let funct3 = funct3!(instr);
+		let funct7 = funct7!(instr);
+		let mnemonic = match funct3 {
+		    FUNCT3_ADD => {
+			if funct7 == FUNCT7_SUB {
+			    format!("sub")
+			} else {
+			    format!("add")
+			}
+		    }
+		    FUNCT3_SLL => format!("sll"),
+		    FUNCT3_SLT => format!("slt"),
+		    FUNCT3_SLTU => format!("sltu"),
+		    FUNCT3_XOR => format!("xor"),
+		    FUNCT3_SRL => {
+			if funct7 == FUNCT7_SRA {
+			    format!("sra")
+			} else {
+			    format!("srl")
+			}
+		    }
+		    FUNCT3_OR => format!("or"),
+		    FUNCT3_AND => format!("and"),
+		    _ => panic!("Should change this to enum")
+		};
+		Self::RegReg { mnemonic, dest, src1, src2 }
+            }
             _ => unimplemented!("Opcode 0b{op:b} is not yet implemented"),
         }
     }
@@ -110,10 +339,40 @@ impl fmt::Display for Instr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Lui { dest, u_immediate } => {
-                let u_immediate_signed = interpret_as_signed!(*u_immediate, 20);
+                let u_immediate_signed: i32 = interpret_as_signed!(*u_immediate, 20);
                 write!(f, "lui x{dest}, {u_immediate_signed}")
             }
-            _ => unimplemented!("Missing Display implementation for {:?}", &self),
+            Self::Auipc { dest, u_immediate } => {
+                let u_immediate_signed: i32 = interpret_as_signed!(*u_immediate, 20);
+                write!(f, "auipc x{dest}, {u_immediate_signed}")
+            }
+            Self::Jal { dest, offset } => {
+                let offset_signed: i32 = interpret_as_signed!(*offset, 21);
+                write!(f, "jal x{dest}, {offset_signed}")
+            }
+            Self::Jalr { dest, base, offset } => {
+                let offset_signed: i16 = interpret_as_signed!(*offset, 12);
+                write!(f, "jalr x{dest}, x{base}, {offset_signed}")
+            }
+            Self::Branch { mnemonic, src1, src2, offset } => {
+                let offset_signed: i16 = interpret_as_signed!(*offset, 12);
+                write!(f, "{mnemonic} x{src1}, x{src2}, {offset_signed}")
+            }
+	    Self::Load { mnemonic, dest, base, offset } => {
+                let offset_signed: i16 = interpret_as_signed!(*offset, 12);
+                write!(f, "{mnemonic} x{dest}, x{base}, {offset_signed}")
+            }
+	    Self::Store { mnemonic, src, base, offset } => {
+                let offset_signed: i16 = interpret_as_signed!(*offset, 12);
+                write!(f, "{mnemonic} x{src}, x{base}, {offset_signed}")
+            }
+	    Self::RegImm { mnemonic, dest, src, i_immediate } => {
+                let i_immediate_signed: i16 = interpret_as_signed!(*i_immediate, 12);
+                write!(f, "{mnemonic} x{dest}, x{src}, {i_immediate_signed}")
+            }
+	    Self::RegReg { mnemonic, dest, src1, src2 } => {
+                write!(f, "{mnemonic} x{dest}, x{src1}, x{src2}")
+            }
         }
     }
 }
