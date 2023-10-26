@@ -4,9 +4,9 @@
 //! The documentation for Instr for what each instruction does
 //! in the different instruction subsets (e.g. RV32I and RV64I).
 
-use riscvemu::instr_decode::Instr;
-use riscvemu::instr_encode::*;
-use riscvemu::instr_opcodes::*;
+use riscvemu::instr::decode::Instr;
+use riscvemu::instr::encode::*;
+use riscvemu::instr::opcodes::*;
 
 fn main() -> Result<(), &'static str> {
     // The constant -10 is the value that is loaded
