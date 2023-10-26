@@ -50,6 +50,20 @@ macro_rules! funct7 {
 }
 pub use funct7;
 
+/// Return the offset including the least-significant
+/// zero (i.e. 21 bits long)
+#[macro_export]
+macro_rules! jal_offset {
+    ($instr:expr) => {{
+        let imm20 = extract_field!($instr, 31, 31);
+	let imm19_12 = extract_field!($instr, 19, 12);
+	let imm11 = extract_field!($instr, 20, 20);
+    	let imm10_1 = extract_field!($instr, 30, 21);
+	(imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1)
+    }};
+}
+pub use jal_offset;
+
 /// The shift amount for RV32I and RV64I is stored in the lower
 /// portion of what would be the imm field in an itype instruction.
 /// For 32-bit operation, the field is 5 bits, and for 64-bit
