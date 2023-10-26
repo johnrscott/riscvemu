@@ -1,31 +1,3 @@
-/// Make a bit-mask of n bits using mask!(n)
-#[macro_export]
-macro_rules! mask {
-    ($n:expr) => {
-        (1 << $n) - 1
-    };
-}
-pub use mask;
-
-/// Mask a value to n least significant bits and
-/// shift it left by s bits
-#[macro_export]
-macro_rules! mask_and_shift {
-    ($val:expr, $m:expr, $s:expr) => {
-        (mask!($m) & $val) << $s
-    };
-}
-pub use mask_and_shift;
-
-/// Return val[end:start]
-#[macro_export]
-macro_rules! extract_field {
-    ($val:expr, $end:expr, $start:expr) => {{
-        mask!($end - $start + 1) & ($val >> $start)
-    }};
-}
-pub use extract_field;
-
 /// Make an I-type instruction
 #[macro_export]
 macro_rules! itype {

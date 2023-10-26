@@ -1,4 +1,4 @@
-use crate::{instr::encode::*, instr::opcodes::*};
+use crate::{instr::fields::*, instr::opcodes::*};
 use std::fmt;
 
 /// RISC-V Instructions
