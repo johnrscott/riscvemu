@@ -130,6 +130,22 @@ fn main() -> Result<(), &'static str> {
     let y = Instr::from(x);
     println!("{y}");
 
+    let x = addiw!(x2, x10, -20);
+    let y = Instr::from(x);
+    println!("{y}");
+
+    let x = slliw!(x2, x10, 3);
+    let y = Instr::from(x);
+    println!("{y}");
+
+    let x = srliw!(x2, x10, 3);
+    let y = Instr::from(x);
+    println!("{y}");
+
+    let x = sraiw!(x2, x10, 3);
+    let y = Instr::from(x);
+    println!("{y}");
+    
     let x = add!(x2, x10, x3);
     let y = Instr::from(x);
     println!("{y}");
@@ -170,5 +186,27 @@ fn main() -> Result<(), &'static str> {
     let y = Instr::from(x);
     println!("{y}");
 
+    let x = addw!(x2, x10, x3);
+    let y = Instr::from(x);
+    println!("{y}");
+
+    let x = subw!(x2, x10, x3);
+    let y = Instr::from(x);
+    println!("{y}");
+
+    let x = sllw!(x2, x10, x3);
+    let y = Instr::from(x);
+    println!("{y}");
+
+    let x = srlw!(x2, x10, x3);
+    let y = Instr::from(x);
+    println!("{y}");
+
+    let x = sraw!(x2, x10, x3);
+    let y = Instr::from(x);
+    println!("{y}");
+
+    
+    
     Ok(())
 }

@@ -299,7 +299,7 @@ itype_instr!(xori, 0b100, OP_IMM);
 itype_instr!(ori, 0b110, OP_IMM);
 itype_instr!(andi, 0b111, OP_IMM);
 // 64-bit
-itype_instr!(addiw, 0b000, OP_IMM);
+itype_instr!(addiw, 0b000, OP_IMM_32);
 
 // Shift-by-immediate instructions. When using the 64-bit
 // instruction set, these become 64-bit
@@ -307,9 +307,9 @@ shift_instr!(slli, 0b0000000, 0b001, OP_IMM);
 shift_instr!(srli, 0b0000000, 0b101, OP_IMM);
 shift_instr!(srai, 0b0100000, 0b101, OP_IMM);
 // 64-bit
-shift_instr!(slliw, 0b0000000, 0b001, OP_IMM);
-shift_instr!(srliw, 0b0000000, 0b101, OP_IMM);
-shift_instr!(sraiw, 0b0100000, 0b101, OP_IMM);
+shift_instr!(slliw, 0b0000000, 0b001, OP_IMM_32);
+shift_instr!(srliw, 0b0000000, 0b101, OP_IMM_32);
+shift_instr!(sraiw, 0b0100000, 0b101, OP_IMM_32);
 
 // Integer register-register instructions
 rtype_instr!(add, 0b0000000, 0b000, OP);

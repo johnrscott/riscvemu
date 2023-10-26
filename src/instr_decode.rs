@@ -85,6 +85,11 @@ pub enum Instr {
     /// - "andi": dest = src & i_immediate
     /// - "ori": dest = src | i_immediate
     /// - "xori": dest = src ^ i_immediate
+    /// - "slli": dest = src << (0x1f & i_immediate)
+    /// - "srli": dest = src >> (0x1f & i_immediate) (logical)
+    /// - "srai": dest = src >> (0x1f & i_immediate) (arithmetic)
+    /// 
+    /// In RV64I, the shift operators
     ///
     RegImm { mnemonic: String, dest: u8, src: u8, i_immediate: u16},
     /// In RV32I and RV64I, perform an operation between the values in
@@ -133,6 +138,27 @@ macro_rules! funct7 {
         extract_field!($instr, 31, 25)
     };
 }
+
+/// The shift amount for RV32I and RV64I is stored in the lower
+/// portion of what would be the imm field in an itype instruction.
+/// For 32-bit operation, the field is 5 bits, and for 64-bit
+/// operation it is 6 bits. This function returns a u8 that includes
+/// the full 6-bit field, which is important for checking whether
+/// the field is valid in 64-bit mode.
+macro_rules! shamt {
+    ($instr:expr) => {{
+        let shamt: u8 = extract_field!($instr, 25, 20).try_into().unwrap();
+	shamt
+    }};
+}
+
+/// The flag for being an arithmetic (instead of logical)
+/// right shift is stored in bit 30 of the instruction.
+/// Used to distinguish sra, srl, srai, srli.
+macro_rules! is_arithmetic_shift {
+    ($instr:expr) => {extract_field!($instr, 30, 30) == 1}
+}
+
 
 macro_rules! imm_itype {
     ($instr:expr) => {{
@@ -286,7 +312,7 @@ impl Instr {
             OP_IMM => {
                 let src = rs1!(instr);
 		let dest = rd!(instr);
-                let i_immediate = imm_itype!(instr);
+                let mut i_immediate = imm_itype!(instr);
 		let funct3 = funct3!(instr);
 		let mnemonic = match funct3 {
 		    FUNCT3_ADDI => format!("addi"),
@@ -295,10 +321,39 @@ impl Instr {
 		    FUNCT3_ANDI => format!("andi"),
 		    FUNCT3_ORI => format!("ori"),
 		    FUNCT3_XORI => format!("xori"),
+		    FUNCT3_SLLI => format!("slli"),
+		    FUNCT3_SRLI => {
+			if is_arithmetic_shift!(instr) {
+			    i_immediate = shamt!(instr).into();
+			    format!("sra")
+			} else {
+			    format!("srl")
+			}
+		    }
 		    _ => panic!("Should change this to enum")
 		};
 		Self::RegImm { mnemonic, dest, src, i_immediate }
             }
+            OP_IMM_32 => {
+                let src = rs1!(instr);
+		let dest = rd!(instr);
+                let mut i_immediate = imm_itype!(instr);
+		let funct3 = funct3!(instr);
+		let mnemonic = match funct3 {
+		    FUNCT3_ADDI => format!("addiw"),
+		    FUNCT3_SLLI => format!("slliw"),
+		    FUNCT3_SRLI => {
+			if is_arithmetic_shift!(instr) {
+			    i_immediate = shamt!(instr).into();
+			    format!("sraw")
+			} else {
+			    format!("srlw")
+			}
+		    }
+		    _ => panic!("Should change this to enum")
+		};
+		Self::RegImm { mnemonic, dest, src, i_immediate }
+            }	    
             OP => {
                 let src1 = rs1!(instr);
 		let src2 = rs2!(instr);
@@ -318,7 +373,7 @@ impl Instr {
 		    FUNCT3_SLTU => format!("sltu"),
 		    FUNCT3_XOR => format!("xor"),
 		    FUNCT3_SRL => {
-			if funct7 == FUNCT7_SRA {
+			if is_arithmetic_shift!(instr) {
 			    format!("sra")
 			} else {
 			    format!("srl")
@@ -330,6 +385,33 @@ impl Instr {
 		};
 		Self::RegReg { mnemonic, dest, src1, src2 }
             }
+	    OP_32 => {
+                let src1 = rs1!(instr);
+		let src2 = rs2!(instr);
+		let dest = rd!(instr);
+		let funct3 = funct3!(instr);
+		let funct7 = funct7!(instr);
+		let mnemonic = match funct3 {
+		    FUNCT3_ADD => {
+			if funct7 == FUNCT7_SUB {
+			    format!("subw")
+			} else {
+			    format!("addw")
+			}
+		    }
+		    FUNCT3_SLL => format!("sllw"),
+		    FUNCT3_SRL => {
+			if funct7 == FUNCT7_SRA {
+			    format!("sraw")
+			} else {
+			    format!("srlw")
+			}
+		    }
+		    _ => panic!("Should change this to enum")
+		};
+		Self::RegReg { mnemonic, dest, src1, src2 }
+            }
+
             _ => unimplemented!("Opcode 0b{op:b} is not yet implemented"),
         }
     }

@@ -3,6 +3,7 @@ pub const OP_AUIPC: u32 = 0b0010111;
 pub const OP_JAL: u32 = 0b1101111;
 pub const OP_JALR: u32 = 0b1100111;
 pub const OP_IMM: u32 = 0b0010011;
+pub const OP_IMM_32: u32 = 0b0011011;
 pub const OP: u32 = 0b0110011;
 pub const OP_32: u32 = 0b0111011;
 pub const OP_BRANCH: u32 = 0b1100011;
@@ -10,6 +11,7 @@ pub const OP_LOAD: u32 = 0b0000011;
 pub const OP_STORE: u32 = 0b0100011;
 pub const OP_MISC_MEM: u32 = 0b0001111;
 pub const OP_SYSTEM: u32 = 0b1110011;
+
 
 // Conditional branches
 pub const FUNCT3_BEQ: u32 = 0b000;
@@ -35,6 +37,10 @@ pub const FUNCT3_SLTIU: u32 = 0b011;
 pub const FUNCT3_XORI: u32 = 0b100;
 pub const FUNCT3_ORI: u32 = 0b110;
 pub const FUNCT3_ANDI: u32 = 0b111;
+pub const FUNCT3_SLLI: u32 = 0b001;
+pub const FUNCT3_SRLI: u32 = 0b101;
+pub const FUNCT3_SRAI: u32 = 0b101;
+
 
 // Register-register opcodes
 pub const FUNCT3_ADD: u32 = 0b000;
