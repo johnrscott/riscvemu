@@ -1,4 +1,5 @@
-use crate::{instr::encode::*, instr::opcodes::*};
+use super::opcodes::*;
+use super::fields::*;
 use std::fmt;
 
 /// RISC-V Instructions
@@ -6,14 +7,14 @@ use std::fmt;
 /// Field names below correspond to the names in the
 /// instruction set reference.
 #[derive(Debug)]
-pub enum Instr {
+pub enum Rv32i {
     /// In RV32I and RV64I, load u_immediate into dest[31:12] bits of
     /// dest, filling the low 12 bits with zeros. In RV64I, also sign
     /// extend the result to the high bits of dest. u_immediate is 20
     /// bits long.
     Lui { dest: u8, u_immediate: u32 },
     /// In RV32I, concatenate u_immediate with 12 low-order zeros, add
-    /// the result the the pc, and place the result in dest. In RV64I,
+    /// pc to the the result, and place the result in dest. In RV64I,
     /// sign extend the result before adding to the pc. u_immediate is
     /// 20 bits long.
     Auipc { dest: u8, u_immediate: u32 },
@@ -119,18 +120,6 @@ pub enum Instr {
     /// - "sraw"
     ///
     RegReg { mnemonic: String, dest: u8, src1: u8, src2: u8 }    
-}
-
-/// Return the offset including the least-significant
-/// zero (i.e. 21 bits long)
-macro_rules! jal_offset {
-    ($instr:expr) => {{
-        let imm20 = extract_field!($instr, 31, 31);
-	let imm19_12 = extract_field!($instr, 19, 12);
-	let imm11 = extract_field!($instr, 20, 20);
-    	let imm10_1 = extract_field!($instr, 30, 21);
-	(imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1)
-    }};
 }
 
 /// Interpret the n least significant bits of

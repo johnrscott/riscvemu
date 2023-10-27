@@ -7,6 +7,7 @@
 use riscvemu::instr::decode::Instr;
 use riscvemu::instr::encode::*;
 use riscvemu::instr::opcodes::*;
+use riscvemu::instr::fields::*;
 
 fn main() -> Result<(), &'static str> {
     // The constant -10 is the value that is loaded
