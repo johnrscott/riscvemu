@@ -6,3 +6,4 @@
 //pub mod register_file;
 
 pub mod instr;
+pub mod hart;
