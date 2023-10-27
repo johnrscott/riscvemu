@@ -1,3 +1,5 @@
+use memory::Memory;
+
 pub mod memory;
 
 /// RISC-V Hardware Thread
@@ -20,10 +22,24 @@ pub mod memory;
 ///   causing this execution environment (i.e. this single
 ///   hart) to terminate.
 ///
-/// The member function step() control execution of the hart.
-/// 
+/// The member function step() controls execution of the hart.
+/// Each time it is called, the instruction at the current PC
+/// is executed. If an exception occurs, step() returns the
+/// trap type that occurred, for the caller to take any action.
+/// If step is re-called, then the hart will attempt to continue
+/// execution, which may or may not result in another trap.
 ///
+///
+#[derive(Debug)]
 struct Hart {
-
+    memory: Memory,
+    pc: u32,
+    //registers: Registers,
 }
-    
+
+// impl Hart {
+//     pub fn new() -> Self {
+
+//     }
+
+// }

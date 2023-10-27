@@ -1,5 +1,5 @@
-use super::opcodes::*;
 use super::fields::*;
+use super::opcodes::*;
 use std::fmt;
 
 /// RISC-V Instructions
@@ -7,7 +7,7 @@ use std::fmt;
 /// Field names below correspond to the names in the
 /// instruction set reference.
 #[derive(Debug)]
-pub enum Rv32i {
+pub enum Instr {
     /// In RV32I and RV64I, load u_immediate into dest[31:12] bits of
     /// dest, filling the low 12 bits with zeros. In RV64I, also sign
     /// extend the result to the high bits of dest. u_immediate is 20
@@ -39,7 +39,12 @@ pub enum Rv32i {
     /// - "bltu": src1 < src2 as unsigned integers
     /// - "bgeu": src1 >= src2 as unsigned integers
     ///
-    Branch { mnemonic: String, src1: u8, src2: u8, offset: u16 },
+    Branch {
+        mnemonic: String,
+        src1: u8,
+        src2: u8,
+        offset: u16,
+    },
     /// In RV32I and RV64I, load the data at address base + offset
     /// into dest. The offset is 12 bits long.
     ///
@@ -59,7 +64,12 @@ pub enum Rv32i {
     /// - "ld": load a doubleword
     ///
     /// Loads do not need to be aligned
-    Load { mnemonic: String, dest: u8, base: u8, offset: u16 },
+    Load {
+        mnemonic: String,
+        dest: u8,
+        base: u8,
+        offset: u16,
+    },
     /// In RV32I and RV64I, load the data at src into address base +
     /// offset. The offset is 12 bits long.
     ///
@@ -75,7 +85,12 @@ pub enum Rv32i {
     /// - "sd": store a doubleword
     ///
     /// Stores do not need to be aligned
-    Store { mnemonic: String, src: u8, base: u8, offset: u16 },
+    Store {
+        mnemonic: String,
+        src: u8,
+        base: u8,
+        offset: u16,
+    },
     /// In RV32I and RV64I, perform an operation between the value in
     /// register src and the i_immediate and store the result in dest.
     ///
@@ -89,10 +104,15 @@ pub enum Rv32i {
     /// - "slli": dest = src << (0x1f & i_immediate)
     /// - "srli": dest = src >> (0x1f & i_immediate) (logical)
     /// - "srai": dest = src >> (0x1f & i_immediate) (arithmetic)
-    /// 
+    ///
     /// In RV64I, the shift operators
     ///
-    RegImm { mnemonic: String, dest: u8, src: u8, i_immediate: u16},
+    RegImm {
+        mnemonic: String,
+        dest: u8,
+        src: u8,
+        i_immediate: u16,
+    },
     /// In RV32I and RV64I, perform an operation between the values in
     /// src1 and src2 and place the result in dest
     ///
@@ -119,7 +139,12 @@ pub enum Rv32i {
     /// - "srlw"
     /// - "sraw"
     ///
-    RegReg { mnemonic: String, dest: u8, src1: u8, src2: u8 }    
+    RegReg {
+        mnemonic: String,
+        dest: u8,
+        src1: u8,
+        src2: u8,
+    },
 }
 
 /// Interpret the n least significant bits of
@@ -132,7 +157,7 @@ macro_rules! interpret_as_signed {
     ($value:expr, $n:expr) => {{
         let sign_bit = 1 & ($value >> ($n - 1));
         let sign_extended = if sign_bit == 1 {
-	    let all_ones = ((0*$value).wrapping_sub(1));
+            let all_ones = ((0 * $value).wrapping_sub(1));
             let sign_extension = all_ones - mask!($n);
             sign_extension | $value
         } else {
@@ -163,158 +188,193 @@ impl Instr {
             }
             OP_JALR => {
                 let dest = rd!(instr);
-		let base = rs1!(instr);
+                let base = rs1!(instr);
                 let offset = imm_itype!(instr);
                 Self::Jalr { dest, base, offset }
             }
             OP_BRANCH => {
                 let src1 = rs1!(instr);
-		let src2 = rs2!(instr);
+                let src2 = rs2!(instr);
                 let offset = imm_btype!(instr).try_into().unwrap();
-		let funct3 = funct3!(instr);
-		let mnemonic = match funct3 {
-		    FUNCT3_BEQ => format!("beq"),
-		    FUNCT3_BNE => format!("bne"),
-		    FUNCT3_BLT => format!("blt"),
-		    FUNCT3_BGE => format!("bge"),
-		    FUNCT3_BLTU => format!("bltu"),
-		    FUNCT3_BGEU => format!("bgeu"),
-		    _ => panic!("Should change this to enum")
-		};
-		Self::Branch { mnemonic, src1, src2, offset }
+                let funct3 = funct3!(instr);
+                let mnemonic = match funct3 {
+                    FUNCT3_BEQ => format!("beq"),
+                    FUNCT3_BNE => format!("bne"),
+                    FUNCT3_BLT => format!("blt"),
+                    FUNCT3_BGE => format!("bge"),
+                    FUNCT3_BLTU => format!("bltu"),
+                    FUNCT3_BGEU => format!("bgeu"),
+                    _ => panic!("Should change this to enum"),
+                };
+                Self::Branch {
+                    mnemonic,
+                    src1,
+                    src2,
+                    offset,
+                }
             }
             OP_LOAD => {
                 let dest = rd!(instr);
-		let base = rs1!(instr);
+                let base = rs1!(instr);
                 let offset = imm_itype!(instr);
-		let funct3 = funct3!(instr);
-		let mnemonic = match funct3 {
-		    FUNCT3_B => format!("lb"),
-		    FUNCT3_H => format!("lh"),
-		    FUNCT3_W => format!("lw"),
-		    FUNCT3_BU => format!("lbu"),
-		    FUNCT3_HU => format!("lhu"),
-		    FUNCT3_WU => format!("lwu"),
-		    FUNCT3_D => format!("ld"),
-		    _ => panic!("Should change this to enum")
-		};
-		Self::Load { mnemonic, dest, base, offset }
+                let funct3 = funct3!(instr);
+                let mnemonic = match funct3 {
+                    FUNCT3_B => format!("lb"),
+                    FUNCT3_H => format!("lh"),
+                    FUNCT3_W => format!("lw"),
+                    FUNCT3_BU => format!("lbu"),
+                    FUNCT3_HU => format!("lhu"),
+                    FUNCT3_WU => format!("lwu"),
+                    FUNCT3_D => format!("ld"),
+                    _ => panic!("Should change this to enum"),
+                };
+                Self::Load {
+                    mnemonic,
+                    dest,
+                    base,
+                    offset,
+                }
             }
             OP_STORE => {
                 let src = rs2!(instr);
-		let base = rs1!(instr);
+                let base = rs1!(instr);
                 let offset = imm_itype!(instr);
-		let funct3 = funct3!(instr);
-		let mnemonic = match funct3 {
-		    FUNCT3_B => format!("sb"),
-		    FUNCT3_H => format!("sh"),
-		    FUNCT3_W => format!("sw"),
-		    FUNCT3_D => format!("sd"),
-		    _ => panic!("Should change this to enum")
-		};
-		Self::Store { mnemonic, src, base, offset }
+                let funct3 = funct3!(instr);
+                let mnemonic = match funct3 {
+                    FUNCT3_B => format!("sb"),
+                    FUNCT3_H => format!("sh"),
+                    FUNCT3_W => format!("sw"),
+                    FUNCT3_D => format!("sd"),
+                    _ => panic!("Should change this to enum"),
+                };
+                Self::Store {
+                    mnemonic,
+                    src,
+                    base,
+                    offset,
+                }
             }
             OP_IMM => {
                 let src = rs1!(instr);
-		let dest = rd!(instr);
+                let dest = rd!(instr);
                 let mut i_immediate = imm_itype!(instr);
-		let funct3 = funct3!(instr);
-		let mnemonic = match funct3 {
-		    FUNCT3_ADDI => format!("addi"),
-		    FUNCT3_SLTI => format!("slti"),
-		    FUNCT3_SLTIU => format!("sltiu"),
-		    FUNCT3_ANDI => format!("andi"),
-		    FUNCT3_ORI => format!("ori"),
-		    FUNCT3_XORI => format!("xori"),
-		    FUNCT3_SLLI => format!("slli"),
-		    FUNCT3_SRLI => {
-			if is_arithmetic_shift!(instr) {
-			    i_immediate = shamt!(instr).into();
-			    format!("sra")
-			} else {
-			    format!("srl")
-			}
-		    }
-		    _ => panic!("Should change this to enum")
-		};
-		Self::RegImm { mnemonic, dest, src, i_immediate }
+                let funct3 = funct3!(instr);
+                let mnemonic = match funct3 {
+                    FUNCT3_ADDI => format!("addi"),
+                    FUNCT3_SLTI => format!("slti"),
+                    FUNCT3_SLTIU => format!("sltiu"),
+                    FUNCT3_ANDI => format!("andi"),
+                    FUNCT3_ORI => format!("ori"),
+                    FUNCT3_XORI => format!("xori"),
+                    FUNCT3_SLLI => format!("slli"),
+                    FUNCT3_SRLI => {
+                        if is_arithmetic_shift!(instr) {
+                            i_immediate = shamt!(instr).into();
+                            format!("sra")
+                        } else {
+                            format!("srl")
+                        }
+                    }
+                    _ => panic!("Should change this to enum"),
+                };
+                Self::RegImm {
+                    mnemonic,
+                    dest,
+                    src,
+                    i_immediate,
+                }
             }
             OP_IMM_32 => {
                 let src = rs1!(instr);
-		let dest = rd!(instr);
+                let dest = rd!(instr);
                 let mut i_immediate = imm_itype!(instr);
-		let funct3 = funct3!(instr);
-		let mnemonic = match funct3 {
-		    FUNCT3_ADDI => format!("addiw"),
-		    FUNCT3_SLLI => format!("slliw"),
-		    FUNCT3_SRLI => {
-			if is_arithmetic_shift!(instr) {
-			    i_immediate = shamt!(instr).into();
-			    format!("sraw")
-			} else {
-			    format!("srlw")
-			}
-		    }
-		    _ => panic!("Should change this to enum")
-		};
-		Self::RegImm { mnemonic, dest, src, i_immediate }
-            }	    
+                let funct3 = funct3!(instr);
+                let mnemonic = match funct3 {
+                    FUNCT3_ADDI => format!("addiw"),
+                    FUNCT3_SLLI => format!("slliw"),
+                    FUNCT3_SRLI => {
+                        if is_arithmetic_shift!(instr) {
+                            i_immediate = shamt!(instr).into();
+                            format!("sraw")
+                        } else {
+                            format!("srlw")
+                        }
+                    }
+                    _ => panic!("Should change this to enum"),
+                };
+                Self::RegImm {
+                    mnemonic,
+                    dest,
+                    src,
+                    i_immediate,
+                }
+            }
             OP => {
                 let src1 = rs1!(instr);
-		let src2 = rs2!(instr);
-		let dest = rd!(instr);
-		let funct3 = funct3!(instr);
-		let funct7 = funct7!(instr);
-		let mnemonic = match funct3 {
-		    FUNCT3_ADD => {
-			if funct7 == FUNCT7_SUB {
-			    format!("sub")
-			} else {
-			    format!("add")
-			}
-		    }
-		    FUNCT3_SLL => format!("sll"),
-		    FUNCT3_SLT => format!("slt"),
-		    FUNCT3_SLTU => format!("sltu"),
-		    FUNCT3_XOR => format!("xor"),
-		    FUNCT3_SRL => {
-			if is_arithmetic_shift!(instr) {
-			    format!("sra")
-			} else {
-			    format!("srl")
-			}
-		    }
-		    FUNCT3_OR => format!("or"),
-		    FUNCT3_AND => format!("and"),
-		    _ => panic!("Should change this to enum")
-		};
-		Self::RegReg { mnemonic, dest, src1, src2 }
+                let src2 = rs2!(instr);
+                let dest = rd!(instr);
+                let funct3 = funct3!(instr);
+                let funct7 = funct7!(instr);
+                let mnemonic = match funct3 {
+                    FUNCT3_ADD => {
+                        if funct7 == FUNCT7_SUB {
+                            format!("sub")
+                        } else {
+                            format!("add")
+                        }
+                    }
+                    FUNCT3_SLL => format!("sll"),
+                    FUNCT3_SLT => format!("slt"),
+                    FUNCT3_SLTU => format!("sltu"),
+                    FUNCT3_XOR => format!("xor"),
+                    FUNCT3_SRL => {
+                        if is_arithmetic_shift!(instr) {
+                            format!("sra")
+                        } else {
+                            format!("srl")
+                        }
+                    }
+                    FUNCT3_OR => format!("or"),
+                    FUNCT3_AND => format!("and"),
+                    _ => panic!("Should change this to enum"),
+                };
+                Self::RegReg {
+                    mnemonic,
+                    dest,
+                    src1,
+                    src2,
+                }
             }
-	    OP_32 => {
+            OP_32 => {
                 let src1 = rs1!(instr);
-		let src2 = rs2!(instr);
-		let dest = rd!(instr);
-		let funct3 = funct3!(instr);
-		let funct7 = funct7!(instr);
-		let mnemonic = match funct3 {
-		    FUNCT3_ADD => {
-			if funct7 == FUNCT7_SUB {
-			    format!("subw")
-			} else {
-			    format!("addw")
-			}
-		    }
-		    FUNCT3_SLL => format!("sllw"),
-		    FUNCT3_SRL => {
-			if funct7 == FUNCT7_SRA {
-			    format!("sraw")
-			} else {
-			    format!("srlw")
-			}
-		    }
-		    _ => panic!("Should change this to enum")
-		};
-		Self::RegReg { mnemonic, dest, src1, src2 }
+                let src2 = rs2!(instr);
+                let dest = rd!(instr);
+                let funct3 = funct3!(instr);
+                let funct7 = funct7!(instr);
+                let mnemonic = match funct3 {
+                    FUNCT3_ADD => {
+                        if funct7 == FUNCT7_SUB {
+                            format!("subw")
+                        } else {
+                            format!("addw")
+                        }
+                    }
+                    FUNCT3_SLL => format!("sllw"),
+                    FUNCT3_SRL => {
+                        if funct7 == FUNCT7_SRA {
+                            format!("sraw")
+                        } else {
+                            format!("srlw")
+                        }
+                    }
+                    _ => panic!("Should change this to enum"),
+                };
+                Self::RegReg {
+                    mnemonic,
+                    dest,
+                    src1,
+                    src2,
+                }
             }
 
             _ => unimplemented!("Opcode 0b{op:b} is not yet implemented"),
@@ -341,23 +401,48 @@ impl fmt::Display for Instr {
                 let offset_signed: i16 = interpret_as_signed!(*offset, 12);
                 write!(f, "jalr x{dest}, x{base}, {offset_signed}")
             }
-            Self::Branch { mnemonic, src1, src2, offset } => {
+            Self::Branch {
+                mnemonic,
+                src1,
+                src2,
+                offset,
+            } => {
                 let offset_signed: i16 = interpret_as_signed!(*offset, 12);
                 write!(f, "{mnemonic} x{src1}, x{src2}, {offset_signed}")
             }
-	    Self::Load { mnemonic, dest, base, offset } => {
+            Self::Load {
+                mnemonic,
+                dest,
+                base,
+                offset,
+            } => {
                 let offset_signed: i16 = interpret_as_signed!(*offset, 12);
                 write!(f, "{mnemonic} x{dest}, x{base}, {offset_signed}")
             }
-	    Self::Store { mnemonic, src, base, offset } => {
+            Self::Store {
+                mnemonic,
+                src,
+                base,
+                offset,
+            } => {
                 let offset_signed: i16 = interpret_as_signed!(*offset, 12);
                 write!(f, "{mnemonic} x{src}, x{base}, {offset_signed}")
             }
-	    Self::RegImm { mnemonic, dest, src, i_immediate } => {
+            Self::RegImm {
+                mnemonic,
+                dest,
+                src,
+                i_immediate,
+            } => {
                 let i_immediate_signed: i16 = interpret_as_signed!(*i_immediate, 12);
                 write!(f, "{mnemonic} x{dest}, x{src}, {i_immediate_signed}")
             }
-	    Self::RegReg { mnemonic, dest, src1, src2 } => {
+            Self::RegReg {
+                mnemonic,
+                dest,
+                src1,
+                src2,
+            } => {
                 write!(f, "{mnemonic} x{dest}, x{src1}, x{src2}")
             }
         }

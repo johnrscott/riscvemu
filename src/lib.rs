@@ -5,5 +5,5 @@
 //pub mod memory_patterns;
 //pub mod register_file;
 
-pub mod instr;
 pub mod hart;
+pub mod instr;

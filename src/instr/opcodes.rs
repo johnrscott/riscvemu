@@ -12,7 +12,6 @@ pub const OP_STORE: u32 = 0b0100011;
 pub const OP_MISC_MEM: u32 = 0b0001111;
 pub const OP_SYSTEM: u32 = 0b1110011;
 
-
 // Conditional branches
 pub const FUNCT3_BEQ: u32 = 0b000;
 pub const FUNCT3_BNE: u32 = 0b001;
@@ -41,7 +40,6 @@ pub const FUNCT3_SLLI: u32 = 0b001;
 pub const FUNCT3_SRLI: u32 = 0b101;
 pub const FUNCT3_SRAI: u32 = 0b101;
 
-
 // Register-register opcodes
 pub const FUNCT3_ADD: u32 = 0b000;
 pub const FUNCT3_SUB: u32 = 0b000;
@@ -62,4 +60,3 @@ pub const FUNCT3_SRAW: u32 = 0b101;
 // Register-register opcodes
 pub const FUNCT7_SUB: u32 = 0b0100000;
 pub const FUNCT7_SRA: u32 = 0b0100000;
-

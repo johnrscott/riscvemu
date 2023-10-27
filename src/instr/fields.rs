@@ -56,10 +56,10 @@ pub use funct7;
 macro_rules! jal_offset {
     ($instr:expr) => {{
         let imm20 = extract_field!($instr, 31, 31);
-	let imm19_12 = extract_field!($instr, 19, 12);
-	let imm11 = extract_field!($instr, 20, 20);
-    	let imm10_1 = extract_field!($instr, 30, 21);
-	(imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1)
+        let imm19_12 = extract_field!($instr, 19, 12);
+        let imm11 = extract_field!($instr, 20, 20);
+        let imm10_1 = extract_field!($instr, 30, 21);
+        (imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1)
     }};
 }
 pub use jal_offset;
@@ -74,7 +74,7 @@ pub use jal_offset;
 macro_rules! shamt {
     ($instr:expr) => {{
         let shamt: u8 = extract_field!($instr, 25, 20).try_into().unwrap();
-	shamt
+        shamt
     }};
 }
 pub use shamt;
@@ -84,15 +84,17 @@ pub use shamt;
 /// Used to distinguish sra, srl, srai, srli.
 #[macro_export]
 macro_rules! is_arithmetic_shift {
-    ($instr:expr) => {extract_field!($instr, 30, 30) == 1}
+    ($instr:expr) => {
+        extract_field!($instr, 30, 30) == 1
+    };
 }
 pub use is_arithmetic_shift;
 
 #[macro_export]
 macro_rules! imm_itype {
     ($instr:expr) => {{
-	let imm: u16 = extract_field!($instr, 31, 20).try_into().unwrap();
-	imm
+        let imm: u16 = extract_field!($instr, 31, 20).try_into().unwrap();
+        imm
     }};
 }
 pub use imm_itype;
@@ -101,10 +103,10 @@ pub use imm_itype;
 macro_rules! imm_btype {
     ($instr:expr) => {{
         let imm12 = extract_field!($instr, 31, 31);
-    	let imm11 = extract_field!($instr, 7, 7);
-	let imm10_5 = extract_field!($instr, 30, 25);
-	let imm4_1 = extract_field!($instr, 11, 8);
-	(imm12 << 12) | (imm11 << 11) | (imm10_5 << 5) | (imm4_1 << 1)
+        let imm11 = extract_field!($instr, 7, 7);
+        let imm10_5 = extract_field!($instr, 30, 25);
+        let imm4_1 = extract_field!($instr, 11, 8);
+        (imm12 << 12) | (imm11 << 11) | (imm10_5 << 5) | (imm4_1 << 1)
     }};
 }
 pub use imm_btype;

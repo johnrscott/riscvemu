@@ -6,8 +6,8 @@
 
 use riscvemu::instr::decode::Instr;
 use riscvemu::instr::encode::*;
-use riscvemu::instr::opcodes::*;
 use riscvemu::instr::fields::*;
+use riscvemu::instr::opcodes::*;
 
 fn main() -> Result<(), &'static str> {
     // The constant -10 is the value that is loaded
@@ -70,11 +70,11 @@ fn main() -> Result<(), &'static str> {
     let x = lh!(x2, x1, -3);
     let y = Instr::from(x);
     println!("{y}");
-    
+
     let x = lw!(x2, x1, -3);
     let y = Instr::from(x);
     println!("{y}");
-    
+
     let x = lbu!(x2, x1, -3);
     let y = Instr::from(x);
     println!("{y}");
@@ -94,11 +94,11 @@ fn main() -> Result<(), &'static str> {
     let x = sb!(x2, x1, -3);
     let y = Instr::from(x);
     println!("{y}");
-    
+
     let x = sh!(x2, x1, -3);
     let y = Instr::from(x);
     println!("{y}");
-    
+
     let x = sw!(x2, x1, -3);
     let y = Instr::from(x);
     println!("{y}");
@@ -146,7 +146,7 @@ fn main() -> Result<(), &'static str> {
     let x = sraiw!(x2, x10, 3);
     let y = Instr::from(x);
     println!("{y}");
-    
+
     let x = add!(x2, x10, x3);
     let y = Instr::from(x);
     println!("{y}");
@@ -158,7 +158,7 @@ fn main() -> Result<(), &'static str> {
     let x = sll!(x2, x10, x3);
     let y = Instr::from(x);
     println!("{y}");
-    
+
     let x = slt!(x2, x10, x3);
     let y = Instr::from(x);
     println!("{y}");
@@ -182,7 +182,7 @@ fn main() -> Result<(), &'static str> {
     let x = or!(x2, x10, x3);
     let y = Instr::from(x);
     println!("{y}");
-    
+
     let x = and!(x2, x10, x3);
     let y = Instr::from(x);
     println!("{y}");
@@ -207,7 +207,5 @@ fn main() -> Result<(), &'static str> {
     let y = Instr::from(x);
     println!("{y}");
 
-    
-    
     Ok(())
 }

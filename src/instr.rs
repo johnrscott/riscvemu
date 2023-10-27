@@ -1,4 +1,4 @@
-pub mod opcodes;
-pub mod fields;
-pub mod encode;
 pub mod decode;
+pub mod encode;
+pub mod fields;
+pub mod opcodes;
