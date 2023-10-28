@@ -161,6 +161,7 @@ pub enum Instr {
 /// to a signed type. When you use this macro,
 /// make sure to include the type of the result
 /// (e.g. x: i16 = interpret_as_signed!(...))
+#[macro_export]
 macro_rules! interpret_as_signed {
     ($value:expr, $n:expr) => {{
         let sign_bit = 1 & ($value >> ($n - 1));
@@ -174,6 +175,7 @@ macro_rules! interpret_as_signed {
         unsafe { std::mem::transmute(sign_extended) }
     }};
 }
+pub use interpret_as_signed;
 
 impl Instr {
     pub fn from(instr: u32) -> Result<Self, DecodeError> {

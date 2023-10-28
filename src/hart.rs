@@ -1,6 +1,6 @@
 use memory::Memory;
 
-use crate::instr::decode::{Instr, DecodeError};
+use crate::{instr::decode::{Instr, DecodeError}, interpret_as_signed};
 
 use self::{memory::Wordsize, registers::Registers};
 use thiserror::Error;
@@ -45,15 +45,15 @@ pub struct Hart {
 
 macro_rules! interpret_u32_as_signed {
     ($value:expr) => {{
-	let signed: i32 = unsafe {mem::transmute($value)}
-	$value
+	let signed: i32 = unsafe {mem::transmute($value)};
+	signed
     }}
 }
 
 macro_rules! interpret_i32_as_unsigned {
     ($value:expr) => {{
-	let signed: u32 = unsafe {mem::transmute($value)}
-	$value
+	let signed: u32 = unsafe {mem::transmute($value)};
+	signed
     }}
 }
 
@@ -76,8 +76,19 @@ impl Hart {
 	    }
 	    Instr::Jal { dest, offset } => {
 		let value = self.pc.wrapping_add(4);
+		let offset = interpret_as_signed!(offset, 21);
 		self.registers.write(dest.into(), value.into()).unwrap();
 		self.pc = self.pc.wrapping_add(offset.into());
+		if self.pc % 4 != 0 {
+		    // Section 2.2 intro of RISC-V unprivileged specification
+		    return Err(ExecutionError::InstructionAddressMisaligned)
+		}
+	    }
+	    Instr::Jalr { dest, base, offset } => {
+		let value = self.pc.wrapping_add(4);
+		self.registers.write(dest.into(), value.into()).unwrap();
+		let pc_relative_addr = 0xfffe & offset.wrapping_add(base.into());
+		self.pc = self.pc.wrapping_add(pc_relative_addr.into());
 		if self.pc % 4 != 0 {
 		    // Section 2.2 intro of RISC-V unprivileged specification
 		    return Err(ExecutionError::InstructionAddressMisaligned)
@@ -192,6 +203,18 @@ mod tests {
 	let x4 = hart.registers.read(4).unwrap();
 	assert_eq!(x4, 8 + (53 << 12));
 	assert_eq!(hart.pc, 12);
+	Ok(())
+    }
+
+    #[test]
+    fn check_jal() -> Result<(), &'static str> {
+	let mut hart = Hart::default();
+	hart.pc = 8;
+	hart.memory.write(8, jal!(x4, -4).into(), Wordsize::Word).unwrap();
+	hart.step().unwrap();
+	let x4 = hart.registers.read(4).unwrap();
+	assert_eq!(x4, 12);
+	assert_eq!(hart.pc, 4);
 	Ok(())
     }
     
