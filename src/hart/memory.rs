@@ -40,44 +40,16 @@ pub struct Memory {
     data: HashMap<u64, u8>,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error,PartialEq, Eq,  Debug)]
 pub enum ReadError {
-    #[error("wrong address size")]
-    WrongAddressSize,
+    #[error("read address exceeds 0xffff_ffff in 32-bit mode")]
+    InvalidAddress,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, PartialEq, Eq, Debug)]
 pub enum WriteError {
-    #[error("wrong address size")]
-    WrongAddressSize,
-}
-
-fn read_byte(byte_map: &HashMap<u64, u8>, addr: u64) -> u64 {
-    u64::from(*byte_map.get(&addr).unwrap_or(&0))
-}
-
-fn read_word(byte_map: &HashMap<u64, u8>, addr: u64, num_bytes: u64) -> u64 {
-    let mut value = 0;
-    for n in 0..num_bytes {
-	let byte_n = read_byte(byte_map, addr+n);
-	value |= byte_n << 8*n;
-    }
-    value
-}
-    
-fn write_byte(byte_map: &mut HashMap<u64, u8>, addr: u64, value: u8) {
-    if value == 0 {
-	byte_map.remove(&addr);
-    } else {
-	byte_map.insert(addr, value);
-    }
-}
-
-fn write_word(byte_map: &mut HashMap<u64, u8>, addr: u64, num_bytes: u64, value: u64,) {
-    for n in 0..num_bytes {
-	let byte_n = 0xff & (value >> 8*n);
-	write_byte(byte_map, addr+n, byte_n.try_into().unwrap());
-    }
+    #[error("read address exceeds to exceed 0xffff_ffff in 32-bit mode")]
+    InvalidAddress,
 }
 
 fn wrap_address(addr: u64, xlen: Xlen) -> u64 {
@@ -87,6 +59,41 @@ fn wrap_address(addr: u64, xlen: Xlen) -> u64 {
     }
 }
 
+fn read_byte(byte_map: &HashMap<u64, u8>, addr: u64, xlen: Xlen) -> u64 {
+    let addr = wrap_address(addr, xlen);
+    u64::from(*byte_map.get(&addr).unwrap_or(&0))
+}
+
+fn read_word(byte_map: &HashMap<u64, u8>, addr: u64, num_bytes: u64, xlen: Xlen) -> u64 {
+    let mut value = 0;
+    for n in 0..num_bytes {
+	let byte_n = read_byte(byte_map, addr.wrapping_add(n), xlen);
+	value |= byte_n << 8*n;
+    }
+    value
+}
+    
+fn write_byte(byte_map: &mut HashMap<u64, u8>, addr: u64, value: u8, xlen: Xlen) {
+    let addr = wrap_address(addr, xlen);
+    if value == 0 {
+	byte_map.remove(&addr);
+    } else {
+	byte_map.insert(addr, value);
+    }
+}
+
+fn write_word(byte_map: &mut HashMap<u64, u8>, addr: u64, num_bytes: u64, value: u64, xlen: Xlen) {
+    for n in 0..num_bytes {
+	let byte_n = 0xff & (value >> 8*n);
+	write_byte(byte_map, addr.wrapping_add(n), byte_n.try_into().unwrap(), xlen);
+    }
+}
+
+fn address_invalid(addr: u64, xlen: Xlen) -> bool {
+    xlen == Xlen::Xlen32 && addr > 0xffff_ffff
+}
+    
+
 impl Memory {
 
     pub fn new(xlen: Xlen) -> Self {
@@ -94,19 +101,25 @@ impl Memory {
 	    xlen, ..Self::default()
 	}
     }
-    
+   
     pub fn write(&mut self, addr: u64, value: u64, word_size: Wordsize) -> Result<(), WriteError> {
-	let addr = wrap_address(addr, self.xlen);
-	let write_width = word_size.width().try_into().unwrap();
-	write_word(&mut self.data, addr, write_width, value);
-	Ok(())
+	if address_invalid(addr, self.xlen) {
+	    Err(WriteError::InvalidAddress)
+	} else {
+	    let write_width = word_size.width().try_into().unwrap();
+	    write_word(&mut self.data, addr, write_width, value, self.xlen);
+	    Ok(())
+	}
     }
     
     pub fn read(&self, addr: u64, word_size: Wordsize) -> Result<u64, ReadError> {
-	let addr = wrap_address(addr, self.xlen);
-	let read_width = word_size.width().try_into().unwrap();
-	let result = read_word(&self.data, addr, read_width);
-	Ok(result.try_into().unwrap())
+	if address_invalid(addr, self.xlen) {
+	    Err(ReadError::InvalidAddress)
+	} else {
+	    let read_width = word_size.width().try_into().unwrap();
+	    let result = read_word(&self.data, addr, read_width, self.xlen);
+	    Ok(result.try_into().unwrap())
+	}
     }
 
 }
@@ -185,9 +198,44 @@ mod tests {
 	assert_eq!(mem.read(addr, Wordsize::Byte).unwrap(), 1);
 	assert_eq!(mem.read(0, Wordsize::Byte).unwrap(), 2);
 	assert_eq!(mem.read(1, Wordsize::Byte).unwrap(), 3);
-	assert_eq!(mem.read(1, Wordsize::Byte).unwrap(), 4);
+	assert_eq!(mem.read(2, Wordsize::Byte).unwrap(), 4);
     }
-    
+
+    #[test]
+    fn check_64bit_memory_wrap() {
+	let mut mem = Memory::new(Xlen::Xlen64);
+	let value = 0x0403_0201;
+	let addr = 0xffff_ffff_ffff_ffff;
+	mem.write(addr, value, Wordsize::Word).unwrap();
+	assert_eq!(mem.read(addr, Wordsize::Byte).unwrap(), 1);
+	assert_eq!(mem.read(0, Wordsize::Byte).unwrap(), 2);
+	assert_eq!(mem.read(1, Wordsize::Byte).unwrap(), 3);
+	assert_eq!(mem.read(2, Wordsize::Byte).unwrap(), 4);
+    }
+
+    #[test]
+    fn check_invalid_address_on_write() {
+	let mut mem = Memory::default();
+	let value = 0x0403_0201;
+	let addr = 0x0_ffff_ffff;
+	let result = mem.write(addr, value, Wordsize::Word);
+	assert_eq!(result, Ok(()));
+	let addr = 0x1_0000_0000;
+	let result = mem.write(addr, value, Wordsize::Word);
+	assert_eq!(result, Err(WriteError::InvalidAddress));
+    }
+
+    #[test]
+    fn check_invalid_address_on_read() {
+	let mem = Memory::default();
+	let addr = 0x0_ffff_ffff;
+	let result = mem.read(addr, Wordsize::Word);
+	assert_eq!(result, Ok(0));
+	let addr = 0x1_0000_0000;
+	let result = mem.read(addr, Wordsize::Word);
+	assert_eq!(result, Err(ReadError::InvalidAddress));
+    }
+
     
     
 }
