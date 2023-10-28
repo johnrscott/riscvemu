@@ -49,7 +49,7 @@ impl Hart {
     fn execute(&mut self, instr: Instr) -> Result<(), ExecutionError> {
 
 	// Do something here depending on the instruction
-	match instr {
+	match instr.clone() {
 	    Instr::Lui { dest, u_immediate } => {
 		let value = u_immediate << 12;
 		self.registers.write(dest.into(), value.into()).unwrap();
@@ -61,7 +61,7 @@ impl Hart {
 
 		let value = match mnemonic.as_ref() {
 		    "add" => src1.wrapping_add(src2),
-		    _ => return Err(ExecutionError::InvalidInstruction)
+		    _ => return Err(ExecutionError::InvalidInstruction(instr))
 		};
 	
 		self.registers.write(dest.into(), value.into()).unwrap();
@@ -109,7 +109,7 @@ pub enum Trap {
 #[derive(Error, Debug)]
 pub enum ExecutionError {
     #[error("invalid instruction")]
-    InvalidInstruction,
+    InvalidInstruction(Instr),
     #[error("unimplemented instruction")]
     UnimplementedInstruction(Instr),
 }
