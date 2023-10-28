@@ -14,7 +14,7 @@ pub enum DecodeError {
 ///
 /// Field names below correspond to the names in the
 /// instruction set reference.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Instr {
     /// In RV32I and RV64I, load u_immediate into dest[31:12] bits of
     /// dest, filling the low 12 bits with zeros. In RV64I, also sign
@@ -127,7 +127,7 @@ pub enum Instr {
     /// In RV32I, the operation performed is determined by the mnemonic
     /// as follows:
     /// - "add": dest = src1 + src2
-    /// - "sub": dest = src1 + src2
+    /// - "sub": dest = src1 - src2
     /// - "slt": dest = (src1 < src2) ? 1 : 0, signed comparison
     /// - "sltu": dest = (src1 < src2) ? 1 : 0, unsigned comparison
     /// - "and": dest = src1 & src2

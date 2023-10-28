@@ -46,7 +46,7 @@ pub struct Hart {
 
 impl Hart {
 
-    fn execute(&mut self, instr: Instr) -> Result<(), Trap> {
+    fn execute(&mut self, instr: Instr) -> Result<(), ExecutionError> {
 
 	// Do something here depending on the instruction
 	match instr {
@@ -55,7 +55,20 @@ impl Hart {
 		self.registers.write(dest.into(), value.into()).unwrap();
 		self.pc += 4;
 	    }
-	    _ => unimplemented!("Instruction {instr} is not yet implemented"),
+	    Instr::RegReg { mnemonic, dest, src1, src2 } => {
+		let src1: u32 = self.registers.read(src1.into()).unwrap().try_into().unwrap();
+		let src2: u32 = self.registers.read(src2.into()).unwrap().try_into().unwrap();
+
+		let value = match mnemonic.as_ref() {
+		    "add" => src1.wrapping_add(src2),
+		    _ => return Err(ExecutionError::InvalidInstruction)
+		};
+	
+		self.registers.write(dest.into(), value.into()).unwrap();
+		self.pc += 4;
+
+	    }
+	    _ => return Err(ExecutionError::UnimplementedInstruction(instr))
 	}
 	
 	Ok(())
@@ -88,14 +101,32 @@ impl Hart {
 #[derive(Error, Debug)]
 pub enum Trap {
     #[error("instruction decode failed: {0}")]    
-    InstructionDecodeFailed(DecodeError)
+    InstructionDecodeFailed(DecodeError),
+    #[error("instruction execution failed: {0}")]    
+    InstructionExecutionFailed(ExecutionError)
 }
+
+#[derive(Error, Debug)]
+pub enum ExecutionError {
+    #[error("invalid instruction")]
+    InvalidInstruction,
+    #[error("unimplemented instruction")]
+    UnimplementedInstruction(Instr),
+}
+
 
 impl From<DecodeError> for Trap {
     fn from(d: DecodeError) -> Trap {
 	Trap::InstructionDecodeFailed(d)
     }
 }
+
+impl From<ExecutionError> for Trap {
+    fn from(e: ExecutionError) -> Trap {
+	Trap::InstructionExecutionFailed(e)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -116,5 +147,19 @@ mod tests {
 	Ok(())
     }
 
+    #[test]
+    fn check_add() -> Result<(), &'static str> {
+	let mut hart = Hart::default();
+	hart.memory.write(0, add!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(2, 2).unwrap();
+	hart.registers.write(3, 3).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 5);
+	assert_eq!(hart.pc, 4);
+	Ok(())
+    }
+
+    
 
 }
