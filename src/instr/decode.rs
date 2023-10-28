@@ -1,7 +1,15 @@
 use super::fields::*;
 use super::opcodes::*;
 use std::fmt;
+use thiserror::Error;
 
+#[derive(Debug, Error)]
+pub enum DecodeError {
+    #[error("got invalid opcode 0x{0:x}")]
+    InvalidOpcode(u32),
+
+}
+    
 /// RISC-V Instructions
 ///
 /// Field names below correspond to the names in the
@@ -168,29 +176,29 @@ macro_rules! interpret_as_signed {
 }
 
 impl Instr {
-    pub fn from(instr: u32) -> Self {
+    pub fn from(instr: u32) -> Result<Self, DecodeError> {
         let op = opcode!(instr);
         match op {
             OP_LUI => {
                 let dest = rd!(instr);
                 let u_immediate = lui_u_immediate!(instr);
-                Self::Lui { dest, u_immediate }
+                Ok(Self::Lui { dest, u_immediate })
             }
             OP_AUIPC => {
                 let dest = rd!(instr);
                 let u_immediate = lui_u_immediate!(instr);
-                Self::Auipc { dest, u_immediate }
+                Ok(Self::Auipc { dest, u_immediate })
             }
             OP_JAL => {
                 let dest = rd!(instr);
                 let offset = jal_offset!(instr);
-                Self::Jal { dest, offset }
+                Ok(Self::Jal { dest, offset })
             }
             OP_JALR => {
                 let dest = rd!(instr);
                 let base = rs1!(instr);
                 let offset = imm_itype!(instr);
-                Self::Jalr { dest, base, offset }
+                Ok(Self::Jalr { dest, base, offset })
             }
             OP_BRANCH => {
                 let src1 = rs1!(instr);
@@ -206,12 +214,12 @@ impl Instr {
                     FUNCT3_BGEU => format!("bgeu"),
                     _ => panic!("Should change this to enum"),
                 };
-                Self::Branch {
+                Ok(Self::Branch {
                     mnemonic,
                     src1,
                     src2,
                     offset,
-                }
+                })
             }
             OP_LOAD => {
                 let dest = rd!(instr);
@@ -228,12 +236,12 @@ impl Instr {
                     FUNCT3_D => format!("ld"),
                     _ => panic!("Should change this to enum"),
                 };
-                Self::Load {
+                Ok(Self::Load {
                     mnemonic,
                     dest,
                     base,
                     offset,
-                }
+                })
             }
             OP_STORE => {
                 let src = rs2!(instr);
@@ -247,12 +255,12 @@ impl Instr {
                     FUNCT3_D => format!("sd"),
                     _ => panic!("Should change this to enum"),
                 };
-                Self::Store {
+                Ok(Self::Store {
                     mnemonic,
                     src,
                     base,
                     offset,
-                }
+                })
             }
             OP_IMM => {
                 let src = rs1!(instr);
@@ -277,12 +285,12 @@ impl Instr {
                     }
                     _ => panic!("Should change this to enum"),
                 };
-                Self::RegImm {
+                Ok(Self::RegImm {
                     mnemonic,
                     dest,
                     src,
                     i_immediate,
-                }
+                })
             }
             OP_IMM_32 => {
                 let src = rs1!(instr);
@@ -302,12 +310,12 @@ impl Instr {
                     }
                     _ => panic!("Should change this to enum"),
                 };
-                Self::RegImm {
+                Ok(Self::RegImm {
                     mnemonic,
                     dest,
                     src,
                     i_immediate,
-                }
+                })
             }
             OP => {
                 let src1 = rs1!(instr);
@@ -338,12 +346,12 @@ impl Instr {
                     FUNCT3_AND => format!("and"),
                     _ => panic!("Should change this to enum"),
                 };
-                Self::RegReg {
+                Ok(Self::RegReg {
                     mnemonic,
                     dest,
                     src1,
                     src2,
-                }
+                })
             }
             OP_32 => {
                 let src1 = rs1!(instr);
@@ -369,15 +377,14 @@ impl Instr {
                     }
                     _ => panic!("Should change this to enum"),
                 };
-                Self::RegReg {
+                Ok(Self::RegReg {
                     mnemonic,
                     dest,
                     src1,
                     src2,
-                }
+                })
             }
-
-            _ => unimplemented!("Opcode 0b{op:b} is not yet implemented"),
+            _ => Err(DecodeError::InvalidOpcode(op)),
         }
     }
 }
