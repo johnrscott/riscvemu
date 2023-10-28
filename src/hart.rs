@@ -45,15 +45,15 @@ pub struct Hart {
 
 macro_rules! interpret_u32_as_signed {
     ($value:expr) => {{
-	let signed: i32 = unsafe {mem::transmute($value)}
-	$value
+	let signed: i32 = unsafe {mem::transmute($value)};
+	signed
     }}
 }
 
 macro_rules! interpret_i32_as_unsigned {
     ($value:expr) => {{
-	let signed: u32 = unsafe {mem::transmute($value)}
-	$value
+	let unsigned: u32 = unsafe {mem::transmute($value)};
+	unsigned
     }}
 }
 
@@ -91,7 +91,11 @@ impl Hart {
 		let value = match mnemonic.as_ref() {
 		    "add" => src1.wrapping_add(src2),
 		    "sub" => src1.wrapping_sub(src2), 
-		    "slt" => 0, // TODO!
+		    "slt" => {
+			let src1: i32 = interpret_u32_as_signed!(src1);
+			let src2: i32 = interpret_u32_as_signed!(src2);
+			if src1 < src2 {1} else {0}
+		    }, 
 		    "sltu" => if src1 < src2 {1} else {0},
 		    _ => return Err(ExecutionError::InvalidInstruction(instr))
 		};
@@ -247,6 +251,84 @@ mod tests {
 	Ok(())
     }
 
+    #[test]
+    fn check_slt_both_positive() -> Result<(), &'static str> {
+	let mut hart = Hart::default();
+	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(2, 124).unwrap();
+	hart.registers.write(3, 22).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 0);
+	assert_eq!(hart.pc, 4);
+	
+	// Swap src1 and src2
+	let mut hart = Hart::default();
+	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(3, 124).unwrap();
+	hart.registers.write(2, 22).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 1);
+	assert_eq!(hart.pc, 4);
+	
+	Ok(())
+    }
+
+
+    #[test]
+    fn check_slt_both_negative() -> Result<(), &'static str> {
+	let mut hart = Hart::default();
+	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	let v1: u64 = interpret_i32_as_unsigned!(-24).into();
+	let v2: u64 = interpret_i32_as_unsigned!(-5).into();
+	hart.registers.write(2, v1).unwrap();
+	hart.registers.write(3, v2).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 1);
+	assert_eq!(hart.pc, 4);
+	
+	// Swap src1 and src2
+	let mut hart = Hart::default();
+	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(3, v1).unwrap();
+	hart.registers.write(2, v2).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 0);
+	assert_eq!(hart.pc, 4);
+	
+	Ok(())
+    }
+
+    #[test]
+    fn check_slt_different_signs() -> Result<(), &'static str> {
+	let mut hart = Hart::default();
+	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	let v1: u64 = interpret_i32_as_unsigned!(-24).into();
+	let v2: u64 = 5;
+	hart.registers.write(2, v1).unwrap();
+	hart.registers.write(3, v2).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 1);
+	assert_eq!(hart.pc, 4);
+	
+	// Swap src1 and src2
+	let mut hart = Hart::default();
+	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(3, v1).unwrap();
+	hart.registers.write(2, v2).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 0);
+	assert_eq!(hart.pc, 4);
+	
+	Ok(())
+    }
+
+    
     #[test]
     fn check_sltu() -> Result<(), &'static str> {
 	let mut hart = Hart::default();
