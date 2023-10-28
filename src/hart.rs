@@ -53,8 +53,23 @@ impl Hart {
 	    Instr::Lui { dest, u_immediate } => {
 		let value = u_immediate << 12;
 		self.registers.write(dest.into(), value.into()).unwrap();
-		self.pc += 4;
+		self.pc = self.pc.wrapping_add(4);
 	    }
+	    Instr::Auipc { dest, u_immediate } => {
+		let value = self.pc.wrapping_add(u_immediate << 12);
+		self.registers.write(dest.into(), value.into()).unwrap();
+		self.pc = self.pc.wrapping_add(4);
+	    }
+	    Instr::Jal { dest, offset } => {
+		let value = self.pc.wrapping_add(4);
+		self.registers.write(dest.into(), value.into()).unwrap();
+		self.pc = self.pc.wrapping_add(offset.into());
+		if self.pc % 4 != 0 {
+		    // Section 2.2 intro of RISC-V unprivileged specification
+		    return Err(ExecutionError::InstructionAddressMisaligned)
+		}
+	    }
+
 	    Instr::RegReg { mnemonic, dest, src1, src2 } => {
 		let src1: u32 = self.registers.read(src1.into()).unwrap().try_into().unwrap();
 		let src2: u32 = self.registers.read(src2.into()).unwrap().try_into().unwrap();
@@ -112,6 +127,8 @@ pub enum ExecutionError {
     InvalidInstruction(Instr),
     #[error("unimplemented instruction")]
     UnimplementedInstruction(Instr),
+    #[error("instruction address should be aligned to a 4-byte boundary")]
+    InstructionAddressMisaligned,
 }
 
 
@@ -147,6 +164,20 @@ mod tests {
 	Ok(())
     }
 
+    #[test]
+    fn check_auipc() -> Result<(), &'static str> {
+	// Check a basic case of lui (result should be placed in
+	// upper 20 bits of x2)
+	let mut hart = Hart::default();
+	hart.pc = 8;
+	hart.memory.write(8, auipc!(x4, 53).into(), Wordsize::Word).unwrap();
+	hart.step().unwrap();
+	let x4 = hart.registers.read(4).unwrap();
+	assert_eq!(x4, 8 + (53 << 12));
+	assert_eq!(hart.pc, 12);
+	Ok(())
+    }
+    
     #[test]
     fn check_add() -> Result<(), &'static str> {
 	let mut hart = Hart::default();
