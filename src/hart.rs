@@ -61,11 +61,14 @@ impl Hart {
 
 		let value = match mnemonic.as_ref() {
 		    "add" => src1.wrapping_add(src2),
+		    "sub" => src1.wrapping_sub(src2), 
+		    "slt" => 0, // TODO!
+		    "sltu" => if src1 < src2 {1} else {0},
 		    _ => return Err(ExecutionError::InvalidInstruction(instr))
 		};
 	
 		self.registers.write(dest.into(), value.into()).unwrap();
-		self.pc += 4;
+		self.pc = self.pc.wrapping_add(4);
 
 	    }
 	    _ => return Err(ExecutionError::UnimplementedInstruction(instr))
@@ -160,6 +163,67 @@ mod tests {
 	Ok(())
     }
 
-    
+    #[test]
+    fn check_add_wrapping_edge_case() -> Result<(), &'static str> {
+	let mut hart = Hart::default();
+	hart.memory.write(0, add!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(2, 0xffff_fffe).unwrap();
+	hart.registers.write(3, 5).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 3);
+	assert_eq!(hart.pc, 4);
+	Ok(())
+    }
+
+    #[test]
+    fn check_sub() -> Result<(), &'static str> {
+	let mut hart = Hart::default();
+	hart.memory.write(0, sub!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(2, 124).unwrap();
+	hart.registers.write(3, 22).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 102);
+	assert_eq!(hart.pc, 4);
+	Ok(())
+    }
+
+    #[test]
+    fn check_sub_wrapping_edge_case() -> Result<(), &'static str> {
+	let mut hart = Hart::default();
+	hart.memory.write(0, sub!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(2, 20).unwrap();
+	hart.registers.write(3, 22).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 0xffff_fffe);
+	assert_eq!(hart.pc, 4);
+	Ok(())
+    }
+
+    #[test]
+    fn check_sltu() -> Result<(), &'static str> {
+	let mut hart = Hart::default();
+	hart.memory.write(0, sltu!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(2, 124).unwrap();
+	hart.registers.write(3, 22).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 0);
+	assert_eq!(hart.pc, 4);
+	
+	// Swap src1 and src2
+	let mut hart = Hart::default();
+	hart.memory.write(0, sltu!(x1, x2, x3).into(), Wordsize::Word).unwrap();
+	hart.registers.write(3, 124).unwrap();
+	hart.registers.write(2, 22).unwrap();
+	hart.step().unwrap();
+	let x1 = hart.registers.read(1).unwrap();
+	assert_eq!(x1, 1);
+	assert_eq!(hart.pc, 4);
+	
+	Ok(())
+    }
 
 }
