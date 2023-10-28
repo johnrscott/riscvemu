@@ -5,7 +5,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DecodeError {
-    #[error("got invalid opcode 0x{0:x}")]
+    #[error("got invalid or unimplemented opcode 0x{0:x}")]
     InvalidOpcode(u32),
 
 }

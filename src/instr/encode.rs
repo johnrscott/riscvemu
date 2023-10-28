@@ -1,3 +1,6 @@
+pub use super::fields::*;
+pub use super::opcodes::*;
+
 /// Make an I-type instruction
 #[macro_export]
 macro_rules! itype {
