@@ -4,6 +4,7 @@ use crate::instr::decode::{Instr, DecodeError};
 
 use self::{memory::Wordsize, registers::Registers};
 use thiserror::Error;
+use std::mem;
 
 pub mod memory;
 pub mod registers;
@@ -42,6 +43,19 @@ pub struct Hart {
     pub memory: Memory,
 }
 
+macro_rules! interpret_u32_as_signed {
+    ($value:expr) => {{
+	let signed: i32 = unsafe {mem::transmute($value)}
+	$value
+    }}
+}
+
+macro_rules! interpret_i32_as_unsigned {
+    ($value:expr) => {{
+	let signed: u32 = unsafe {mem::transmute($value)}
+	$value
+    }}
+}
 
 
 impl Hart {
