@@ -105,7 +105,8 @@ pub enum Instr {
         offset: u16,
     },
     /// In RV32I and RV64I, perform an operation between the value in
-    /// register src and the i_immediate and store the result in dest.
+    /// register src and the sign-extended version of the 12-bit
+    /// i_immediate.
     ///
     /// The operation performed is determined by the mnemonic as follows:
     /// - "addi": dest = src + i_immediate
