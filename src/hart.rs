@@ -65,9 +65,7 @@ macro_rules! interpret_i32_as_unsigned {
 /// of the u32.
 fn sign_extend<T: Into<u32>>(value: T, sign_bit_position: u32) -> u32 {
     let value: u32 = value.into();
-    println!("sign bit: {value:x}");
     let sign_bit = 1 & (value >> sign_bit_position);
-    println!("sign bit: {sign_bit}");
     if sign_bit == 1 {
         let sign_extension = 0xffff_ffff - mask!(sign_bit_position);
         value | sign_extension
@@ -155,7 +153,7 @@ impl Hart {
                 };
 
                 if branch_taken {
-                    let offset = sign_extend(offset, 12);
+                    let offset = sign_extend(offset, 11);
                     self.pc = self.pc.wrapping_add(offset.into());
                     if self.pc % 4 != 0 {
                         // Section 2.2 intro of RISC-V unprivileged specification
@@ -177,7 +175,7 @@ impl Hart {
                     .unwrap()
                     .try_into()
                     .unwrap();
-		let offset = sign_extend(offset, 12);
+		let offset = sign_extend(offset, 11);
 		let addr = base.wrapping_add(offset);
                 let data = match mnemonic.as_ref() {
                     "lb" => sign_extend(u32::try_from(self.memory.read(addr.into(), Wordsize::Byte).unwrap()).unwrap(), 7),
@@ -188,6 +186,30 @@ impl Hart {
                     _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
 		self.registers.write(dest.into(), data.into()).unwrap();
+		self.pc = self.pc.wrapping_add(4);
+	    }
+            Instr::Store { mnemonic, src, base, offset } => {
+		let base: u32 = self
+                    .registers
+                    .read(base.into())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
+		let offset = sign_extend(offset, 11);
+		println!("{offset}");
+		let addr = base.wrapping_add(offset);
+		let data: u32 = self
+                    .registers
+                    .read(src.into())
+                    .unwrap()
+                    .try_into()
+                    .unwrap(); 
+                match mnemonic.as_ref() {
+                    "sb" => self.memory.write(addr.into(), data.into(), Wordsize::Byte).unwrap(),
+                    "sh" => self.memory.write(addr.into(), data.into(), Wordsize::Halfword).unwrap(),
+                    "sw" => self.memory.write(addr.into(), data.into(), Wordsize::Word).unwrap(),
+                    _ => return Err(ExecutionError::InvalidInstruction(instr)),
+                };
 		self.pc = self.pc.wrapping_add(4);
 	    }
             Instr::RegReg {
@@ -573,6 +595,22 @@ mod tests {
         assert_eq!(hart.registers.read(1).unwrap(), 0x1234_ff92);
         Ok(())
     }
+
+    #[test]
+    fn check_sb() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, sb!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 0xfe).unwrap();
+        hart.registers.write(2, 6).unwrap();
+        hart.step().unwrap();
+	println!("{:?}", hart);
+        assert_eq!(hart.pc, 4);
+        assert_eq!(hart.memory.read(22, Wordsize::Byte).unwrap(), 0xfe);
+        Ok(())
+    }
+
     
     #[test]
     fn check_add() -> Result<(), &'static str> {

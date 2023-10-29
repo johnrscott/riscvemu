@@ -253,7 +253,7 @@ impl Instr {
             OP_STORE => {
                 let src = rs2!(instr);
                 let base = rs1!(instr);
-                let offset = imm_itype!(instr);
+                let offset = imm_stype!(instr);
                 let funct3 = funct3!(instr);
                 let mnemonic = match funct3 {
                     FUNCT3_B => format!("sb"),
