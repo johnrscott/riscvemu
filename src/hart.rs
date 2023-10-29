@@ -196,7 +196,6 @@ impl Hart {
                     .try_into()
                     .unwrap();
 		let offset = sign_extend(offset, 11);
-		println!("{offset}");
 		let addr = base.wrapping_add(offset);
 		let data: u32 = self
                     .registers
@@ -605,9 +604,36 @@ mod tests {
         hart.registers.write(1, 0xfe).unwrap();
         hart.registers.write(2, 6).unwrap();
         hart.step().unwrap();
-	println!("{:?}", hart);
         assert_eq!(hart.pc, 4);
         assert_eq!(hart.memory.read(22, Wordsize::Byte).unwrap(), 0xfe);
+        Ok(())
+    }
+
+    #[test]
+    fn check_sh() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, sh!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 0xabfe).unwrap();
+        hart.registers.write(2, 7).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        assert_eq!(hart.memory.read(23, Wordsize::Halfword).unwrap(), 0xabfe);
+        Ok(())
+    }
+
+    #[test]
+    fn check_sw() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, sw!(x1, x2, -15).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 0xabcd_ef12).unwrap();
+        hart.registers.write(2, 20).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        assert_eq!(hart.memory.read(5, Wordsize::Word).unwrap(), 0xabcd_ef12);
         Ok(())
     }
 
