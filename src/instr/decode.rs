@@ -286,9 +286,9 @@ impl Instr {
                     FUNCT3_SRLI => {
                         if is_arithmetic_shift!(instr) {
                             i_immediate = shamt!(instr).into();
-                            format!("sra")
+                            format!("srai")
                         } else {
-                            format!("srl")
+                            format!("srli")
                         }
                     }
                     _ => panic!("Should change this to enum"),

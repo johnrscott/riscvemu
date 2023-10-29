@@ -227,6 +227,16 @@ impl Hart {
 			(src < i_immediate) as u32
                     }
                     "sltiu" => (src < i_immediate) as u32,
+		    "andi" => src & i_immediate,
+		    "ori" => src | i_immediate,
+		    "xori" => src ^ i_immediate,
+		    "slli" => src << (0x1f & i_immediate),
+		    "srli" => src >> (0x1f & i_immediate),
+		    "srai" => {
+                        let src: i32 = interpret_u32_as_signed!(src);
+			interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
+		    }
+
                     _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
 		self.registers.write(dest.into(), value.into()).unwrap();
@@ -260,6 +270,15 @@ impl Hart {
                         (src1 < src2) as u32
                     }
                     "sltu" => (src1 < src2) as u32,
+		    "and" => src1 & src2,
+		    "or" => src1 | src2,
+		    "xor" => src1 ^ src2,
+		    "sll" => src1 << (0x1f & src2),
+		    "srl" => src1 >> (0x1f & src2),
+		    "sra" => {
+                        let src1: i32 = interpret_u32_as_signed!(src1);
+			interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
+		    }
                     _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
  
@@ -780,7 +799,91 @@ mod tests {
         Ok(())
     }
 
-    
+    #[test]
+    fn check_andi() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, andi!(x1, x2, 0xff0).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0x00ff_ff00).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+	// Note that AND uses the sign-extended 12-bit immediate
+        assert_eq!(x1, 0x00ff_ff00);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_ori() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, ori!(x1, x2, 0xff0).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0x00ff_ff00).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0xffff_fff0);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_xori() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, xori!(x1, x2, 0xff0).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0x00ff_ff00).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0xff00_00f0);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_slli() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, slli!(x1, x2, 2).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0b1101).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0b110100);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_srli() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, srli!(x1, x2, 4).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xf000_0f00).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0x0f00_00f0);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_srai() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, srai!(x1, x2, 4).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xf000_0f00).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0xff00_00f0);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
     #[test]
     fn check_add() -> Result<(), &'static str> {
         let mut hart = Hart::default();
@@ -956,4 +1059,98 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn check_and() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, and!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0x00ff_ff00).unwrap();
+        hart.registers.write(3, 0x0f0f_f0f0).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0x000f_f000);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_or() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, or!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0x00ff_ff00).unwrap();
+        hart.registers.write(3, 0x0f0f_f0f0).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0x0fff_fff0);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_xor() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, xor!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0x00ff_ff00).unwrap();
+        hart.registers.write(3, 0x0f0f_f0f0).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0x0ff0_0ff0);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_sll() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, sll!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0b1101).unwrap();
+        hart.registers.write(3, 2).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0b110100);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_srl() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, srl!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xf000_0f00).unwrap();
+        hart.registers.write(3, 4).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0x0f00_00f0);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_sra() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, sra!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xf000_0f00).unwrap();
+        hart.registers.write(3, 4).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0xff00_00f0);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    
+    
+    
 }
