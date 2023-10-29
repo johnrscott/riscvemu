@@ -5,10 +5,7 @@ fn main() {
     println!("{:#?}", hart);
 
     match hart.step() {
-	Ok(_) => println!("Done"), 
-	Err(trap) => println!("{trap}"), 	
+        Ok(_) => println!("Done"),
+        Err(trap) => println!("{trap}"),
     }
-
-	
-    
 }

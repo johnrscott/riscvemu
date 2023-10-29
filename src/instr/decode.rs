@@ -7,9 +7,8 @@ use thiserror::Error;
 pub enum DecodeError {
     #[error("got invalid or unimplemented opcode 0x{0:x}")]
     InvalidOpcode(u32),
-
 }
-    
+
 /// RISC-V Instructions
 ///
 /// Field names below correspond to the names in the
@@ -28,11 +27,14 @@ pub enum Instr {
     Auipc { dest: u8, u_immediate: u32 },
     /// In RV32I and RV64I, store pc+4 in dest, and set pc = pc +
     /// offset, where offset is a multiple of 2. Offset is 21 bits
-    /// long.
+    /// long. An instruction-address-misaligned exception is generated
+    /// if the target pc is not 4-byte aligned.
     Jal { dest: u8, offset: u32 },
     /// In RV32I and RV64I, store pc+4 in dest, compute base + offset,
-    /// set bit 0 to zero, and add the result to the pc. The offset is
-    /// 12 bits long (and may be even or odd).
+    /// set bit 0 to zero, and set pc = pc + result. The offset is 12
+    /// bits long (and may be even or odd). An
+    /// instruction-address-misaligned exception is generated if the
+    /// target pc is not 4-byte aligned.
     Jalr { dest: u8, base: u8, offset: u16 },
     /// In RV32I and RV64I, If branch is taken, set pc = pc + offset,
     /// where offset is a multiple of two; else do nothing. The
@@ -47,6 +49,9 @@ pub enum Instr {
     /// - "bltu": src1 < src2 as unsigned integers
     /// - "bgeu": src1 >= src2 as unsigned integers
     ///
+    /// Only on branch-taken, an instruction-address-misaligned
+    /// exception is generated if the target pc is not 4-byte
+    /// aligned.
     Branch {
         mnemonic: String,
         src1: u8,

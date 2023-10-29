@@ -1,10 +1,13 @@
 use memory::Memory;
 
-use crate::{instr::decode::{Instr, DecodeError}, interpret_as_signed};
+use crate::{
+    instr::decode::{DecodeError, Instr},
+    interpret_as_signed, mask,
+};
 
 use self::{memory::Wordsize, registers::Registers};
-use thiserror::Error;
 use std::mem;
+use thiserror::Error;
 
 pub mod memory;
 pub mod registers;
@@ -45,112 +48,191 @@ pub struct Hart {
 
 macro_rules! interpret_u32_as_signed {
     ($value:expr) => {{
-	let signed: i32 = unsafe {mem::transmute($value)};
-	signed
-    }}
+        let signed: i32 = unsafe { mem::transmute($value) };
+        signed
+    }};
 }
 
 macro_rules! interpret_i32_as_unsigned {
     ($value:expr) => {{
-	let unsigned: u32 = unsafe {mem::transmute($value)};
-	unsigned
-    }}
+        let unsigned: u32 = unsafe { mem::transmute($value) };
+        unsigned
+    }};
 }
 
+/// Take an unsigned value (u8, u16 or u32), and a bit position for the
+/// sign bit, and copy the value of the sign bit into all the higher bits
+/// of the u32.
+fn sign_extend<T: Into<u32>>(value: T, sign_bit_position: u32) -> u32 {
+    let value: u32 = value.into();
+    println!("sign bit: {value:x}");
+    let sign_bit = 1 & (value >> sign_bit_position);
+    println!("sign bit: {sign_bit}");
+    if sign_bit == 1 {
+        let sign_extension = 0xffff_ffff - mask!(sign_bit_position);
+        value | sign_extension
+    } else {
+        value
+    }
+}
 
 impl Hart {
-
     fn execute(&mut self, instr: Instr) -> Result<(), ExecutionError> {
+        // Do something here depending on the instruction
+        match instr.clone() {
+            Instr::Lui { dest, u_immediate } => {
+                let value = u_immediate << 12;
+                self.registers.write(dest.into(), value.into()).unwrap();
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Auipc { dest, u_immediate } => {
+                let value = self.pc.wrapping_add(u_immediate << 12);
+                self.registers.write(dest.into(), value.into()).unwrap();
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Jal { dest, offset } => {
+                let value = self.pc.wrapping_add(4);
+                let offset = sign_extend(offset, 20);
+                self.registers.write(dest.into(), value.into()).unwrap();
+                self.pc = self.pc.wrapping_add(offset.into());
+                if self.pc % 4 != 0 {
+                    // Section 2.2 intro of RISC-V unprivileged specification
+                    return Err(ExecutionError::InstructionAddressMisaligned);
+                }
+            }
+            Instr::Jalr { dest, base, offset } => {
+                let pc = self.pc.wrapping_add(4);
+                self.registers.write(dest.into(), pc.into()).unwrap();
+                let offset = sign_extend(offset, 11);
+                let base: u32 = self
+                    .registers
+                    .read(base.into())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
+                let pc_relative_addr = 0xffff_fffe & base.wrapping_add(offset);
+                self.pc = self.pc.wrapping_add(pc_relative_addr);
+                if self.pc % 4 != 0 {
+                    // Section 2.2 intro of RISC-V unprivileged specification
+                    return Err(ExecutionError::InstructionAddressMisaligned);
+                }
+            }
+            Instr::Branch {
+                mnemonic,
+                src1,
+                src2,
+                offset,
+            } => {
+                let src1: u32 = self
+                    .registers
+                    .read(src1.into())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
+                let src2: u32 = self
+                    .registers
+                    .read(src2.into())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
 
-	// Do something here depending on the instruction
-	match instr.clone() {
-	    Instr::Lui { dest, u_immediate } => {
-		let value = u_immediate << 12;
-		self.registers.write(dest.into(), value.into()).unwrap();
-		self.pc = self.pc.wrapping_add(4);
-	    }
-	    Instr::Auipc { dest, u_immediate } => {
-		let value = self.pc.wrapping_add(u_immediate << 12);
-		self.registers.write(dest.into(), value.into()).unwrap();
-		self.pc = self.pc.wrapping_add(4);
-	    }
-	    Instr::Jal { dest, offset } => {
-		let value = self.pc.wrapping_add(4);
-		let offset = interpret_as_signed!(offset, 21);
-		self.registers.write(dest.into(), value.into()).unwrap();
-		self.pc = self.pc.wrapping_add(offset.into());
-		if self.pc % 4 != 0 {
-		    // Section 2.2 intro of RISC-V unprivileged specification
-		    return Err(ExecutionError::InstructionAddressMisaligned)
-		}
-	    }
-	    Instr::Jalr { dest, base, offset } => {
-		let value = self.pc.wrapping_add(4);
-		self.registers.write(dest.into(), value.into()).unwrap();
-		let pc_relative_addr = 0xfffe & offset.wrapping_add(base.into());
-		self.pc = self.pc.wrapping_add(pc_relative_addr.into());
-		if self.pc % 4 != 0 {
-		    // Section 2.2 intro of RISC-V unprivileged specification
-		    return Err(ExecutionError::InstructionAddressMisaligned)
-		}
-	    }
+                let branch_taken = match mnemonic.as_ref() {
+                    "beq" => src1 == src2,
+                    "bne" => src1 != src2,
+                    "blt" => {
+                        let src1: i32 = interpret_u32_as_signed!(src1);
+                        let src2: i32 = interpret_u32_as_signed!(src2);
+                        src1 < src2
+                    }
+                    "bge" => {
+                        let src1: i32 = interpret_u32_as_signed!(src1);
+                        let src2: i32 = interpret_u32_as_signed!(src2);
+                        src1 >= src2
+                    }
+                    "bltu" => src1 < src2,
+                    "bgeu" => src1 >= src2,
+                    _ => return Err(ExecutionError::InvalidInstruction(instr)),
+                };
 
-	    Instr::RegReg { mnemonic, dest, src1, src2 } => {
-		let src1: u32 = self.registers.read(src1.into()).unwrap().try_into().unwrap();
-		let src2: u32 = self.registers.read(src2.into()).unwrap().try_into().unwrap();
+                if branch_taken {
+                    let offset = sign_extend(offset, 12);
+                    self.pc = self.pc.wrapping_add(offset.into());
+                    if self.pc % 4 != 0 {
+                        // Section 2.2 intro of RISC-V unprivileged specification
+                        return Err(ExecutionError::InstructionAddressMisaligned);
+                    }
+                } else {
+                    self.pc = self.pc.wrapping_add(4);
+                }
+            }
+            Instr::RegReg {
+                mnemonic,
+                dest,
+                src1,
+                src2,
+            } => {
+                let src1: u32 = self
+                    .registers
+                    .read(src1.into())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
+                let src2: u32 = self
+                    .registers
+                    .read(src2.into())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
 
-		let value = match mnemonic.as_ref() {
-		    "add" => src1.wrapping_add(src2),
-		    "sub" => src1.wrapping_sub(src2), 
-		    "slt" => {
-			let src1: i32 = interpret_u32_as_signed!(src1);
-			let src2: i32 = interpret_u32_as_signed!(src2);
-			if src1 < src2 {1} else {0}
-		    }, 
-		    "sltu" => if src1 < src2 {1} else {0},
-		    _ => return Err(ExecutionError::InvalidInstruction(instr))
-		};
-	
-		self.registers.write(dest.into(), value.into()).unwrap();
-		self.pc = self.pc.wrapping_add(4);
+                let value = match mnemonic.as_ref() {
+                    "add" => src1.wrapping_add(src2),
+                    "sub" => src1.wrapping_sub(src2),
+                    "slt" => {
+                        let src1: i32 = interpret_u32_as_signed!(src1);
+                        let src2: i32 = interpret_u32_as_signed!(src2);
+                        (src1 < src2) as u32
+                    }
+                    "sltu" => (src1 < src2) as u32,
+                    _ => return Err(ExecutionError::InvalidInstruction(instr)),
+                };
 
-	    }
-	    _ => return Err(ExecutionError::UnimplementedInstruction(instr))
-	}
-	
-	Ok(())
+                self.registers.write(dest.into(), value.into()).unwrap();
+                self.pc = self.pc.wrapping_add(4);
+            }
+            _ => return Err(ExecutionError::UnimplementedInstruction(instr)),
+        }
+
+        Ok(())
     }
-    
-    pub fn step(&mut self) -> Result<(), Trap> {
 
-	// Fetch the instruction
-	let instr: u32 = self
+    pub fn step(&mut self) -> Result<(), Trap> {
+        // Fetch the instruction
+        let instr: u32 = self
             .memory
             .read(self.pc.into(), Wordsize::Word)
             .expect("this read should succeed, else pc is invalid")
             .try_into()
             .expect("the word should fit in u32, else bug in Memory");
 
-	// Decoding the instruction may return traps, e.g. invalid
-	// instruction. That can be returned.
-	let instr = Instr::from(instr)?;
-					      
+        // Decoding the instruction may return traps, e.g. invalid
+        // instruction. That can be returned.
+        let instr = Instr::from(instr)?;
 
-	// Execute instruction here. That may produce further traps,
-	// e.g. ecalls or invalid instructions discovered at the
-	// execution step
-	self.execute(instr)?;
-	
+        // Execute instruction here. That may produce further traps,
+        // e.g. ecalls or invalid instructions discovered at the
+        // execution step
+        self.execute(instr)?;
+
         Ok(())
     }
 }
 
 #[derive(Error, Debug)]
 pub enum Trap {
-    #[error("instruction decode failed: {0}")]    
+    #[error("instruction decode failed: {0}")]
     InstructionDecodeFailed(DecodeError),
-    #[error("instruction execution failed: {0}")]    
-    InstructionExecutionFailed(ExecutionError)
+    #[error("instruction execution failed: {0}")]
+    InstructionExecutionFailed(ExecutionError),
 }
 
 #[derive(Error, Debug)]
@@ -163,217 +245,413 @@ pub enum ExecutionError {
     InstructionAddressMisaligned,
 }
 
-
 impl From<DecodeError> for Trap {
     fn from(d: DecodeError) -> Trap {
-	Trap::InstructionDecodeFailed(d)
+        Trap::InstructionDecodeFailed(d)
     }
 }
 
 impl From<ExecutionError> for Trap {
     fn from(e: ExecutionError) -> Trap {
-	Trap::InstructionExecutionFailed(e)
+        Trap::InstructionExecutionFailed(e)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
     use crate::instr::encode::*;
-    
+
     #[test]
     fn check_lui() -> Result<(), &'static str> {
-	// Check a basic case of lui (result should be placed in
-	// upper 20 bits of x2)
-	let mut hart = Hart::default();
-	hart.memory.write(0, lui!(x2, 53).into(), Wordsize::Word).unwrap();
-	hart.step().unwrap();
-	let x2 = hart.registers.read(2).unwrap();
-	assert_eq!(x2, 53 << 12);
-	assert_eq!(hart.pc, 4);
-	Ok(())
+        // Check a basic case of lui (result should be placed in
+        // upper 20 bits of x2)
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, lui!(x2, 53).into(), Wordsize::Word)
+            .unwrap();
+        hart.step().unwrap();
+        let x2 = hart.registers.read(2).unwrap();
+        assert_eq!(x2, 53 << 12);
+        assert_eq!(hart.pc, 4);
+        Ok(())
     }
 
     #[test]
     fn check_auipc() -> Result<(), &'static str> {
-	// Check a basic case of lui (result should be placed in
-	// upper 20 bits of x2)
-	let mut hart = Hart::default();
-	hart.pc = 8;
-	hart.memory.write(8, auipc!(x4, 53).into(), Wordsize::Word).unwrap();
-	hart.step().unwrap();
-	let x4 = hart.registers.read(4).unwrap();
-	assert_eq!(x4, 8 + (53 << 12));
-	assert_eq!(hart.pc, 12);
-	Ok(())
+        // Check a basic case of lui (result should be placed in
+        // upper 20 bits of x2)
+        let mut hart = Hart::default();
+        hart.pc = 8;
+        hart.memory
+            .write(8, auipc!(x4, 53).into(), Wordsize::Word)
+            .unwrap();
+        hart.step().unwrap();
+        let x4 = hart.registers.read(4).unwrap();
+        assert_eq!(x4, 8 + (53 << 12));
+        assert_eq!(hart.pc, 12);
+        Ok(())
     }
 
     #[test]
     fn check_jal() -> Result<(), &'static str> {
-	let mut hart = Hart::default();
-	hart.pc = 8;
-	hart.memory.write(8, jal!(x4, -4).into(), Wordsize::Word).unwrap();
-	hart.step().unwrap();
-	let x4 = hart.registers.read(4).unwrap();
-	assert_eq!(x4, 12);
-	assert_eq!(hart.pc, 4);
-	Ok(())
+        let mut hart = Hart::default();
+        hart.pc = 8;
+        hart.memory
+            .write(8, jal!(x4, -4).into(), Wordsize::Word)
+            .unwrap();
+        hart.step().unwrap();
+        let x4 = hart.registers.read(4).unwrap();
+        assert_eq!(x4, 12);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_jalr() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.pc = 12;
+        hart.registers.write(6, 20).unwrap();
+        hart.memory
+            .write(12, jalr!(x4, x6, -4).into(), Wordsize::Word)
+            .unwrap();
+        hart.step().unwrap();
+        let x4 = hart.registers.read(4).unwrap();
+        assert_eq!(x4, 16);
+        assert_eq!(hart.pc, 12 + 20 - 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_beq_not_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, beq!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 1).unwrap();
+        hart.registers.write(2, 2).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_beq_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, beq!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 2).unwrap();
+        hart.registers.write(2, 2).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 16);
+        Ok(())
+    }
+
+    #[test]
+    fn check_bne_not_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, bne!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 2).unwrap();
+        hart.registers.write(2, 2).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_bne_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, bne!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 1).unwrap();
+        hart.registers.write(2, 2).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 16);
+        Ok(())
+    }
+
+    #[test]
+    fn check_blt_not_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, blt!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 10).unwrap();
+        hart.registers.write(2, 0xffff_ffff).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_blt_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, blt!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 0xffff_ffff).unwrap();
+        hart.registers.write(2, 10).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 16);
+        Ok(())
+    }
+
+    #[test]
+    fn check_bltu_not_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, bltu!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 10).unwrap();
+        hart.registers.write(2, 1).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_bltu_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, bltu!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 1).unwrap();
+        hart.registers.write(2, 10).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 16);
+        Ok(())
+    }
+    
+    #[test]
+    fn check_bge_not_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, bge!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 0xffff_ffff).unwrap();
+        hart.registers.write(2, 10).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_bge_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, bge!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 10).unwrap();
+        hart.registers.write(2, 0xffff_ffff).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 16);
+        Ok(())
+    }
+
+    #[test]
+    fn check_bgeu_not_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, bgeu!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 1).unwrap();
+        hart.registers.write(2, 10).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_bgeu_taken() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, bgeu!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(1, 10).unwrap();
+        hart.registers.write(2, 1).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 16);
+        Ok(())
     }
     
     #[test]
     fn check_add() -> Result<(), &'static str> {
-	let mut hart = Hart::default();
-	hart.memory.write(0, add!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(2, 2).unwrap();
-	hart.registers.write(3, 3).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 5);
-	assert_eq!(hart.pc, 4);
-	Ok(())
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, add!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 2).unwrap();
+        hart.registers.write(3, 3).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 5);
+        assert_eq!(hart.pc, 4);
+        Ok(())
     }
 
     #[test]
     fn check_add_wrapping_edge_case() -> Result<(), &'static str> {
-	let mut hart = Hart::default();
-	hart.memory.write(0, add!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(2, 0xffff_fffe).unwrap();
-	hart.registers.write(3, 5).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 3);
-	assert_eq!(hart.pc, 4);
-	Ok(())
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, add!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xffff_fffe).unwrap();
+        hart.registers.write(3, 5).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 3);
+        assert_eq!(hart.pc, 4);
+        Ok(())
     }
 
     #[test]
     fn check_sub() -> Result<(), &'static str> {
-	let mut hart = Hart::default();
-	hart.memory.write(0, sub!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(2, 124).unwrap();
-	hart.registers.write(3, 22).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 102);
-	assert_eq!(hart.pc, 4);
-	Ok(())
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, sub!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 124).unwrap();
+        hart.registers.write(3, 22).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 102);
+        assert_eq!(hart.pc, 4);
+        Ok(())
     }
 
     #[test]
     fn check_sub_wrapping_edge_case() -> Result<(), &'static str> {
-	let mut hart = Hart::default();
-	hart.memory.write(0, sub!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(2, 20).unwrap();
-	hart.registers.write(3, 22).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 0xffff_fffe);
-	assert_eq!(hart.pc, 4);
-	Ok(())
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, sub!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 20).unwrap();
+        hart.registers.write(3, 22).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0xffff_fffe);
+        assert_eq!(hart.pc, 4);
+        Ok(())
     }
 
     #[test]
     fn check_slt_both_positive() -> Result<(), &'static str> {
-	let mut hart = Hart::default();
-	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(2, 124).unwrap();
-	hart.registers.write(3, 22).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 0);
-	assert_eq!(hart.pc, 4);
-	
-	// Swap src1 and src2
-	let mut hart = Hart::default();
-	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(3, 124).unwrap();
-	hart.registers.write(2, 22).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 1);
-	assert_eq!(hart.pc, 4);
-	
-	Ok(())
-    }
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, slt!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 124).unwrap();
+        hart.registers.write(3, 22).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0);
+        assert_eq!(hart.pc, 4);
 
+        // Swap src1 and src2
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, slt!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(3, 124).unwrap();
+        hart.registers.write(2, 22).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 1);
+        assert_eq!(hart.pc, 4);
+
+        Ok(())
+    }
 
     #[test]
     fn check_slt_both_negative() -> Result<(), &'static str> {
-	let mut hart = Hart::default();
-	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	let v1: u64 = interpret_i32_as_unsigned!(-24).into();
-	let v2: u64 = interpret_i32_as_unsigned!(-5).into();
-	hart.registers.write(2, v1).unwrap();
-	hart.registers.write(3, v2).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 1);
-	assert_eq!(hart.pc, 4);
-	
-	// Swap src1 and src2
-	let mut hart = Hart::default();
-	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(3, v1).unwrap();
-	hart.registers.write(2, v2).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 0);
-	assert_eq!(hart.pc, 4);
-	
-	Ok(())
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, slt!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        let v1: u64 = interpret_i32_as_unsigned!(-24).into();
+        let v2: u64 = interpret_i32_as_unsigned!(-5).into();
+        hart.registers.write(2, v1).unwrap();
+        hart.registers.write(3, v2).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 1);
+        assert_eq!(hart.pc, 4);
+
+        // Swap src1 and src2
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, slt!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(3, v1).unwrap();
+        hart.registers.write(2, v2).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0);
+        assert_eq!(hart.pc, 4);
+
+        Ok(())
     }
 
     #[test]
     fn check_slt_different_signs() -> Result<(), &'static str> {
-	let mut hart = Hart::default();
-	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	let v1: u64 = interpret_i32_as_unsigned!(-24).into();
-	let v2: u64 = 5;
-	hart.registers.write(2, v1).unwrap();
-	hart.registers.write(3, v2).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 1);
-	assert_eq!(hart.pc, 4);
-	
-	// Swap src1 and src2
-	let mut hart = Hart::default();
-	hart.memory.write(0, slt!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(3, v1).unwrap();
-	hart.registers.write(2, v2).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 0);
-	assert_eq!(hart.pc, 4);
-	
-	Ok(())
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, slt!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        let v1: u64 = interpret_i32_as_unsigned!(-24).into();
+        let v2: u64 = 5;
+        hart.registers.write(2, v1).unwrap();
+        hart.registers.write(3, v2).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 1);
+        assert_eq!(hart.pc, 4);
+
+        // Swap src1 and src2
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, slt!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(3, v1).unwrap();
+        hart.registers.write(2, v2).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0);
+        assert_eq!(hart.pc, 4);
+
+        Ok(())
     }
 
-    
     #[test]
     fn check_sltu() -> Result<(), &'static str> {
-	let mut hart = Hart::default();
-	hart.memory.write(0, sltu!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(2, 124).unwrap();
-	hart.registers.write(3, 22).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 0);
-	assert_eq!(hart.pc, 4);
-	
-	// Swap src1 and src2
-	let mut hart = Hart::default();
-	hart.memory.write(0, sltu!(x1, x2, x3).into(), Wordsize::Word).unwrap();
-	hart.registers.write(3, 124).unwrap();
-	hart.registers.write(2, 22).unwrap();
-	hart.step().unwrap();
-	let x1 = hart.registers.read(1).unwrap();
-	assert_eq!(x1, 1);
-	assert_eq!(hart.pc, 4);
-	
-	Ok(())
-    }
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, sltu!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 124).unwrap();
+        hart.registers.write(3, 22).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0);
+        assert_eq!(hart.pc, 4);
 
+        // Swap src1 and src2
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, sltu!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(3, 124).unwrap();
+        hart.registers.write(2, 22).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 1);
+        assert_eq!(hart.pc, 4);
+
+        Ok(())
+    }
 }
