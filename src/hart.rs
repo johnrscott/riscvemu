@@ -165,6 +165,31 @@ impl Hart {
                     self.pc = self.pc.wrapping_add(4);
                 }
             }
+            Instr::Load {
+                mnemonic,
+                dest,
+                base,
+                offset,
+            } => {
+		let base: u32 = self
+                    .registers
+                    .read(base.into())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
+		let offset = sign_extend(offset, 12);
+		let addr = base.wrapping_add(offset);
+                let data = match mnemonic.as_ref() {
+                    "lb" => sign_extend(u32::try_from(self.memory.read(addr.into(), Wordsize::Byte).unwrap()).unwrap(), 7),
+                    "lh" => sign_extend(u32::try_from(self.memory.read(addr.into(), Wordsize::Halfword).unwrap()).unwrap(), 15),
+                    "lw" => self.memory.read(addr.into(), Wordsize::Word).unwrap().try_into().unwrap(),
+                    "lbu" => self.memory.read(addr.into(), Wordsize::Byte).unwrap().try_into().unwrap(),
+                    "lhu" => self.memory.read(addr.into(), Wordsize::Halfword).unwrap().try_into().unwrap(),
+                    _ => return Err(ExecutionError::InvalidInstruction(instr)),
+                };
+		self.registers.write(dest.into(), data.into()).unwrap();
+		self.pc = self.pc.wrapping_add(4);
+	    }
             Instr::RegReg {
                 mnemonic,
                 dest,
@@ -426,7 +451,7 @@ mod tests {
         assert_eq!(hart.pc, 16);
         Ok(())
     }
-    
+
     #[test]
     fn check_bge_not_taken() -> Result<(), &'static str> {
         let mut hart = Hart::default();
@@ -476,6 +501,76 @@ mod tests {
         hart.registers.write(2, 1).unwrap();
         hart.step().unwrap();
         assert_eq!(hart.pc, 16);
+        Ok(())
+    }
+
+    #[test]
+    fn check_lb() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, lb!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 4).unwrap();
+	hart.memory.write(20, 0xff, Wordsize::Byte).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        assert_eq!(hart.registers.read(1).unwrap(), 0xffff_ffff);
+        Ok(())
+    }
+
+    #[test]
+    fn check_lbu() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, lbu!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 4).unwrap();
+	hart.memory.write(20, 0xff, Wordsize::Byte).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        assert_eq!(hart.registers.read(1).unwrap(), 0x0000_00ff);
+        Ok(())
+    }
+
+    #[test]
+    fn check_lh() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, lh!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 5).unwrap();
+	hart.memory.write(21, 0xff92, Wordsize::Halfword).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        assert_eq!(hart.registers.read(1).unwrap(), 0xffff_ff92);
+        Ok(())
+    }
+
+    #[test]
+    fn check_lhu() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, lhu!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 5).unwrap();
+	hart.memory.write(21, 0xff92, Wordsize::Halfword).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        assert_eq!(hart.registers.read(1).unwrap(), 0x0000_ff92);
+        Ok(())
+    }
+
+    #[test]
+    fn check_lw() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, lw!(x1, x2, 16).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 6).unwrap();
+	hart.memory.write(22, 0x1234_ff92, Wordsize::Word).unwrap();
+        hart.step().unwrap();
+        assert_eq!(hart.pc, 4);
+        assert_eq!(hart.registers.read(1).unwrap(), 0x1234_ff92);
         Ok(())
     }
     
