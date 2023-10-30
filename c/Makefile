@@ -2,7 +2,7 @@
 CC=riscv32-unknown-elf-gcc
 
 hello.out: hello.c startup.o linker.ld Makefile
-	$(CC) -T linker.ld -O2 -ffreestanding -nostdlib hello.c startup.o -o $@
+	$(CC) -T linker.ld -O2 -Wall -Wextra -ffreestanding -nostdlib hello.c -o $@
 
 startup.o: startup.S
 	$(CC) -s $< -o startup.o
