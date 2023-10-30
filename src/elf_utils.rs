@@ -2,7 +2,8 @@ use elf::endian::AnyEndian;
 use elf::section::SectionHeader;
 use elf::ElfBytes;
 
-use crate::cpu::Cpu;
+use crate::hart::Hart;
+use crate::hart::memory::Wordsize;
 
 pub fn read_text_instructions(file_path: &String) -> Vec<u32> {
     let path = std::path::PathBuf::from(file_path);
@@ -64,12 +65,12 @@ pub fn find_function_symbol(file_path: &String, symbol_name: &String) -> Option<
     None
 }
 
-pub fn load_text_section(cpu: &mut Cpu, elf_file_path: &String, text_load_offset: usize) {
+pub fn load_text_section(hart: &mut Hart, elf_file_path: &String, text_load_offset: usize) {
     let instructions = read_text_instructions(elf_file_path);
 
     let mut addr = text_load_offset;
     for instr in instructions {
-        cpu.write_instruction(addr.try_into().unwrap(), instr);
+        hart.memory.write(addr.try_into().unwrap(), instr.into(), Wordsize::Word).unwrap();
         addr += 4;
     }
 }
