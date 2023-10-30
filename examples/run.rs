@@ -8,7 +8,7 @@ fn main() {
     // Load text section at 0 offset
     load_text_section(&mut hart, &binary, 0);
 
-    for _ in 0..10 {
+    for _ in 0..100000 {
 	hart.step().unwrap()
     }
 }
