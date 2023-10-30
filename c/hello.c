@@ -5,7 +5,7 @@
 static volatile char *dev = (char*)0x3f8;
 
 int main() {
-    *dev = '0';
+    *dev = '5';
     while (1)
 	;
 }
