@@ -14,6 +14,6 @@ SECTIONS {
 	       	 *(.text.startup)
 		 *(.text)
 		 }
-    	 /* .data : { *(.data) } > data */
-    	 /* .bss : { *(.bss) } > data */
+    	 .data : { *(.data) } > data
+    	 .bss : { *(.bss) } > data
 }

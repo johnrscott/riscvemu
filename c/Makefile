@@ -1,6 +1,7 @@
 # See NOTES.md on installing this compiler
 CC=riscv32-unknown-elf-gcc
 
+# Note startup.o is added by the linker.ld script
 hello.out: hello.c startup.o linker.ld Makefile
 	$(CC) -T linker.ld -O2 -Wall -Wextra -ffreestanding -nostdlib hello.c -o $@
 
