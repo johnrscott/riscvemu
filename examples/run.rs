@@ -8,7 +8,10 @@ fn main() {
     // Load text section at 0 offset
     load_text_section(&mut hart, &binary, 0);
 
-    for _ in 0..100000 {
-	hart.step().unwrap()
+    for _ in 0..10000 {
+	if let Err(e) = hart.step() {
+	    println!("Trap: {e} at instruction pc={:x}", hart.pc);
+	    break;
+	}
     }
 }
