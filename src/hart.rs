@@ -108,8 +108,7 @@ impl Hart {
                     .unwrap()
                     .try_into()
                     .unwrap();
-                let pc_relative_addr = 0xffff_fffe & base.wrapping_add(offset);
-                self.pc = self.pc.wrapping_add(pc_relative_addr);
+                self.pc = 0xffff_fffe & base.wrapping_add(offset);
                 if self.pc % 4 != 0 {
                     // Section 2.2 intro of RISC-V unprivileged specification
                     return Err(ExecutionError::InstructionAddressMisaligned);

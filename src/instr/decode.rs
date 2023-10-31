@@ -31,7 +31,7 @@ pub enum Instr {
     /// if the target pc is not 4-byte aligned.
     Jal { dest: u8, offset: u32 },
     /// In RV32I and RV64I, store pc+4 in dest, compute base + offset,
-    /// set bit 0 to zero, and set pc = pc + result. The offset is 12
+    /// set bit 0 to zero, and set pc = result. The offset is 12
     /// bits long (and may be even or odd). An
     /// instruction-address-misaligned exception is generated if the
     /// target pc is not 4-byte aligned.
