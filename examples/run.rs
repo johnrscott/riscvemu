@@ -58,7 +58,9 @@ fn main() {
     // Load text section at 0 offset
     load_elf(&mut hart, &elf_name);
 
-    let debug = true;
+    let debug = false;
+
+    println!("Starting execution");
     
     for _ in 0..10000 {
 	let pc = hart.pc;
