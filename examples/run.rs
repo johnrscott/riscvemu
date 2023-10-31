@@ -15,6 +15,41 @@ fn press_enter_to_continue() {
     let _ = stdin.read(&mut [0u8]).unwrap();
 }
 
+fn reg_index_to_abi_name(index: usize) -> String {
+    String::from(match index {
+	0 => "zero",
+	1 => "ra (return address)",
+	2 => "sp (stack pointer)",
+	3 => "gp (global pointer)",
+	4 => "tp (thread_pointer)",
+	5 => "t0 (temp 0)",
+	6 => "t1 (temp 1)",
+	7 => "t2 (temp 2)",
+	8 => "s0/fp (saved register/frame pointer)",
+	9 => "s1 (saved register)",
+	10 => "a0 (function args/return values)",
+	11 => "a1 (function args/return values)",
+	12 => "a2 (function args)",
+	13 => "a3 (function args)",
+	14 => "a4 (function args)",
+	15 => "a5 (function args)",
+	16 => "a6 (function args)",
+	17 => "a7 (function args)",
+	_ => unimplemented!("Not implemented this register name yet")
+    })
+}
+
+fn print_nonzero_registers(hart: &Hart) {
+    for n in 0..32 {
+	let value = hart.registers.read(n).unwrap();
+	if value != 0 {
+	    let reg_abi_name = reg_index_to_abi_name(n);
+	    println!("{reg_abi_name}: 0x{value:x}");
+	}
+    }
+}
+  
+
 fn main() {
     
     let mut hart = Hart::default();
@@ -27,19 +62,26 @@ fn main() {
     
     for _ in 0..10000 {
 	let pc = hart.pc;
-	println!("Current pc = 0x{pc:x}");
 	let instr = hart.memory.read(pc.into(), Wordsize::Word).unwrap();
 	let instr = Instr::from(instr.try_into().unwrap());
-	println!("Next instruction: {:x?}", instr);
-	print!("Executing instruction now... ");
+
+	if debug {
+	    println!("\nCurrent state of hart:");
+	    //println!("{:x?}\n", hart);
+	    print_nonzero_registers(&hart);
+	    println!("\nCurrent pc = 0x{pc:x}");
+	    println!("Next instruction: {:x?}", instr);
+	    press_enter_to_continue();
+	    print!("Executing instruction now... ");
+
+	}
 	if let Err(e) = hart.step() {
 	    println!("trap: {e} at instruction pc={:x}", hart.pc);
 	    break;
 	} else {
-	    println!("done (no trap)");
+	    if debug {
+		println!("done (no trap)");
+	    }
 	}
-	println!("Current state of hart:");
-	println!("{:x?}", hart);
-	press_enter_to_continue();
     }
 }
