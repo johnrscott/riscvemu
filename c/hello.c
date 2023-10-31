@@ -16,8 +16,12 @@ int triangle_number(int n) {
     }
 }
 
+int divide(int a, int b) {
+    return a / b;
+}
+
 int main() {
-    int m = triangle_number(3);
+    int m = divide(6, 2);
     putchar(0x30 + m);
     while (1)
 	;
