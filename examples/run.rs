@@ -1,6 +1,6 @@
 use riscvemu::hart::memory::Wordsize;
 use riscvemu::instr::decode::Instr;
-use riscvemu::{hart::Hart, elf_utils::load_text_section};
+use riscvemu::{hart::Hart, elf_utils::load_elf};
 use std::io;
 use std::io::prelude::*;
 
@@ -18,10 +18,10 @@ fn press_enter_to_continue() {
 fn main() {
     
     let mut hart = Hart::default();
-    let binary = format!("c/hello.out");
+    let elf_name = format!("c/hello.out");
 
     // Load text section at 0 offset
-    load_text_section(&mut hart, &binary, 0);
+    load_elf(&mut hart, &elf_name);
 
     let debug = true;
     
