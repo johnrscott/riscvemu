@@ -35,7 +35,7 @@ fn reg_index_to_abi_name(index: usize) -> String {
 	15 => "a5 (function args)",
 	16 => "a6 (function args)",
 	17 => "a7 (function args)",
-	_ => unimplemented!("Not implemented this register name yet")
+	_ => "xn (unknown)",
     })
 }
 
@@ -58,7 +58,7 @@ fn main() {
     // Load text section at 0 offset
     load_elf(&mut hart, &elf_name);
 
-    let debug = false;
+    let debug = true;
 
     println!("Starting execution");
     
