@@ -14,8 +14,8 @@ void putchar(char ch) {
  */
 int puts(const char * str)
 {
-    for (size_t i = 0; i < 10; i++) {
-	putchar(str[i]);
+    for (size_t i = 0; i < 5; i++) {
+        putchar(str[i]);
     }
 
     return 0;
@@ -35,8 +35,9 @@ int divide(int a, int b) {
 
 int main() {
     //int m = divide(6, 2);
-    putchar('a');
-    puts("Hello");
+    //putchar('a');
+    const char * hello = "Hello";
+    putchar(0x30 + strlen(hello));
     while (1)
 	;
 }
