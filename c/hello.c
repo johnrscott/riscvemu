@@ -1,4 +1,3 @@
-
 void putchar(char ch) {
     // This emits a warning currently, might be a
     // compiler bug:
@@ -22,7 +21,8 @@ int divide(int a, int b) {
 
 int main() {
     int m = divide(6, 2);
-    putchar(0x30 + m);
+    //putchar(0x30 + m);
+    putchar('H');
     while (1)
 	;
 }

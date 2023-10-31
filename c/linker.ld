@@ -9,11 +9,12 @@ MEMORY {
 	stack : ORIGIN = 0xc00, LENGTH = 1024
 }
 
+
 SECTIONS {
 	 .text : {
 	       	 *(.text.startup)
 		 *(.text)
-		 }
+		 } > instr
     	 .data : { *(.data) } > data
     	 .bss : { *(.bss) } > data
 }
