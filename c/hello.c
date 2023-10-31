@@ -1,6 +1,37 @@
-#include <string.h>
+//#include <string.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <stddef.h>
+
+size_t strlen(const char* str) 
+{
+    size_t len = 0;
+    while (str[len] != '\0') {   // \0 is the NULL char
+	len++;
+    }
+    return len;
+}
+
+void putchar(char ch) {
+    // This emits a warning currently, might be a
+    // compiler bug:
+    // https://stackoverflow.com/questions/71383351/
+    // how-to-avoid-wrong-array-bounds-warning-on-a-pointer-in-g12
+    static volatile char *dev = (char*)0x3f8;
+    *dev = ch;
+}
+
+/**
+ * \brief Print a string
+ */
+int puts(const char * str)
+{
+    for (size_t i = 0; i < strlen(str); i++) {
+        putchar(str[i]);
+    }
+
+    return 0;
+}
 
 void reverse(char* str)
 {
@@ -14,17 +45,12 @@ void reverse(char* str)
     }    
 }
 
-char * itoa(int value, char * str, int base)
+char * itoa(int value, char * str)
 {
     int i = 0;
     bool isNegative = false;
     unsigned int num = 0;
-    
-    // Check base is between 2 and 36
-    if (base < 2 || base > 36) {
-	str[i] = '\0';
-	return str;
-    }
+    int base = 10;
 
     // Handle 0 explicitly, otherwise an empty string will be printed.
     if (value == 0) {
@@ -35,7 +61,7 @@ char * itoa(int value, char * str, int base)
 
     // Numbers are usually considered unsigned.
     // Negative numbers are handled only with base 10 in standard itoa.
-    if (value < 0 && base == 10) {
+    if (value < 0) {
 	isNegative = true;
 	num = -value;
     } else {
@@ -73,8 +99,6 @@ int printf(const char * format, ...)
     va_start(args, format);
 
     char str[100];
-    bool precision = false;
-    unsigned int prec_len = 0;
     
     for (const char *p = format; *p != '\0'; p++) {
 	// Print character if it is not a %
@@ -85,67 +109,15 @@ int printf(const char * format, ...)
 	    // Increment to character after %
 	    p++;
 
-	    // Check if precision has been specified
-	    // Only supported for string at the moment
-	    /// \todo Extend precision specification to numbers
-	    if (*p == '.') {
-		// Precision specified
-		precision = true;
-		p++;
-		// Precision is specified in an argument
-		if (*p == '*') {
-		    prec_len = va_arg(args, unsigned int);
-		    p++;
-		}
-	    }
-	    
 	    switch(*p) {
 	    case 'd': {   // Decimal number
 		int i = va_arg(args, int);
-		puts(itoa(i, str, 10));
-		break;
-	    }
-	    case 'x': {   // Hexadecimal number
-		unsigned int i = va_arg(args, unsigned int);
-		if (precision == false) {
-		    puts(itoa(i, str, 16));
-		}
-		else {
-		    char * num_str = itoa(i, str, 16);
-		    if (strlen(num_str) >= prec_len) {
-			puts(num_str);
-		    }
-		    else {
-			for (size_t i = 0; i < prec_len - strlen(num_str); i++) {
-			    putchar('0');
-			}
-			puts(num_str);
-		    }
-		}
-		break;
-	    }
-	    case 'o': {   // Octal number
-		unsigned int i = va_arg(args, unsigned int);
-		puts(itoa(i, str, 8));
-		break;
-	    }
-	    case 'b': {   // Binary number
-		unsigned int i = va_arg(args, unsigned int);
-		puts(itoa(i, str, 2));
+		puts(itoa(i, str));
 		break;
 	    }
 	    case 's': {   // String
 		char *s = va_arg(args, char *);
-		if (precision == false) {
-		    puts(s);
-		}
-		else {
-		    for (unsigned int i = 0; i < prec_len; i++) {
-			putchar(s[i]);
-		    }
-		    // Reset precision flag
-		    precision = false;
-		}
+		puts(s);
 		break;
 	    }
 	    case '%': {
@@ -168,30 +140,6 @@ int printf(const char * format, ...)
     return 0;
 }
 
-
-void putchar(char ch) {
-    // This emits a warning currently, might be a
-    // compiler bug:
-    // https://stackoverflow.com/questions/71383351/
-    // how-to-avoid-wrong-array-bounds-warning-on-a-pointer-in-g12
-    static volatile char *dev = (char*)0x3f8;
-    *dev = ch;
-}
-
-/**
- * \brief Print a string
- */
-int puts(const char * str)
-{
-    for (size_t i = 0; i < strlen(str); i++) {
-        putchar(str[i]);
-    }
-
-    return 0;
-}
-
-
-
 int triangle_number(int n) {
     if (n == 0) {
 	return 0;
@@ -207,7 +155,7 @@ int divide(int a, int b) {
 int main() {
     //int m = divide(6, 2);
     const char * hello = "Hello world!";
-    puts(hello);
+    printf("%s, %d", hello, 10);
     while (1)
 	;
 }

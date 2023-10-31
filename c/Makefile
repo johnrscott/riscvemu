@@ -11,7 +11,7 @@ CC=riscv32-unknown-elf-gcc
 # off crt0 etc. See the manual page for gcc for full
 # information.
 hello.out: hello.c startup.o linker.ld Makefile
-	$(CC) -T linker.ld -Os -Wall -Wextra -ffreestanding -nostartfiles hello.c -o $@
+	$(CC) -T linker.ld -flto -Os -Wall -Wextra -ffreestanding -nostartfiles hello.c -o $@
 
 startup.o: startup.S
 	$(CC) -s $< -o startup.o
