@@ -72,28 +72,6 @@ char * itoa_internal(int value, char * str, int base)
     return str;
 }
 
-
-void putchar(char ch) {
-    // This emits a warning currently, might be a
-    // compiler bug:
-    // https://stackoverflow.com/questions/71383351/
-    // how-to-avoid-wrong-array-bounds-warning-on-a-pointer-in-g12
-    static volatile char *dev = (char*)0x3f8;
-    *dev = ch;
-}
-
-/**
- * \brief Print a string
- */
-int puts(const char * str)
-{
-    for (size_t i = 0; i < strlen(str); i++) {
-	putchar(str[i]);
-    }
-
-    return 0;
-}
-
 int printf(const char * format, ...)
 {
     // Define a variable to manipulate extra arguments

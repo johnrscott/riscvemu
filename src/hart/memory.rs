@@ -89,7 +89,7 @@ fn read_word(byte_map: &HashMap<u64, u8>, addr: u64, num_bytes: u64, xlen: Xlen)
 fn write_byte(byte_map: &mut HashMap<u64, u8>, addr: u64, value: u8, xlen: Xlen) {
     let addr = wrap_address(addr, xlen);
     // Char output device
-    if addr == 0x7f8 {
+    if addr == 0x3f8 {
 	let char_array = [value];
 	let s = std::str::from_utf8(&char_array).unwrap();
 	print!("{s}");
