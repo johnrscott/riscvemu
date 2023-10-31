@@ -3,11 +3,12 @@ STARTUP(startup.o)
 
 /* Memory is 4k in total */
 MEMORY {
-	instr : ORIGIN = 0x0, LENGTH = 2042,
-	io : ORIGIN = 0x7f8, LENGTH = 8,
-	data : ORIGIN = 0x800, LENGTH = 1024,
+	instr : ORIGIN = 0x0, LENGTH = 1016,
+	io : ORIGIN = 0x3f8, LENGTH = 8,
+	data : ORIGIN = 0x400, LENGTH = 2048,
 	stack : ORIGIN = 0xc00, LENGTH = 1024
 }
+
 
 SECTIONS {
 	 .text : {

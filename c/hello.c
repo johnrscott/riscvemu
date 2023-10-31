@@ -1,4 +1,4 @@
-#include "printf.h"
+#include <stdio.h>
 
 int triangle_number(int n) {
     if (n == 0) {
@@ -14,8 +14,8 @@ int divide(int a, int b) {
 
 int main() {
     int m = divide(6, 2);
-    //putchar(0x30 + m);
-    printf("Hello");
+    putchar('H');
+    //printf("Hello");
     while (1)
 	;
 }
