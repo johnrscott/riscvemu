@@ -142,6 +142,30 @@ fn get_registers(hart: &Hart) -> Paragraph {
     Paragraph::new(lines)
 }
 
+fn get_stack(hart: &Hart) -> Paragraph {
+
+    let mut lines = Vec::new();
+    
+    let stack_bottom = 0xff0;
+    let stack_pointer = hart.registers.read(2).expect("valid register read");
+
+    if stack_pointer == 0 || stack_pointer > stack_bottom {
+	Paragraph::new(format!("Stack pointer value sp={stack_pointer} not currently valid"))
+    } else {
+	for addr in (stack_pointer..=stack_bottom).rev().step_by(4) {
+	    let value = hart.memory.read(addr, Wordsize::Word).expect("valid memory read");
+	    let span = if value == 0 {
+		Span::raw(format!("0x{addr:x}: 0x{value:x}"))
+	    } else {
+		format!("0x{addr}: 0x{value:x}").bold().yellow()
+	    };
+	    lines.push(Line::from(vec![span]));
+	}
+	Paragraph::new(lines)
+    }
+}
+
+
 fn ui(frame: &mut Frame, hart: &mut Hart, hart_stdout: &mut String) {
     let main_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -205,7 +229,8 @@ fn ui(frame: &mut Frame, hart: &mut Hart, hart_stdout: &mut String) {
     );
 
     frame.render_widget(
-        Block::default().borders(Borders::ALL).title("Right"),
-        inner_layout[1],
+	get_stack(hart)
+	    .block(Block::default().borders(Borders::ALL).title("Stack Frame")),
+	inner_layout[1],
     );
 }
