@@ -1,10 +1,3 @@
-[package]
-name = "riscvemu"
-version = "0.1.0"
-edition = "2021"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-elf = "0.7"
-thiserror = "1.0"
+members = ["riscvemu", "emulator"]
