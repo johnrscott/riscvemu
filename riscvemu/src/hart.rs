@@ -1,8 +1,7 @@
 use memory::Memory;
 
 use crate::{
-    instr::decode::{DecodeError, Instr},
-    interpret_as_signed, mask,
+    instr::decode::{DecodeError, Instr}, mask,
 };
 
 use self::{memory::Wordsize, registers::Registers};
@@ -284,7 +283,6 @@ impl Hart {
                 self.registers.write(dest.into(), value.into()).unwrap();
                 self.pc = self.pc.wrapping_add(4);
             }
-            _ => return Err(ExecutionError::UnimplementedInstruction(instr)),
         }
 
         Ok(())

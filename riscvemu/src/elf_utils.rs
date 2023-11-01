@@ -1,4 +1,4 @@
-use elf::abi::{SHF_ALLOC, SHF_EXECINSTR};
+use elf::abi::SHF_ALLOC;
 use elf::endian::AnyEndian;
 use elf::section::SectionHeader;
 use elf::ElfBytes;
@@ -34,7 +34,6 @@ pub fn read_text_instructions(file_path: &String) -> Vec<u32> {
 	}
 	//SHF_ALLOC & SHF_EXECINSTR;
     }
-    panic!("");
     
     let text_shdr: SectionHeader = file
         .section_header_by_name(".text")
