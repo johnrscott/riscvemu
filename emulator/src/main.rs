@@ -157,7 +157,7 @@ fn get_stack(hart: &Hart) -> Paragraph {
 	    let span = if value == 0 {
 		Span::raw(format!("0x{addr:x}: 0x{value:x}"))
 	    } else {
-		format!("0x{addr}: 0x{value:x}").bold().yellow()
+		format!("0x{addr:x}: 0x{value:x}").bold().yellow()
 	    };
 	    lines.push(Line::from(vec![span]));
 	}

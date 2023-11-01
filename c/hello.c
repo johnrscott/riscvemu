@@ -98,7 +98,7 @@ int printf(const char * format, ...)
     // Initializes args variable to the last fixed argument
     va_start(args, format);
 
-    char str[100];
+    char str[32];
     
     for (const char *p = format; *p != '\0'; p++) {
 	// Print character if it is not a %
