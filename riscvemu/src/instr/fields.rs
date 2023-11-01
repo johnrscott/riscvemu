@@ -104,11 +104,10 @@ macro_rules! imm_stype {
     ($instr:expr) => {{
         let imm11_5: u16 = extract_field!($instr, 31, 25).try_into().unwrap();
         let imm4_0: u16 = extract_field!($instr, 11, 7).try_into().unwrap();
-	(imm11_5 << 5) | imm4_0
+        (imm11_5 << 5) | imm4_0
     }};
 }
 pub use imm_stype;
-
 
 #[macro_export]
 macro_rules! imm_btype {

@@ -1,3 +1,4 @@
+use queues::*;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -51,6 +52,7 @@ pub enum Xlen {
 pub struct Memory {
     xlen: Xlen,
     data: HashMap<u64, u8>,
+    pub stdout: Queue<char>,
 }
 
 #[derive(Error, PartialEq, Eq, Debug)]
@@ -86,32 +88,6 @@ fn read_word(byte_map: &HashMap<u64, u8>, addr: u64, num_bytes: u64, xlen: Xlen)
     value
 }
 
-fn write_byte(byte_map: &mut HashMap<u64, u8>, addr: u64, value: u8, xlen: Xlen) {
-    let addr = wrap_address(addr, xlen);
-    // Char output device
-    if addr == 0x3f8 {
-	let char_array = [value];
-	let s = std::str::from_utf8(&char_array).unwrap();
-	print!("{s}");
-    } else if value == 0 {
-        byte_map.remove(&addr);
-    } else {
-        byte_map.insert(addr, value);
-    }
-}
-
-fn write_word(byte_map: &mut HashMap<u64, u8>, addr: u64, num_bytes: u64, value: u64, xlen: Xlen) {
-    for n in 0..num_bytes {
-        let byte_n = 0xff & (value >> 8 * n);
-        write_byte(
-            byte_map,
-            addr.wrapping_add(n),
-            byte_n.try_into().unwrap(),
-            xlen,
-        );
-    }
-}
-
 fn address_invalid(addr: u64, xlen: Xlen) -> bool {
     xlen == Xlen::Xlen32 && addr > 0xffff_ffff
 }
@@ -124,12 +100,43 @@ impl Memory {
         }
     }
 
+    /// Return the current contents of the stdout buffer as a
+    /// and also delete the contents of the buffer
+    pub fn flush_stdout(&mut self) -> String {
+	let mut stdout = String::new();
+	while let Ok(ch) = self.stdout.remove() {
+	    stdout.push(ch);
+	}
+	stdout
+    }
+    
+    fn write_byte(&mut self, addr: u64, value: u8, xlen: Xlen) {
+        let addr = wrap_address(addr, xlen);
+        // Char output device
+        if addr == 0x3f8 {
+            self.stdout
+                .add(value as char)
+                .expect("insert into queue should work");
+        } else if value == 0 {
+            self.data.remove(&addr);
+        } else {
+            self.data.insert(addr, value);
+        }
+    }
+
+    fn write_word(&mut self, addr: u64, num_bytes: u64, value: u64, xlen: Xlen) {
+        for n in 0..num_bytes {
+            let byte_n = 0xff & (value >> 8 * n);
+            self.write_byte(addr.wrapping_add(n), byte_n.try_into().unwrap(), xlen);
+        }
+    }
+
     pub fn write(&mut self, addr: u64, value: u64, word_size: Wordsize) -> Result<(), WriteError> {
         if address_invalid(addr, self.xlen) {
             Err(WriteError::InvalidAddress)
         } else {
             let write_width = word_size.width().try_into().unwrap();
-            write_word(&mut self.data, addr, write_width, value, self.xlen);
+            self.write_word(addr, write_width, value, self.xlen);
             Ok(())
         }
     }

@@ -1,7 +1,8 @@
 use memory::Memory;
 
 use crate::{
-    instr::decode::{DecodeError, Instr}, mask,
+    instr::decode::{DecodeError, Instr},
+    mask,
 };
 
 use self::{memory::Wordsize, registers::Registers};
@@ -167,79 +168,111 @@ impl Hart {
                 base,
                 offset,
             } => {
-		let base: u32 = self
+                let base: u32 = self
                     .registers
                     .read(base.into())
                     .unwrap()
                     .try_into()
                     .unwrap();
-		let offset = sign_extend(offset, 11);
-		let addr = base.wrapping_add(offset);
+                let offset = sign_extend(offset, 11);
+                let addr = base.wrapping_add(offset);
                 let data = match mnemonic.as_ref() {
-                    "lb" => sign_extend(u32::try_from(self.memory.read(addr.into(), Wordsize::Byte).unwrap()).unwrap(), 7),
-                    "lh" => sign_extend(u32::try_from(self.memory.read(addr.into(), Wordsize::Halfword).unwrap()).unwrap(), 15),
-                    "lw" => self.memory.read(addr.into(), Wordsize::Word).unwrap().try_into().unwrap(),
-                    "lbu" => self.memory.read(addr.into(), Wordsize::Byte).unwrap().try_into().unwrap(),
-                    "lhu" => self.memory.read(addr.into(), Wordsize::Halfword).unwrap().try_into().unwrap(),
+                    "lb" => sign_extend(
+                        u32::try_from(self.memory.read(addr.into(), Wordsize::Byte).unwrap())
+                            .unwrap(),
+                        7,
+                    ),
+                    "lh" => sign_extend(
+                        u32::try_from(self.memory.read(addr.into(), Wordsize::Halfword).unwrap())
+                            .unwrap(),
+                        15,
+                    ),
+                    "lw" => self
+                        .memory
+                        .read(addr.into(), Wordsize::Word)
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                    "lbu" => self
+                        .memory
+                        .read(addr.into(), Wordsize::Byte)
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                    "lhu" => self
+                        .memory
+                        .read(addr.into(), Wordsize::Halfword)
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
                     _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
-		self.registers.write(dest.into(), data.into()).unwrap();
-		self.pc = self.pc.wrapping_add(4);
-	    }
-            Instr::Store { mnemonic, src, base, offset } => {
-		let base: u32 = self
+                self.registers.write(dest.into(), data.into()).unwrap();
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Store {
+                mnemonic,
+                src,
+                base,
+                offset,
+            } => {
+                let base: u32 = self
                     .registers
                     .read(base.into())
                     .unwrap()
                     .try_into()
                     .unwrap();
-		let offset = sign_extend(offset, 11);
-		let addr = base.wrapping_add(offset);
-		let data: u32 = self
-                    .registers
-                    .read(src.into())
-                    .unwrap()
-                    .try_into()
-                    .unwrap(); 
+                let offset = sign_extend(offset, 11);
+                let addr = base.wrapping_add(offset);
+                let data: u32 = self.registers.read(src.into()).unwrap().try_into().unwrap();
                 match mnemonic.as_ref() {
-                    "sb" => self.memory.write(addr.into(), data.into(), Wordsize::Byte).unwrap(),
-                    "sh" => self.memory.write(addr.into(), data.into(), Wordsize::Halfword).unwrap(),
-                    "sw" => self.memory.write(addr.into(), data.into(), Wordsize::Word).unwrap(),
+                    "sb" => self
+                        .memory
+                        .write(addr.into(), data.into(), Wordsize::Byte)
+                        .unwrap(),
+                    "sh" => self
+                        .memory
+                        .write(addr.into(), data.into(), Wordsize::Halfword)
+                        .unwrap(),
+                    "sw" => self
+                        .memory
+                        .write(addr.into(), data.into(), Wordsize::Word)
+                        .unwrap(),
                     _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
-		self.pc = self.pc.wrapping_add(4);
-	    }
-	    Instr::RegImm { mnemonic, dest, src, i_immediate } => {
-                let src: u32 = self
-                    .registers
-                    .read(src.into())
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-		let i_immediate = sign_extend(i_immediate, 11);
-		let value = match mnemonic.as_ref() {
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::RegImm {
+                mnemonic,
+                dest,
+                src,
+                i_immediate,
+            } => {
+                let src: u32 = self.registers.read(src.into()).unwrap().try_into().unwrap();
+                let i_immediate = sign_extend(i_immediate, 11);
+                let value = match mnemonic.as_ref() {
                     "addi" => src.wrapping_add(i_immediate),
                     "slti" => {
                         let src: i32 = interpret_u32_as_signed!(src);
-			let i_immediate: i32 = interpret_u32_as_signed!(i_immediate);
-			(src < i_immediate) as u32
+                        let i_immediate: i32 = interpret_u32_as_signed!(i_immediate);
+                        (src < i_immediate) as u32
                     }
                     "sltiu" => (src < i_immediate) as u32,
-		    "andi" => src & i_immediate,
-		    "ori" => src | i_immediate,
-		    "xori" => src ^ i_immediate,
-		    "slli" => src << (0x1f & i_immediate),
-		    "srli" => src >> (0x1f & i_immediate),
-		    "srai" => {
+                    "andi" => src & i_immediate,
+                    "ori" => src | i_immediate,
+                    "xori" => src ^ i_immediate,
+                    "slli" => src << (0x1f & i_immediate),
+                    "srli" => src >> (0x1f & i_immediate),
+                    "srai" => {
                         let src: i32 = interpret_u32_as_signed!(src);
-			interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
-		    }
+                        interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
+                    }
 
                     _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
-		self.registers.write(dest.into(), value.into()).unwrap();
+                self.registers.write(dest.into(), value.into()).unwrap();
                 self.pc = self.pc.wrapping_add(4);
-	    }
+            }
             Instr::RegReg {
                 mnemonic,
                 dest,
@@ -268,18 +301,18 @@ impl Hart {
                         (src1 < src2) as u32
                     }
                     "sltu" => (src1 < src2) as u32,
-		    "and" => src1 & src2,
-		    "or" => src1 | src2,
-		    "xor" => src1 ^ src2,
-		    "sll" => src1 << (0x1f & src2),
-		    "srl" => src1 >> (0x1f & src2),
-		    "sra" => {
+                    "and" => src1 & src2,
+                    "or" => src1 | src2,
+                    "xor" => src1 ^ src2,
+                    "sll" => src1 << (0x1f & src2),
+                    "srl" => src1 >> (0x1f & src2),
+                    "sra" => {
                         let src1: i32 = interpret_u32_as_signed!(src1);
-			interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
-		    }
+                        interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
+                    }
                     _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
- 
+
                 self.registers.write(dest.into(), value.into()).unwrap();
                 self.pc = self.pc.wrapping_add(4);
             }
@@ -569,7 +602,7 @@ mod tests {
             .write(0, lb!(x1, x2, 16).into(), Wordsize::Word)
             .unwrap();
         hart.registers.write(2, 4).unwrap();
-	hart.memory.write(20, 0xff, Wordsize::Byte).unwrap();
+        hart.memory.write(20, 0xff, Wordsize::Byte).unwrap();
         hart.step().unwrap();
         assert_eq!(hart.pc, 4);
         assert_eq!(hart.registers.read(1).unwrap(), 0xffff_ffff);
@@ -583,7 +616,7 @@ mod tests {
             .write(0, lbu!(x1, x2, 16).into(), Wordsize::Word)
             .unwrap();
         hart.registers.write(2, 4).unwrap();
-	hart.memory.write(20, 0xff, Wordsize::Byte).unwrap();
+        hart.memory.write(20, 0xff, Wordsize::Byte).unwrap();
         hart.step().unwrap();
         assert_eq!(hart.pc, 4);
         assert_eq!(hart.registers.read(1).unwrap(), 0x0000_00ff);
@@ -597,7 +630,7 @@ mod tests {
             .write(0, lh!(x1, x2, 16).into(), Wordsize::Word)
             .unwrap();
         hart.registers.write(2, 5).unwrap();
-	hart.memory.write(21, 0xff92, Wordsize::Halfword).unwrap();
+        hart.memory.write(21, 0xff92, Wordsize::Halfword).unwrap();
         hart.step().unwrap();
         assert_eq!(hart.pc, 4);
         assert_eq!(hart.registers.read(1).unwrap(), 0xffff_ff92);
@@ -611,7 +644,7 @@ mod tests {
             .write(0, lhu!(x1, x2, 16).into(), Wordsize::Word)
             .unwrap();
         hart.registers.write(2, 5).unwrap();
-	hart.memory.write(21, 0xff92, Wordsize::Halfword).unwrap();
+        hart.memory.write(21, 0xff92, Wordsize::Halfword).unwrap();
         hart.step().unwrap();
         assert_eq!(hart.pc, 4);
         assert_eq!(hart.registers.read(1).unwrap(), 0x0000_ff92);
@@ -625,7 +658,7 @@ mod tests {
             .write(0, lw!(x1, x2, 16).into(), Wordsize::Word)
             .unwrap();
         hart.registers.write(2, 6).unwrap();
-	hart.memory.write(22, 0x1234_ff92, Wordsize::Word).unwrap();
+        hart.memory.write(22, 0x1234_ff92, Wordsize::Word).unwrap();
         hart.step().unwrap();
         assert_eq!(hart.pc, 4);
         assert_eq!(hart.registers.read(1).unwrap(), 0x1234_ff92);
@@ -673,7 +706,7 @@ mod tests {
         assert_eq!(hart.memory.read(5, Wordsize::Word).unwrap(), 0xabcd_ef12);
         Ok(())
     }
-    
+
     #[test]
     fn check_addi() -> Result<(), &'static str> {
         let mut hart = Hart::default();
@@ -714,7 +747,7 @@ mod tests {
         Ok(())
     }
 
-        #[test]
+    #[test]
     fn check_slti_both_negative() -> Result<(), &'static str> {
         let mut hart = Hart::default();
         hart.memory
@@ -805,7 +838,7 @@ mod tests {
         hart.registers.write(2, 0x00ff_ff00).unwrap();
         hart.step().unwrap();
         let x1 = hart.registers.read(1).unwrap();
-	// Note that AND uses the sign-extended 12-bit immediate
+        // Note that AND uses the sign-extended 12-bit immediate
         assert_eq!(x1, 0x00ff_ff00);
         assert_eq!(hart.pc, 4);
         Ok(())
@@ -1146,8 +1179,4 @@ mod tests {
         assert_eq!(hart.pc, 4);
         Ok(())
     }
-
-    
-    
-    
 }
