@@ -5,7 +5,10 @@ use crate::{
     mask,
 };
 
-use self::{memory::Wordsize, registers::Registers};
+use self::{
+    memory::{ReadError, Wordsize},
+    registers::Registers,
+};
 use std::mem;
 use thiserror::Error;
 
@@ -74,6 +77,24 @@ fn sign_extend<T: Into<u32>>(value: T, sign_bit_position: u32) -> u32 {
     }
 }
 
+/// Check that an address is aligned to a byte_boundary specified.
+/// Return address-misaligned if not.
+fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), ExecutionError> {
+    if address % 4 != 0 {
+        // Section 2.2 intro of RISC-V unprivileged specification
+        Err(ExecutionError::InstructionAddressMisaligned)
+    } else {
+        Ok(())
+    }
+}
+
+/// Calculate the address of the next instruction by adding
+/// four to the program counter (wrapping if necessary) and
+/// returning the result
+fn next_instruction_address(pc: u32) -> u32 {
+    pc.wrapping_add(4)
+}
+
 /// Load upper immediate in 32-bit mode
 ///
 /// Load the u_immediate into the upper 12 bits of the register
@@ -95,6 +116,248 @@ fn execute_lui_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), 
 fn execute_auipc_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
     let value = hart.pc.wrapping_add(u_immediate << 12);
     hart.set_x(dest, value).unwrap();
+    hart.increment_pc();
+    Ok(())
+}
+
+/// Jump and link in 32-bit mode
+///
+/// Store the address of the next instruction (pc + 4) in
+/// the register dest. Then set pc = pc + offset (an
+/// unconditional jump relative to the program counter).
+fn execute_jal_rv32i(hart: &mut Hart, dest: u8, offset: u32) -> Result<(), ExecutionError> {
+    let return_address = next_instruction_address(hart.pc);
+    hart.set_x(dest, return_address)?;
+    let relative_address = sign_extend(offset, 20);
+    hart.jump_relative_to_pc(relative_address)
+}
+
+/// Jump and link register in 32-bit mode
+///
+/// Store the address of the next instruction (pc + 4) in
+/// the register dest. Then compute base + offset, set the
+/// least significant bit to zero, and set the pc to the
+/// result.
+fn execute_jalr_rv32i(
+    hart: &mut Hart,
+    dest: u8,
+    base: u8,
+    offset: u16,
+) -> Result<(), ExecutionError> {
+    let return_address = next_instruction_address(hart.pc);
+    hart.set_x(dest, return_address)?;
+    let relative_address = sign_extend(offset, 11);
+    let base_address = hart.x(base)?;
+    let new_pc = 0xffff_fffe & base_address.wrapping_add(relative_address);
+    hart.jump_to_address(new_pc)
+}
+
+/// Execute a conditional branch in 32-bit mode
+///
+/// Compute a condition specified by the mnemonic between the values
+/// of the registers src1 and src2. If the result is false, do nothing.
+/// Else, compute a pc-relative address by sign-extending offset, and
+/// jump to that address, raising an address-misaligned exception if the
+/// resulting program counter is not aligned to a 4-byte boundary.
+fn execute_branch_rv32i(
+    hart: &mut Hart,
+    mnemonic: Branch,
+    src1: u8,
+    src2: u8,
+    offset: u16,
+) -> Result<(), ExecutionError> {
+    let src1 = hart.x(src1)?;
+    let src2 = hart.x(src2)?;
+    let branch_taken = match mnemonic {
+        Branch::Beq => src1 == src2,
+        Branch::Bne => src1 != src2,
+        Branch::Blt => {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            let src2: i32 = interpret_u32_as_signed!(src2);
+            src1 < src2
+        }
+        Branch::Bge => {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            let src2: i32 = interpret_u32_as_signed!(src2);
+            src1 >= src2
+        }
+        Branch::Bltu => src1 < src2,
+        Branch::Bgeu => src1 >= src2,
+    };
+
+    if branch_taken {
+        let relative_address = sign_extend(offset, 11);
+        hart.jump_relative_to_pc(relative_address)
+    } else {
+        hart.increment_pc();
+        Ok(())
+    }
+}
+
+/// Execute a load instruction in 32-bit mode
+///
+/// Compute a load address by adding the register base to the
+/// sign-extended offset, and load data at that address into
+/// dest. The width of the loaded data, and whether to sign-
+/// or zero-extend the result is determined by mnemonic.
+fn execute_load_rv32i(
+    hart: &mut Hart,
+    mnemonic: Load,
+    dest: u8,
+    base: u8,
+    offset: u16,
+) -> Result<(), ExecutionError> {
+    let base_address = hart.x(base)?;
+    let offset = sign_extend(offset, 11);
+    let load_address = base_address.wrapping_add(offset);
+    let load_data = match mnemonic {
+        Load::Lb => sign_extend(
+            u32::try_from(
+                hart.memory
+                    .read(load_address.into(), Wordsize::Byte)
+                    .unwrap(),
+            )
+            .unwrap(),
+            7,
+        ),
+        Load::Lh => sign_extend(
+            u32::try_from(
+                hart.memory
+                    .read(load_address.into(), Wordsize::Halfword)
+                    .unwrap(),
+            )
+            .unwrap(),
+            15,
+        ),
+        Load::Lw => hart
+            .memory
+            .read(load_address.into(), Wordsize::Word)
+            .unwrap()
+            .try_into()
+            .unwrap(),
+        Load::Lbu => hart
+            .memory
+            .read(load_address.into(), Wordsize::Byte)
+            .unwrap()
+            .try_into()
+            .unwrap(),
+        Load::Lhu => hart
+            .memory
+            .read(load_address.into(), Wordsize::Halfword)
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    };
+    hart.set_x(dest, load_data)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+/// Execute a store instruction in 32-bit mode
+///
+/// Compute a store address by adding the register base to the
+/// sign-extended offset, and write data to that address from
+/// dest. The width of the data to write is determined by the
+/// mnemonic
+fn execute_store_rv32i(
+    hart: &mut Hart,
+    mnemonic: Store,
+    src: u8,
+    base: u8,
+    offset: u16,
+) -> Result<(), ExecutionError> {
+    let base_address = hart.x(base)?;
+    let offset = sign_extend(offset, 11);
+    let store_address = base_address.wrapping_add(offset);
+    let store_data = hart.x(src)?;
+    match mnemonic {
+        Store::Sb => hart
+            .memory
+            .write(store_address.into(), store_data.into(), Wordsize::Byte)
+            .unwrap(),
+        Store::Sh => hart
+            .memory
+            .write(store_address.into(), store_data.into(), Wordsize::Halfword)
+            .unwrap(),
+        Store::Sw => hart
+            .memory
+            .write(store_address.into(), store_data.into(), Wordsize::Word)
+            .unwrap(),
+    };
+    hart.increment_pc();
+    Ok(())
+}
+
+/// Execute a register-immediate operation in 32-bit mode
+///
+/// Compute an operation determined by the mnemonic between the
+/// register src and the sign-extended value of i_immediate.
+/// Place the result in the register dest.
+fn execute_reg_imm_rv32i(
+    hart: &mut Hart,
+    mnemonic: RegImm,
+    dest: u8,
+    src: u8,
+    i_immediate: u16,
+) -> Result<(), ExecutionError> {
+    let src: u32 = hart.x(src)?;
+    let i_immediate = sign_extend(i_immediate, 11);
+    let value = match mnemonic {
+        RegImm::Addi => src.wrapping_add(i_immediate),
+        RegImm::Slti => {
+            let src: i32 = interpret_u32_as_signed!(src);
+            let i_immediate: i32 = interpret_u32_as_signed!(i_immediate);
+            (src < i_immediate) as u32
+        }
+        RegImm::Sltiu => (src < i_immediate) as u32,
+        RegImm::Andi => src & i_immediate,
+        RegImm::Ori => src | i_immediate,
+        RegImm::Xori => src ^ i_immediate,
+        RegImm::Slli => src << (0x1f & i_immediate),
+        RegImm::Srli => src >> (0x1f & i_immediate),
+        RegImm::Srai => {
+            let src: i32 = interpret_u32_as_signed!(src);
+            interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
+        }
+    };
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+/// Execute a register-register operation in 32-bit mode
+///
+/// Compute an operation determined by the mnemonic between the
+/// registers src1 and src2. Place the result in the register dest.
+fn execute_reg_reg_rv32i(
+    hart: &mut Hart,
+    mnemonic: RegReg,
+    dest: u8,
+    src1: u8,
+    src2: u8,
+) -> Result<(), ExecutionError> {
+    let src1: u32 = hart.x(src1)?;
+    let src2: u32 = hart.x(src2)?;
+    let value = match mnemonic {
+        RegReg::Add => src1.wrapping_add(src2),
+        RegReg::Sub => src1.wrapping_sub(src2),
+        RegReg::Slt => {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            let src2: i32 = interpret_u32_as_signed!(src2);
+            (src1 < src2) as u32
+        }
+        RegReg::Sltu => (src1 < src2) as u32,
+        RegReg::And => src1 & src2,
+        RegReg::Or => src1 | src2,
+        RegReg::Xor => src1 ^ src2,
+        RegReg::Sll => src1 << (0x1f & src2),
+        RegReg::Srl => src1 >> (0x1f & src2),
+        RegReg::Sra => {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
+        }
+    };
+    hart.set_x(dest, value)?;
     hart.increment_pc();
     Ok(())
 }
@@ -127,7 +390,7 @@ impl Hart {
             self.registers
                 .write(n.into(), value.into())
                 .expect("index is valid, so no errors should occur on write");
-	    Ok(())
+            Ok(())
         } else {
             Err(RegisterError::RegisterIndexInvalid(n))
         }
@@ -135,257 +398,90 @@ impl Hart {
 
     /// Add 4 to the program counter, wrapping if necessary
     fn increment_pc(&mut self) {
-	self.pc = self.pc.wrapping_add(4);	
+        self.pc = next_instruction_address(self.pc);
+    }
+
+    /// Add an offset to the program counter, wrapping if necessary.
+    /// If the resulting address is not aligned on a 4-byte boundary,
+    /// return an address-misaligned exception (pc remains modified).
+    fn jump_relative_to_pc(&mut self, offset: u32) -> Result<(), ExecutionError> {
+        self.pc = self.pc.wrapping_add(offset);
+        check_address_aligned(self.pc, 4)
+    }
+
+    /// Jump to a new instruction address (set pc = new_pc). Return
+    /// an address-misaligned exception if the new_pc is not 4-byte
+    /// aligned (pc remains modified).
+    fn jump_to_address(&mut self, new_pc: u32) -> Result<(), ExecutionError> {
+        self.pc = new_pc;
+        check_address_aligned(self.pc, 4)
     }
 
     /// Get the program counter
     pub fn pc(&mut self) -> u32 {
-	self.pc
+        self.pc
+    }
+
+    pub fn read_memory(&mut self, address: u32, word_size: Wordsize) -> Result<u32, ExecutionError> {
+        let value = self
+            .memory
+            .read(address.into(), word_size)?
+            .try_into()
+            .expect("the word should fit in u32, else bug in Memory");
+        Ok(value)
     }
     
     fn execute(&mut self, instr: Instr) -> Result<(), ExecutionError> {
-        // Do something here depending on the instruction
         match instr.clone() {
             Instr::Lui { dest, u_immediate } => execute_lui_rv32i(self, dest, u_immediate)?,
             Instr::Auipc { dest, u_immediate } => execute_auipc_rv32i(self, dest, u_immediate)?,
-            Instr::Jal { dest, offset } => {
-                let value = self.pc.wrapping_add(4);
-                let offset = sign_extend(offset, 20);
-                self.registers.write(dest.into(), value.into()).unwrap();
-                self.pc = self.pc.wrapping_add(offset.into());
-                if self.pc % 4 != 0 {
-                    // Section 2.2 intro of RISC-V unprivileged specification
-                    return Err(ExecutionError::InstructionAddressMisaligned);
-                }
-            }
-            Instr::Jalr { dest, base, offset } => {
-                let pc = self.pc.wrapping_add(4);
-                self.registers.write(dest.into(), pc.into()).unwrap();
-                let offset = sign_extend(offset, 11);
-                let base: u32 = self
-                    .registers
-                    .read(base.into())
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-                self.pc = 0xffff_fffe & base.wrapping_add(offset);
-                if self.pc % 4 != 0 {
-                    // Section 2.2 intro of RISC-V unprivileged specification
-                    return Err(ExecutionError::InstructionAddressMisaligned);
-                }
-            }
+            Instr::Jal { dest, offset } => execute_jal_rv32i(self, dest, offset)?,
+            Instr::Jalr { dest, base, offset } => execute_jalr_rv32i(self, dest, base, offset)?,
             Instr::Branch {
                 mnemonic,
                 src1,
                 src2,
                 offset,
-            } => {
-                let src1: u32 = self
-                    .registers
-                    .read(src1.into())
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-                let src2: u32 = self
-                    .registers
-                    .read(src2.into())
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-
-                let branch_taken = match mnemonic {
-                    Branch::Beq => src1 == src2,
-                    Branch::Bne => src1 != src2,
-                    Branch::Blt => {
-                        let src1: i32 = interpret_u32_as_signed!(src1);
-                        let src2: i32 = interpret_u32_as_signed!(src2);
-                        src1 < src2
-                    }
-                    Branch::Bge => {
-                        let src1: i32 = interpret_u32_as_signed!(src1);
-                        let src2: i32 = interpret_u32_as_signed!(src2);
-                        src1 >= src2
-                    }
-                    Branch::Bltu => src1 < src2,
-                    Branch::Bgeu => src1 >= src2,
-                };
-
-                if branch_taken {
-                    let offset = sign_extend(offset, 11);
-                    self.pc = self.pc.wrapping_add(offset.into());
-                    if self.pc % 4 != 0 {
-                        // Section 2.2 intro of RISC-V unprivileged specification
-                        return Err(ExecutionError::InstructionAddressMisaligned);
-                    }
-                } else {
-                    self.pc = self.pc.wrapping_add(4);
-                }
-            }
+            } => execute_branch_rv32i(self, mnemonic, src1, src2, offset)?,
             Instr::Load {
                 mnemonic,
                 dest,
                 base,
                 offset,
-            } => {
-                let base: u32 = self
-                    .registers
-                    .read(base.into())
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-                let offset = sign_extend(offset, 11);
-                let addr = base.wrapping_add(offset);
-                let data = match mnemonic {
-                    Load::Lb => sign_extend(
-                        u32::try_from(self.memory.read(addr.into(), Wordsize::Byte).unwrap())
-                            .unwrap(),
-                        7,
-                    ),
-                    Load::Lh => sign_extend(
-                        u32::try_from(self.memory.read(addr.into(), Wordsize::Halfword).unwrap())
-                            .unwrap(),
-                        15,
-                    ),
-                    Load::Lw => self
-                        .memory
-                        .read(addr.into(), Wordsize::Word)
-                        .unwrap()
-                        .try_into()
-                        .unwrap(),
-                    Load::Lbu => self
-                        .memory
-                        .read(addr.into(), Wordsize::Byte)
-                        .unwrap()
-                        .try_into()
-                        .unwrap(),
-                    Load::Lhu => self
-                        .memory
-                        .read(addr.into(), Wordsize::Halfword)
-                        .unwrap()
-                        .try_into()
-                        .unwrap(),
-                };
-                self.registers.write(dest.into(), data.into()).unwrap();
-                self.pc = self.pc.wrapping_add(4);
-            }
+            } => execute_load_rv32i(self, mnemonic, dest, base, offset)?,
             Instr::Store {
                 mnemonic,
                 src,
                 base,
                 offset,
-            } => {
-                let base: u32 = self
-                    .registers
-                    .read(base.into())
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-                let offset = sign_extend(offset, 11);
-                let addr = base.wrapping_add(offset);
-                let data: u32 = self.registers.read(src.into()).unwrap().try_into().unwrap();
-                match mnemonic {
-                    Store::Sb => self
-                        .memory
-                        .write(addr.into(), data.into(), Wordsize::Byte)
-                        .unwrap(),
-                    Store::Sh => self
-                        .memory
-                        .write(addr.into(), data.into(), Wordsize::Halfword)
-                        .unwrap(),
-                    Store::Sw => self
-                        .memory
-                        .write(addr.into(), data.into(), Wordsize::Word)
-                        .unwrap(),
-                };
-                self.pc = self.pc.wrapping_add(4);
-            }
+            } => execute_store_rv32i(self, mnemonic, src, base, offset)?,
             Instr::RegImm {
                 mnemonic,
                 dest,
                 src,
                 i_immediate,
-            } => {
-                let src: u32 = self.registers.read(src.into()).unwrap().try_into().unwrap();
-                let i_immediate = sign_extend(i_immediate, 11);
-                let value = match mnemonic {
-                    RegImm::Addi => src.wrapping_add(i_immediate),
-                    RegImm::Slti => {
-                        let src: i32 = interpret_u32_as_signed!(src);
-                        let i_immediate: i32 = interpret_u32_as_signed!(i_immediate);
-                        (src < i_immediate) as u32
-                    }
-                    RegImm::Sltiu => (src < i_immediate) as u32,
-                    RegImm::Andi => src & i_immediate,
-                    RegImm::Ori => src | i_immediate,
-                    RegImm::Xori => src ^ i_immediate,
-                    RegImm::Slli => src << (0x1f & i_immediate),
-                    RegImm::Srli => src >> (0x1f & i_immediate),
-                    RegImm::Srai => {
-                        let src: i32 = interpret_u32_as_signed!(src);
-                        interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
-                    }
-                };
-                self.registers.write(dest.into(), value.into()).unwrap();
-                self.pc = self.pc.wrapping_add(4);
-            }
+            } => execute_reg_imm_rv32i(self, mnemonic, dest, src, i_immediate)?,
             Instr::RegReg {
                 mnemonic,
                 dest,
                 src1,
                 src2,
-            } => {
-                let src1: u32 = self
-                    .registers
-                    .read(src1.into())
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-                let src2: u32 = self
-                    .registers
-                    .read(src2.into())
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-
-                let value = match mnemonic {
-                    RegReg::Add => src1.wrapping_add(src2),
-                    RegReg::Sub => src1.wrapping_sub(src2),
-                    RegReg::Slt => {
-                        let src1: i32 = interpret_u32_as_signed!(src1);
-                        let src2: i32 = interpret_u32_as_signed!(src2);
-                        (src1 < src2) as u32
-                    }
-                    RegReg::Sltu => (src1 < src2) as u32,
-                    RegReg::And => src1 & src2,
-                    RegReg::Or => src1 | src2,
-                    RegReg::Xor => src1 ^ src2,
-                    RegReg::Sll => src1 << (0x1f & src2),
-                    RegReg::Srl => src1 >> (0x1f & src2),
-                    RegReg::Sra => {
-                        let src1: i32 = interpret_u32_as_signed!(src1);
-                        interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
-                    }
-                };
-
-                self.registers.write(dest.into(), value.into()).unwrap();
-                self.pc = self.pc.wrapping_add(4);
-            }
+            } => execute_reg_reg_rv32i(self, mnemonic, dest, src1, src2)?,
         }
-
         Ok(())
     }
 
-    pub fn step(&mut self) -> Result<(), Trap> {
-        // Fetch the instruction
-        let instr: u32 = self
-            .memory
-            .read(self.pc.into(), Wordsize::Word)
+    /// Returns the instruction at the current program counter
+    pub fn fetch_current_instruction(&mut self) -> u32 {
+        self.read_memory(self.pc, Wordsize::Word)
             .expect("this read should succeed, else pc is invalid")
-            .try_into()
-            .expect("the word should fit in u32, else bug in Memory");
+    }
+
+    pub fn step(&mut self) -> Result<(), Trap> {
+        let instr = self.fetch_current_instruction();
 
         // Decoding the instruction may return traps, e.g. invalid
-        // instruction. That can be returned.
+        // instruction.
         let instr = Instr::from(instr)?;
 
         // Execute instruction here. That may produce further traps,
@@ -413,6 +509,8 @@ pub enum ExecutionError {
     InstructionAddressMisaligned,
     #[error("register access error: {0}")]
     RegisterError(RegisterError),
+    #[error("error occurred while reading memory: {0}")]
+    MemoryReadError(ReadError),
 }
 
 impl From<RegisterError> for ExecutionError {
@@ -421,6 +519,11 @@ impl From<RegisterError> for ExecutionError {
     }
 }
 
+impl From<ReadError> for ExecutionError {
+    fn from(e: ReadError) -> ExecutionError {
+        ExecutionError::MemoryReadError(e)
+    }
+}
 
 impl From<DecodeError> for Trap {
     fn from(d: DecodeError) -> Trap {
