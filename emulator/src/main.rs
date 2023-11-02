@@ -93,6 +93,7 @@ fn main() -> io::Result<()> {
     let mut should_quit = false;
     while !should_quit {
         terminal.draw(|f| ui(f, &mut hart, &mut hart_stdout))?;
+	//hart.step().unwrap();
 	match handle_events()? {
 	    Keypress::Quit => should_quit = true,
 	    Keypress::Step => {

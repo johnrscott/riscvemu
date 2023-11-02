@@ -1,12 +1,70 @@
+//! Instruction Decoding
+//!
+//! This file is where a u32 instruction word is converted into
+//! the Instr struct which holds the instruction type and fields
+//! in a more easily accessible format ready for execution.
+
 use super::fields::*;
 use super::opcodes::*;
-use std::fmt;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DecodeError {
     #[error("got invalid or unimplemented opcode 0x{0:x}")]
     InvalidOpcode(u32),
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum Branch {
+    Beq,
+    Bne,
+    Blt,
+    Bge,
+    Bltu,
+    Bgeu,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum Load {
+    Lb,
+    Lh,
+    Lw,
+    Lbu,
+    Lhu,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum Store {
+    Sb,
+    Sh,
+    Sw,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum RegImm {
+    Addi,
+    Slti,
+    Sltiu,
+    Andi,
+    Ori,
+    Xori,
+    Slli,
+    Srli,
+    Srai,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum RegReg {
+    Add,
+    Sub,
+    Slt,
+    Sltu,
+    And,
+    Or,
+    Xor,
+    Sll,
+    Srl,
+    Sra,
 }
 
 /// RISC-V Instructions
@@ -53,7 +111,7 @@ pub enum Instr {
     /// exception is generated if the target pc is not 4-byte
     /// aligned.
     Branch {
-        mnemonic: String,
+        mnemonic: Branch,
         src1: u8,
         src2: u8,
         offset: u16,
@@ -78,7 +136,7 @@ pub enum Instr {
     ///
     /// Loads do not need to be aligned
     Load {
-        mnemonic: String,
+        mnemonic: Load,
         dest: u8,
         base: u8,
         offset: u16,
@@ -99,7 +157,7 @@ pub enum Instr {
     ///
     /// Stores do not need to be aligned
     Store {
-        mnemonic: String,
+        mnemonic: Store,
         src: u8,
         base: u8,
         offset: u16,
@@ -122,7 +180,7 @@ pub enum Instr {
     /// In RV64I, the shift operators
     ///
     RegImm {
-        mnemonic: String,
+        mnemonic: RegImm,
         dest: u8,
         src: u8,
         i_immediate: u16,
@@ -154,7 +212,7 @@ pub enum Instr {
     /// - "sraw"
     ///
     RegReg {
-        mnemonic: String,
+        mnemonic: RegReg,
         dest: u8,
         src1: u8,
         src2: u8,
@@ -214,12 +272,12 @@ impl Instr {
                 let offset = imm_btype!(instr).try_into().unwrap();
                 let funct3 = funct3!(instr);
                 let mnemonic = match funct3 {
-                    FUNCT3_BEQ => format!("beq"),
-                    FUNCT3_BNE => format!("bne"),
-                    FUNCT3_BLT => format!("blt"),
-                    FUNCT3_BGE => format!("bge"),
-                    FUNCT3_BLTU => format!("bltu"),
-                    FUNCT3_BGEU => format!("bgeu"),
+                    FUNCT3_BEQ => Branch::Beq,
+                    FUNCT3_BNE => Branch::Bne,
+                    FUNCT3_BLT => Branch::Blt,
+                    FUNCT3_BGE => Branch::Bge,
+                    FUNCT3_BLTU => Branch::Bltu,
+                    FUNCT3_BGEU => Branch::Bgeu,
                     _ => panic!("Should change this to enum"),
                 };
                 Ok(Self::Branch {
@@ -235,13 +293,13 @@ impl Instr {
                 let offset = imm_itype!(instr);
                 let funct3 = funct3!(instr);
                 let mnemonic = match funct3 {
-                    FUNCT3_B => format!("lb"),
-                    FUNCT3_H => format!("lh"),
-                    FUNCT3_W => format!("lw"),
-                    FUNCT3_BU => format!("lbu"),
-                    FUNCT3_HU => format!("lhu"),
-                    FUNCT3_WU => format!("lwu"),
-                    FUNCT3_D => format!("ld"),
+                    FUNCT3_B => Load::Lb,
+                    FUNCT3_H => Load::Lh,
+                    FUNCT3_W => Load::Lw,
+                    FUNCT3_BU => Load::Lbu,
+                    FUNCT3_HU => Load::Lhu,
+                    //FUNCT3_WU => Load::Lwu,
+                    //FUNCT3_D => Load::Ld,
                     _ => panic!("Should change this to enum"),
                 };
                 Ok(Self::Load {
@@ -257,10 +315,10 @@ impl Instr {
                 let offset = imm_stype!(instr);
                 let funct3 = funct3!(instr);
                 let mnemonic = match funct3 {
-                    FUNCT3_B => format!("sb"),
-                    FUNCT3_H => format!("sh"),
-                    FUNCT3_W => format!("sw"),
-                    FUNCT3_D => format!("sd"),
+                    FUNCT3_B => Store::Sb,
+                    FUNCT3_H => Store::Sh,
+                    FUNCT3_W => Store::Sw,
+                    //FUNCT3_D => format!("sd"),
                     _ => panic!("Should change this to enum"),
                 };
                 Ok(Self::Store {
@@ -276,19 +334,19 @@ impl Instr {
                 let mut i_immediate = imm_itype!(instr);
                 let funct3 = funct3!(instr);
                 let mnemonic = match funct3 {
-                    FUNCT3_ADDI => format!("addi"),
-                    FUNCT3_SLTI => format!("slti"),
-                    FUNCT3_SLTIU => format!("sltiu"),
-                    FUNCT3_ANDI => format!("andi"),
-                    FUNCT3_ORI => format!("ori"),
-                    FUNCT3_XORI => format!("xori"),
-                    FUNCT3_SLLI => format!("slli"),
+                    FUNCT3_ADDI => RegImm::Addi,
+                    FUNCT3_SLTI => RegImm::Slti,
+                    FUNCT3_SLTIU => RegImm::Sltiu,
+                    FUNCT3_ANDI => RegImm::Andi,
+                    FUNCT3_ORI => RegImm::Ori,
+                    FUNCT3_XORI => RegImm::Xori,
+                    FUNCT3_SLLI => RegImm::Slli,
                     FUNCT3_SRLI => {
                         if is_arithmetic_shift!(instr) {
                             i_immediate = shamt!(instr).into();
-                            format!("srai")
+                            RegImm::Srai
                         } else {
-                            format!("srli")
+                            RegImm::Srli
                         }
                     }
                     _ => panic!("Should change this to enum"),
@@ -301,29 +359,32 @@ impl Instr {
                 })
             }
             OP_IMM_32 => {
-                let src = rs1!(instr);
-                let dest = rd!(instr);
-                let mut i_immediate = imm_itype!(instr);
-                let funct3 = funct3!(instr);
-                let mnemonic = match funct3 {
-                    FUNCT3_ADDI => format!("addiw"),
-                    FUNCT3_SLLI => format!("slliw"),
-                    FUNCT3_SRLI => {
-                        if is_arithmetic_shift!(instr) {
-                            i_immediate = shamt!(instr).into();
-                            format!("sraw")
-                        } else {
-                            format!("srlw")
-                        }
-                    }
-                    _ => panic!("Should change this to enum"),
-                };
-                Ok(Self::RegImm {
-                    mnemonic,
-                    dest,
-                    src,
-                    i_immediate,
-                })
+                unimplemented!("64-bit mode is not yet implemented");
+                /*
+                       let src = rs1!(instr);
+                       let dest = rd!(instr);
+                       let mut i_immediate = imm_itype!(instr);
+                       let funct3 = funct3!(instr);
+                       let mnemonic = match funct3 {
+                           FUNCT3_ADDI => format!("addiw"),
+                           FUNCT3_SLLI => format!("slliw"),
+                           FUNCT3_SRLI => {
+                               if is_arithmetic_shift!(instr) {
+                                   i_immediate = shamt!(instr).into();
+                                   format!("sraw")
+                               } else {
+                                   format!("srlw")
+                               }
+                           }
+                           _ => panic!("Should change this to enum"),
+                       };
+                       Ok(Self::RegImm {
+                           mnemonic,
+                           dest,
+                           src,
+                           i_immediate,
+                       })
+                */
             }
             OP => {
                 let src1 = rs1!(instr);
@@ -334,24 +395,24 @@ impl Instr {
                 let mnemonic = match funct3 {
                     FUNCT3_ADD => {
                         if funct7 == FUNCT7_SUB {
-                            format!("sub")
+                            RegReg::Sub
                         } else {
-                            format!("add")
+                            RegReg::Add
                         }
                     }
-                    FUNCT3_SLL => format!("sll"),
-                    FUNCT3_SLT => format!("slt"),
-                    FUNCT3_SLTU => format!("sltu"),
-                    FUNCT3_XOR => format!("xor"),
+                    FUNCT3_SLL => RegReg::Sll,
+                    FUNCT3_SLT => RegReg::Slt,
+                    FUNCT3_SLTU => RegReg::Sltu,
+                    FUNCT3_XOR => RegReg::Xor,
                     FUNCT3_SRL => {
                         if is_arithmetic_shift!(instr) {
-                            format!("sra")
+                            RegReg::Sra
                         } else {
-                            format!("srl")
+                            RegReg::Srl
                         }
                     }
-                    FUNCT3_OR => format!("or"),
-                    FUNCT3_AND => format!("and"),
+                    FUNCT3_OR => RegReg::Or,
+                    FUNCT3_AND => RegReg::And,
                     _ => panic!("Should change this to enum"),
                 };
                 Ok(Self::RegReg {
@@ -362,41 +423,45 @@ impl Instr {
                 })
             }
             OP_32 => {
-                let src1 = rs1!(instr);
-                let src2 = rs2!(instr);
-                let dest = rd!(instr);
-                let funct3 = funct3!(instr);
-                let funct7 = funct7!(instr);
-                let mnemonic = match funct3 {
-                    FUNCT3_ADD => {
-                        if funct7 == FUNCT7_SUB {
-                            format!("subw")
-                        } else {
-                            format!("addw")
-                        }
-                    }
-                    FUNCT3_SLL => format!("sllw"),
-                    FUNCT3_SRL => {
-                        if funct7 == FUNCT7_SRA {
-                            format!("sraw")
-                        } else {
-                            format!("srlw")
-                        }
-                    }
-                    _ => panic!("Should change this to enum"),
-                };
-                Ok(Self::RegReg {
-                    mnemonic,
-                    dest,
-                    src1,
-                    src2,
-                })
+                unimplemented!("64-bit mode is not yet implemented");
+                /*
+                       let src1 = rs1!(instr);
+                       let src2 = rs2!(instr);
+                       let dest = rd!(instr);
+                       let funct3 = funct3!(instr);
+                       let funct7 = funct7!(instr);
+                       let mnemonic = match funct3 {
+                           FUNCT3_ADD => {
+                               if funct7 == FUNCT7_SUB {
+                                   format!("subw")
+                               } else {
+                                   format!("addw")
+                               }
+                           }
+                           FUNCT3_SLL => format!("sllw"),
+                           FUNCT3_SRL => {
+                               if funct7 == FUNCT7_SRA {
+                                   format!("sraw")
+                               } else {
+                                   format!("srlw")
+                               }
+                           }
+                           _ => panic!("Should change this to enum"),
+                       };
+                       Ok(Self::RegReg {
+                           mnemonic,
+                           dest,
+                           src1,
+                           src2,
+                       })
+                */
             }
             _ => Err(DecodeError::InvalidOpcode(op)),
         }
     }
 }
 
+/*
 impl fmt::Display for Instr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
@@ -463,3 +528,4 @@ impl fmt::Display for Instr {
         }
     }
 }
+*/

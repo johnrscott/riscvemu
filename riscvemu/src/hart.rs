@@ -1,7 +1,7 @@
 use memory::Memory;
 
 use crate::{
-    instr::decode::{DecodeError, Instr},
+    instr::decode::{Branch, DecodeError, Instr, Load, RegImm, RegReg, Store},
     mask,
 };
 
@@ -74,20 +74,80 @@ fn sign_extend<T: Into<u32>>(value: T, sign_bit_position: u32) -> u32 {
     }
 }
 
+/// Load upper immediate in 32-bit mode
+///
+/// Load the u_immediate into the upper 12 bits of the register
+/// dest and fill the lower 20 bits with zeros. Set pc = pc + 4.
+///
+fn execute_lui_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
+    hart.set_x(dest, u_immediate << 12)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+/// Add upper immediate to program counter in 32-bit mode
+///
+/// Make a 32-bit value by setting its upper 12 bits to
+/// u_immediate and its lower 20 bits to zero, and add
+/// the current value of the program counter. Store the
+/// result in the register dest. Set pc = pc + 4.
+///
+fn execute_auipc_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
+    let value = hart.pc.wrapping_add(u_immediate << 12);
+    hart.set_x(dest, value).unwrap();
+    hart.increment_pc();
+    Ok(())
+}
+
+#[derive(Error, Debug)]
+pub enum RegisterError {
+    #[error("encountered invalid register index {0}")]
+    RegisterIndexInvalid(u8),
+}
+
 impl Hart {
+    /// Read the value of the register xn
+    pub fn x(&self, n: u8) -> Result<u32, RegisterError> {
+        if n < 32 {
+            let value: u32 = self
+                .registers
+                .read(n.into())
+                .expect("index is valid, so no errors should occur on read")
+                .try_into()
+                .expect("only 32-bit values were written, so conversion should work");
+            Ok(value)
+        } else {
+            Err(RegisterError::RegisterIndexInvalid(n))
+        }
+    }
+
+    /// Write the value of the register xn
+    pub fn set_x(&mut self, n: u8, value: u32) -> Result<(), RegisterError> {
+        if n < 32 {
+            self.registers
+                .write(n.into(), value.into())
+                .expect("index is valid, so no errors should occur on write");
+	    Ok(())
+        } else {
+            Err(RegisterError::RegisterIndexInvalid(n))
+        }
+    }
+
+    /// Add 4 to the program counter, wrapping if necessary
+    fn increment_pc(&mut self) {
+	self.pc = self.pc.wrapping_add(4);	
+    }
+
+    /// Get the program counter
+    pub fn pc(&mut self) -> u32 {
+	self.pc
+    }
+    
     fn execute(&mut self, instr: Instr) -> Result<(), ExecutionError> {
         // Do something here depending on the instruction
         match instr.clone() {
-            Instr::Lui { dest, u_immediate } => {
-                let value = u_immediate << 12;
-                self.registers.write(dest.into(), value.into()).unwrap();
-                self.pc = self.pc.wrapping_add(4);
-            }
-            Instr::Auipc { dest, u_immediate } => {
-                let value = self.pc.wrapping_add(u_immediate << 12);
-                self.registers.write(dest.into(), value.into()).unwrap();
-                self.pc = self.pc.wrapping_add(4);
-            }
+            Instr::Lui { dest, u_immediate } => execute_lui_rv32i(self, dest, u_immediate)?,
+            Instr::Auipc { dest, u_immediate } => execute_auipc_rv32i(self, dest, u_immediate)?,
             Instr::Jal { dest, offset } => {
                 let value = self.pc.wrapping_add(4);
                 let offset = sign_extend(offset, 20);
@@ -133,22 +193,21 @@ impl Hart {
                     .try_into()
                     .unwrap();
 
-                let branch_taken = match mnemonic.as_ref() {
-                    "beq" => src1 == src2,
-                    "bne" => src1 != src2,
-                    "blt" => {
+                let branch_taken = match mnemonic {
+                    Branch::Beq => src1 == src2,
+                    Branch::Bne => src1 != src2,
+                    Branch::Blt => {
                         let src1: i32 = interpret_u32_as_signed!(src1);
                         let src2: i32 = interpret_u32_as_signed!(src2);
                         src1 < src2
                     }
-                    "bge" => {
+                    Branch::Bge => {
                         let src1: i32 = interpret_u32_as_signed!(src1);
                         let src2: i32 = interpret_u32_as_signed!(src2);
                         src1 >= src2
                     }
-                    "bltu" => src1 < src2,
-                    "bgeu" => src1 >= src2,
-                    _ => return Err(ExecutionError::InvalidInstruction(instr)),
+                    Branch::Bltu => src1 < src2,
+                    Branch::Bgeu => src1 >= src2,
                 };
 
                 if branch_taken {
@@ -176,36 +235,35 @@ impl Hart {
                     .unwrap();
                 let offset = sign_extend(offset, 11);
                 let addr = base.wrapping_add(offset);
-                let data = match mnemonic.as_ref() {
-                    "lb" => sign_extend(
+                let data = match mnemonic {
+                    Load::Lb => sign_extend(
                         u32::try_from(self.memory.read(addr.into(), Wordsize::Byte).unwrap())
                             .unwrap(),
                         7,
                     ),
-                    "lh" => sign_extend(
+                    Load::Lh => sign_extend(
                         u32::try_from(self.memory.read(addr.into(), Wordsize::Halfword).unwrap())
                             .unwrap(),
                         15,
                     ),
-                    "lw" => self
+                    Load::Lw => self
                         .memory
                         .read(addr.into(), Wordsize::Word)
                         .unwrap()
                         .try_into()
                         .unwrap(),
-                    "lbu" => self
+                    Load::Lbu => self
                         .memory
                         .read(addr.into(), Wordsize::Byte)
                         .unwrap()
                         .try_into()
                         .unwrap(),
-                    "lhu" => self
+                    Load::Lhu => self
                         .memory
                         .read(addr.into(), Wordsize::Halfword)
                         .unwrap()
                         .try_into()
                         .unwrap(),
-                    _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
                 self.registers.write(dest.into(), data.into()).unwrap();
                 self.pc = self.pc.wrapping_add(4);
@@ -225,20 +283,19 @@ impl Hart {
                 let offset = sign_extend(offset, 11);
                 let addr = base.wrapping_add(offset);
                 let data: u32 = self.registers.read(src.into()).unwrap().try_into().unwrap();
-                match mnemonic.as_ref() {
-                    "sb" => self
+                match mnemonic {
+                    Store::Sb => self
                         .memory
                         .write(addr.into(), data.into(), Wordsize::Byte)
                         .unwrap(),
-                    "sh" => self
+                    Store::Sh => self
                         .memory
                         .write(addr.into(), data.into(), Wordsize::Halfword)
                         .unwrap(),
-                    "sw" => self
+                    Store::Sw => self
                         .memory
                         .write(addr.into(), data.into(), Wordsize::Word)
                         .unwrap(),
-                    _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
                 self.pc = self.pc.wrapping_add(4);
             }
@@ -250,25 +307,23 @@ impl Hart {
             } => {
                 let src: u32 = self.registers.read(src.into()).unwrap().try_into().unwrap();
                 let i_immediate = sign_extend(i_immediate, 11);
-                let value = match mnemonic.as_ref() {
-                    "addi" => src.wrapping_add(i_immediate),
-                    "slti" => {
+                let value = match mnemonic {
+                    RegImm::Addi => src.wrapping_add(i_immediate),
+                    RegImm::Slti => {
                         let src: i32 = interpret_u32_as_signed!(src);
                         let i_immediate: i32 = interpret_u32_as_signed!(i_immediate);
                         (src < i_immediate) as u32
                     }
-                    "sltiu" => (src < i_immediate) as u32,
-                    "andi" => src & i_immediate,
-                    "ori" => src | i_immediate,
-                    "xori" => src ^ i_immediate,
-                    "slli" => src << (0x1f & i_immediate),
-                    "srli" => src >> (0x1f & i_immediate),
-                    "srai" => {
+                    RegImm::Sltiu => (src < i_immediate) as u32,
+                    RegImm::Andi => src & i_immediate,
+                    RegImm::Ori => src | i_immediate,
+                    RegImm::Xori => src ^ i_immediate,
+                    RegImm::Slli => src << (0x1f & i_immediate),
+                    RegImm::Srli => src >> (0x1f & i_immediate),
+                    RegImm::Srai => {
                         let src: i32 = interpret_u32_as_signed!(src);
                         interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
                     }
-
-                    _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
                 self.registers.write(dest.into(), value.into()).unwrap();
                 self.pc = self.pc.wrapping_add(4);
@@ -292,25 +347,24 @@ impl Hart {
                     .try_into()
                     .unwrap();
 
-                let value = match mnemonic.as_ref() {
-                    "add" => src1.wrapping_add(src2),
-                    "sub" => src1.wrapping_sub(src2),
-                    "slt" => {
+                let value = match mnemonic {
+                    RegReg::Add => src1.wrapping_add(src2),
+                    RegReg::Sub => src1.wrapping_sub(src2),
+                    RegReg::Slt => {
                         let src1: i32 = interpret_u32_as_signed!(src1);
                         let src2: i32 = interpret_u32_as_signed!(src2);
                         (src1 < src2) as u32
                     }
-                    "sltu" => (src1 < src2) as u32,
-                    "and" => src1 & src2,
-                    "or" => src1 | src2,
-                    "xor" => src1 ^ src2,
-                    "sll" => src1 << (0x1f & src2),
-                    "srl" => src1 >> (0x1f & src2),
-                    "sra" => {
+                    RegReg::Sltu => (src1 < src2) as u32,
+                    RegReg::And => src1 & src2,
+                    RegReg::Or => src1 | src2,
+                    RegReg::Xor => src1 ^ src2,
+                    RegReg::Sll => src1 << (0x1f & src2),
+                    RegReg::Srl => src1 >> (0x1f & src2),
+                    RegReg::Sra => {
                         let src1: i32 = interpret_u32_as_signed!(src1);
                         interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
                     }
-                    _ => return Err(ExecutionError::InvalidInstruction(instr)),
                 };
 
                 self.registers.write(dest.into(), value.into()).unwrap();
@@ -353,13 +407,20 @@ pub enum Trap {
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
-    #[error("invalid instruction")]
+    #[error("invalid instruction {0:?}")]
     InvalidInstruction(Instr),
-    #[error("unimplemented instruction")]
-    UnimplementedInstruction(Instr),
     #[error("instruction address should be aligned to a 4-byte boundary")]
     InstructionAddressMisaligned,
+    #[error("register access error: {0}")]
+    RegisterError(RegisterError),
 }
+
+impl From<RegisterError> for ExecutionError {
+    fn from(e: RegisterError) -> ExecutionError {
+        ExecutionError::RegisterError(e)
+    }
+}
+
 
 impl From<DecodeError> for Trap {
     fn from(d: DecodeError) -> Trap {
@@ -435,7 +496,7 @@ mod tests {
         hart.step().unwrap();
         let x4 = hart.registers.read(4).unwrap();
         assert_eq!(x4, 16);
-        assert_eq!(hart.pc, 12 + 20 - 4);
+        assert_eq!(hart.pc, 20 - 4);
         Ok(())
     }
 

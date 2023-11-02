@@ -103,13 +103,13 @@ impl Memory {
     /// Return the current contents of the stdout buffer as a
     /// and also delete the contents of the buffer
     pub fn flush_stdout(&mut self) -> String {
-	let mut stdout = String::new();
-	while let Ok(ch) = self.stdout.remove() {
-	    stdout.push(ch);
-	}
-	stdout
+        let mut stdout = String::new();
+        while let Ok(ch) = self.stdout.remove() {
+            stdout.push(ch);
+        }
+        stdout
     }
-    
+
     fn write_byte(&mut self, addr: u64, value: u8, xlen: Xlen) {
         let addr = wrap_address(addr, xlen);
         // Char output device
