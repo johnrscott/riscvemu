@@ -1,59 +1,12 @@
+//! RV32I base integer instruction set
+//!
+//! This file holds the instructions defined in chapter 2,
+//! unprivileged specification version 20191213. 
+//! 
+
 use super::decode::DecodeError;
 use super::fields::*;
 use super::opcodes::*;
-
-#[derive(Debug, Copy, Clone)]
-pub enum Branch {
-    Beq,
-    Bne,
-    Blt,
-    Bge,
-    Bltu,
-    Bgeu,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum Load {
-    Lb,
-    Lh,
-    Lw,
-    Lbu,
-    Lhu,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum Store {
-    Sb,
-    Sh,
-    Sw,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum RegImm {
-    Addi,
-    Slti,
-    Sltiu,
-    Andi,
-    Ori,
-    Xori,
-    Slli,
-    Srli,
-    Srai,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum RegReg {
-    Add,
-    Sub,
-    Slt,
-    Sltu,
-    And,
-    Or,
-    Xor,
-    Sll,
-    Srl,
-    Sra,
-}
 
 /// RISC-V Instructions
 ///
@@ -207,6 +160,59 @@ pub enum Rv32i {
     },
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum Branch {
+    Beq,
+    Bne,
+    Blt,
+    Bge,
+    Bltu,
+    Bgeu,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum Load {
+    Lb,
+    Lh,
+    Lw,
+    Lbu,
+    Lhu,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum Store {
+    Sb,
+    Sh,
+    Sw,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum RegImm {
+    Addi,
+    Slti,
+    Sltiu,
+    Andi,
+    Ori,
+    Xori,
+    Slli,
+    Srli,
+    Srai,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum RegReg {
+    Add,
+    Sub,
+    Slt,
+    Sltu,
+    And,
+    Or,
+    Xor,
+    Sll,
+    Srl,
+    Sra,
+}
+
 impl Rv32i {
     pub fn from(instr: u32) -> Result<Self, DecodeError> {
         let op = opcode!(instr);
@@ -264,8 +270,6 @@ impl Rv32i {
                     FUNCT3_W => Load::Lw,
                     FUNCT3_BU => Load::Lbu,
                     FUNCT3_HU => Load::Lhu,
-                    //FUNCT3_WU => Load::Lwu,
-                    //FUNCT3_D => Load::Ld,
                     _ => panic!("Should change this to enum"),
                 };
                 Ok(Self::Load {
@@ -284,7 +288,6 @@ impl Rv32i {
                     FUNCT3_B => Store::Sb,
                     FUNCT3_H => Store::Sh,
                     FUNCT3_W => Store::Sw,
-                    //FUNCT3_D => format!("sd"),
                     _ => panic!("Should change this to enum"),
                 };
                 Ok(Self::Store {

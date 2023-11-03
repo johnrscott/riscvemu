@@ -56,7 +56,16 @@ pub const FUNCT3_SUBW: u32 = 0b000;
 pub const FUNCT3_SLLW: u32 = 0b001;
 pub const FUNCT3_SRLW: u32 = 0b101;
 pub const FUNCT3_SRAW: u32 = 0b101;
+pub const FUNCT3_MUL: u32 = 0b000;
+pub const FUNCT3_MULH: u32 = 0b001;
+pub const FUNCT3_MULHSU: u32 = 0b010;
+pub const FUNCT3_MULHU: u32 = 0b011;
+pub const FUNCT3_DIV: u32 = 0b100;
+pub const FUNCT3_DIVU: u32 = 0b101;
+pub const FUNCT3_REM: u32 = 0b110;
+pub const FUNCT3_REMU: u32 = 0b111;
 
 // Register-register opcodes
 pub const FUNCT7_SUB: u32 = 0b0100000;
 pub const FUNCT7_SRA: u32 = 0b0100000;
+pub const FUNCT7_MULDIV: u32 = 0b0000001;

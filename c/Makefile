@@ -1,5 +1,7 @@
 # See NOTES.md on installing this compiler
-CC=riscv32-unknown-elf-gcc
+CC=riscv64-unknown-elf-gcc
+CFLAGS=-march=rv32i -mabi=ilp32
+LDFLAGS=-march=rv32i -mabi=ilp32
 
 # Note startup.o is added by the linker.ld script.
 # -ffreestanding enables the C freestanding (i.e. not
@@ -11,7 +13,7 @@ CC=riscv32-unknown-elf-gcc
 # off crt0 etc. See the manual page for gcc for full
 # information.
 hello.out: hello.c startup.o linker.ld Makefile
-	$(CC) -T linker.ld -flto -Os -Wall -Wextra -ffreestanding -nostartfiles hello.c -o $@
+	$(CC) $(CFLAGS) -T linker.ld -flto -Os -Wall -Wextra -ffreestanding -nostartfiles hello.c -o $@
 
 startup.o: startup.S
-	$(CC) -s $< -o startup.o
+	$(CC) $(CFLAGS) -c $< -o startup.o
