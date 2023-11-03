@@ -1,5 +1,5 @@
 use riscvemu::hart::memory::Wordsize;
-use riscvemu::instr::decode::Instr;
+use riscvemu::instr::decode::Rv32i;
 use riscvemu::{hart::Hart, elf_utils::load_elf};
 use std::io::prelude::*;
 use std::io::{self, stdout};
@@ -179,7 +179,7 @@ fn ui(frame: &mut Frame, hart: &mut Hart, hart_stdout: &mut String) {
 
     let pc = hart.pc;
     let instr = hart.memory.read(pc.into(), Wordsize::Word).unwrap();
-    let instr = Instr::from(instr.try_into().unwrap());
+    let instr = Rv32i::from(instr.try_into().unwrap());
     hart_stdout.push_str(&hart.memory.flush_stdout());
 	
     let lines = vec![

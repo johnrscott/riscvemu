@@ -1,7 +1,7 @@
 use memory::Memory;
 
 use crate::{
-    instr::decode::{Branch, DecodeError, Instr, Load, RegImm, RegReg, Store},
+    instr::decode::{Branch, DecodeError, Instr32, Rv32i, Load, RegImm, RegReg, Store},
     mask,
 };
 
@@ -80,7 +80,7 @@ fn sign_extend<T: Into<u32>>(value: T, sign_bit_position: u32) -> u32 {
 /// Check that an address is aligned to a byte_boundary specified.
 /// Return address-misaligned if not.
 fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), ExecutionError> {
-    if address % 4 != 0 {
+    if address % byte_alignment != 0 {
         // Section 2.2 intro of RISC-V unprivileged specification
         Err(ExecutionError::InstructionAddressMisaligned)
     } else {
@@ -431,44 +431,48 @@ impl Hart {
         Ok(value)
     }
     
-    fn execute(&mut self, instr: Instr) -> Result<(), ExecutionError> {
-        match instr.clone() {
-            Instr::Lui { dest, u_immediate } => execute_lui_rv32i(self, dest, u_immediate)?,
-            Instr::Auipc { dest, u_immediate } => execute_auipc_rv32i(self, dest, u_immediate)?,
-            Instr::Jal { dest, offset } => execute_jal_rv32i(self, dest, offset)?,
-            Instr::Jalr { dest, base, offset } => execute_jalr_rv32i(self, dest, base, offset)?,
-            Instr::Branch {
-                mnemonic,
-                src1,
-                src2,
-                offset,
-            } => execute_branch_rv32i(self, mnemonic, src1, src2, offset)?,
-            Instr::Load {
-                mnemonic,
-                dest,
-                base,
-                offset,
-            } => execute_load_rv32i(self, mnemonic, dest, base, offset)?,
-            Instr::Store {
-                mnemonic,
-                src,
-                base,
-                offset,
-            } => execute_store_rv32i(self, mnemonic, src, base, offset)?,
-            Instr::RegImm {
-                mnemonic,
-                dest,
-                src,
-                i_immediate,
-            } => execute_reg_imm_rv32i(self, mnemonic, dest, src, i_immediate)?,
-            Instr::RegReg {
-                mnemonic,
-                dest,
-                src1,
-                src2,
-            } => execute_reg_reg_rv32i(self, mnemonic, dest, src1, src2)?,
-        }
-        Ok(())
+    fn execute(&mut self, instr: Instr32) -> Result<(), ExecutionError> {
+	match instr.clone() {
+	    Instr32::Rv32i(rv32i_instr) => {
+		match rv32i_instr {
+		    Rv32i::Lui { dest, u_immediate } => execute_lui_rv32i(self, dest, u_immediate)?,
+		    Rv32i::Auipc { dest, u_immediate } => execute_auipc_rv32i(self, dest, u_immediate)?,
+		    Rv32i::Jal { dest, offset } => execute_jal_rv32i(self, dest, offset)?,
+		    Rv32i::Jalr { dest, base, offset } => execute_jalr_rv32i(self, dest, base, offset)?,
+		    Rv32i::Branch {
+			mnemonic,
+			src1,
+			src2,
+			offset,
+		    } => execute_branch_rv32i(self, mnemonic, src1, src2, offset)?,
+		    Rv32i::Load {
+			mnemonic,
+			dest,
+			base,
+			offset,
+		    } => execute_load_rv32i(self, mnemonic, dest, base, offset)?,
+		    Rv32i::Store {
+			mnemonic,
+			src,
+			base,
+			offset,
+		    } => execute_store_rv32i(self, mnemonic, src, base, offset)?,
+		    Rv32i::RegImm {
+			mnemonic,
+			dest,
+			src,
+			i_immediate,
+		    } => execute_reg_imm_rv32i(self, mnemonic, dest, src, i_immediate)?,
+		    Rv32i::RegReg {
+			mnemonic,
+			dest,
+			src1,
+			src2,
+		    } => execute_reg_reg_rv32i(self, mnemonic, dest, src1, src2)?,
+		}
+		Ok(())
+	    }	    
+	}
     }
 
     /// Returns the instruction at the current program counter
@@ -482,7 +486,7 @@ impl Hart {
 
         // Decoding the instruction may return traps, e.g. invalid
         // instruction.
-        let instr = Instr::from(instr)?;
+        let instr = Instr32::from(instr)?;
 
         // Execute instruction here. That may produce further traps,
         // e.g. ecalls or invalid instructions discovered at the
@@ -504,7 +508,7 @@ pub enum Trap {
 #[derive(Error, Debug)]
 pub enum ExecutionError {
     #[error("invalid instruction {0:?}")]
-    InvalidInstruction(Instr),
+    InvalidInstruction(Instr32),
     #[error("instruction address should be aligned to a 4-byte boundary")]
     InstructionAddressMisaligned,
     #[error("register access error: {0}")]

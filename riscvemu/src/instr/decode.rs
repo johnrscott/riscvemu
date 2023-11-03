@@ -3,7 +3,11 @@
 //! This file is where a u32 instruction word is converted into
 //! the Instr struct which holds the instruction type and fields
 //! in a more easily accessible format ready for execution.
-
+//!
+//! v20191213, section 2.2: the behaviour upon decoding a reserved
+//! instruction is unspecified. Specific behaviour for reserved
+//! fields in instructions is documented where it occurs below.
+//!
 use super::fields::*;
 use super::opcodes::*;
 use thiserror::Error;
@@ -67,12 +71,23 @@ pub enum RegReg {
     Sra,
 }
 
+#[derive(Debug, Clone)]
+pub enum Instr32 {
+    Rv32i(Rv32i),
+}
+
+impl From<Rv32i> for Instr32 {
+    fn from(rv32i_instr: Rv32i) -> Self {
+	Self::Rv32i(rv32i_instr)
+    }
+}
+
 /// RISC-V Instructions
 ///
 /// Field names below correspond to the names in the
 /// instruction set reference.
 #[derive(Debug, Clone)]
-pub enum Instr {
+pub enum Rv32i {
     /// In RV32I and RV64I, load u_immediate into dest[31:12] bits of
     /// dest, filling the low 12 bits with zeros. In RV64I, also sign
     /// extend the result to the high bits of dest. u_immediate is 20
@@ -241,7 +256,16 @@ macro_rules! interpret_as_signed {
 }
 pub use interpret_as_signed;
 
-impl Instr {
+impl Instr32 {
+
+    /// Decode all the instruction extensions here
+    pub fn from(instr: u32) -> Result<Self, DecodeError> {
+	let rv32i_instr = Rv32i::from(instr)?;
+	Ok(rv32i_instr.into())
+    }
+}
+
+impl Rv32i {
     pub fn from(instr: u32) -> Result<Self, DecodeError> {
         let op = opcode!(instr);
         match op {
