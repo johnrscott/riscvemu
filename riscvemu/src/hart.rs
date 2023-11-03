@@ -1,7 +1,7 @@
 use memory::Memory;
 
 use crate::{
-    instr::decode::{Branch, DecodeError, Instr32, Rv32i, Load, RegImm, RegReg, Store},
+    instr::{decode::{DecodeError, Instr32}, rv32i::{Load, Branch, RegReg, Store, RegImm, Rv32i}},
     mask,
 };
 

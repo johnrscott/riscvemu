@@ -1,5 +1,5 @@
 use riscvemu::hart::memory::Wordsize;
-use riscvemu::instr::decode::Rv32i;
+use riscvemu::instr::rv32i::Rv32i;
 use riscvemu::{hart::Hart, elf_utils::load_elf};
 use std::io::prelude::*;
 use std::io::{self, stdout};

@@ -55,3 +55,25 @@ pub fn imm_stype(instr: u32) -> i16 {
     }
     unsafe { mem::transmute(unsigned) }
 }
+
+/// Interpret the n least significant bits of
+/// value (u32) as signed (i32) by manually
+/// sign-extending based on bit n-1 and casting
+/// to a signed type. When you use this macro,
+/// make sure to include the type of the result
+/// (e.g. x: i16 = interpret_as_signed!(...))
+#[macro_export]
+macro_rules! interpret_as_signed {
+    ($value:expr, $n:expr) => {{
+        let sign_bit = 1 & ($value >> ($n - 1));
+        let sign_extended = if sign_bit == 1 {
+            let all_ones = ((0 * $value).wrapping_sub(1));
+            let sign_extension = all_ones - mask!($n);
+            sign_extension | $value
+        } else {
+            $value
+        };
+        unsafe { std::mem::transmute(sign_extended) }
+    }};
+}
+pub use interpret_as_signed;
