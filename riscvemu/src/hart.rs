@@ -1,7 +1,10 @@
 use memory::Memory;
 
 use crate::{
-    instr::{decode::{DecodeError, Instr32}, rv32i::{Load, Branch, RegReg, Store, RegImm, Rv32i}},
+    instr::{
+        decode::{DecodeError, Instr32},
+        rv32i::{Branch, Load, RegImm, RegReg, Rv32i, Store},
+    },
     mask,
 };
 
@@ -422,7 +425,11 @@ impl Hart {
         self.pc
     }
 
-    pub fn read_memory(&mut self, address: u32, word_size: Wordsize) -> Result<u32, ExecutionError> {
+    pub fn read_memory(
+        &mut self,
+        address: u32,
+        word_size: Wordsize,
+    ) -> Result<u32, ExecutionError> {
         let value = self
             .memory
             .read(address.into(), word_size)?
@@ -430,49 +437,53 @@ impl Hart {
             .expect("the word should fit in u32, else bug in Memory");
         Ok(value)
     }
-    
+
     fn execute(&mut self, instr: Instr32) -> Result<(), ExecutionError> {
-	match instr.clone() {
-	    Instr32::Rv32i(rv32i_instr) => {
-		match rv32i_instr {
-		    Rv32i::Lui { dest, u_immediate } => execute_lui_rv32i(self, dest, u_immediate)?,
-		    Rv32i::Auipc { dest, u_immediate } => execute_auipc_rv32i(self, dest, u_immediate)?,
-		    Rv32i::Jal { dest, offset } => execute_jal_rv32i(self, dest, offset)?,
-		    Rv32i::Jalr { dest, base, offset } => execute_jalr_rv32i(self, dest, base, offset)?,
-		    Rv32i::Branch {
-			mnemonic,
-			src1,
-			src2,
-			offset,
-		    } => execute_branch_rv32i(self, mnemonic, src1, src2, offset)?,
-		    Rv32i::Load {
-			mnemonic,
-			dest,
-			base,
-			offset,
-		    } => execute_load_rv32i(self, mnemonic, dest, base, offset)?,
-		    Rv32i::Store {
-			mnemonic,
-			src,
-			base,
-			offset,
-		    } => execute_store_rv32i(self, mnemonic, src, base, offset)?,
-		    Rv32i::RegImm {
-			mnemonic,
-			dest,
-			src,
-			i_immediate,
-		    } => execute_reg_imm_rv32i(self, mnemonic, dest, src, i_immediate)?,
-		    Rv32i::RegReg {
-			mnemonic,
-			dest,
-			src1,
-			src2,
-		    } => execute_reg_reg_rv32i(self, mnemonic, dest, src1, src2)?,
-		}
-		Ok(())
-	    }	    
-	}
+        match instr.clone() {
+            Instr32::Rv32i(rv32i_instr) => {
+                match rv32i_instr {
+                    Rv32i::Lui { dest, u_immediate } => execute_lui_rv32i(self, dest, u_immediate)?,
+                    Rv32i::Auipc { dest, u_immediate } => {
+                        execute_auipc_rv32i(self, dest, u_immediate)?
+                    }
+                    Rv32i::Jal { dest, offset } => execute_jal_rv32i(self, dest, offset)?,
+                    Rv32i::Jalr { dest, base, offset } => {
+                        execute_jalr_rv32i(self, dest, base, offset)?
+                    }
+                    Rv32i::Branch {
+                        mnemonic,
+                        src1,
+                        src2,
+                        offset,
+                    } => execute_branch_rv32i(self, mnemonic, src1, src2, offset)?,
+                    Rv32i::Load {
+                        mnemonic,
+                        dest,
+                        base,
+                        offset,
+                    } => execute_load_rv32i(self, mnemonic, dest, base, offset)?,
+                    Rv32i::Store {
+                        mnemonic,
+                        src,
+                        base,
+                        offset,
+                    } => execute_store_rv32i(self, mnemonic, src, base, offset)?,
+                    Rv32i::RegImm {
+                        mnemonic,
+                        dest,
+                        src,
+                        i_immediate,
+                    } => execute_reg_imm_rv32i(self, mnemonic, dest, src, i_immediate)?,
+                    Rv32i::RegReg {
+                        mnemonic,
+                        dest,
+                        src1,
+                        src2,
+                    } => execute_reg_reg_rv32i(self, mnemonic, dest, src1, src2)?,
+                }
+                Ok(())
+            }
+        }
     }
 
     /// Returns the instruction at the current program counter

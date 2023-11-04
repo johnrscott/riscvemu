@@ -1,10 +1,19 @@
 //! RV32I base integer instruction set
 //!
 //! This file holds the instructions defined in chapter 2,
-//! unprivileged specification version 20191213. 
-//! 
+//! unprivileged specification version 20191213.
+//!
 
+use super::decode::decode_btype;
+use super::decode::decode_itype;
+use super::decode::decode_rtype;
+use super::decode::decode_stype;
+use super::decode::decode_utype;
 use super::decode::DecodeError;
+use super::decode::Itype;
+use super::decode::Rtype;
+use super::decode::SBtype;
+use super::decode::UJtype;
 use super::fields::*;
 use super::opcodes::*;
 
@@ -213,32 +222,94 @@ pub enum RegReg {
     Sra,
 }
 
+/// lui is completely determined by the opcode
+fn decode_lui(instr: u32) -> Rv32i {
+    let UJtype { rd, imm } = decode_utype(instr);
+    Rv32i::Lui {
+        dest: rd,
+        u_immediate: imm,
+    }
+}
+
+fn decode_beq(instr: u32) -> Rv32i {
+    let SBtype { rs1, rs2, imm } = decode_btype(instr);
+    Rv32i::Branch {
+        mnemonic: Branch::Beq,
+        src1: rs1,
+        src2: rs2,
+        offset: imm,
+    }
+}
+
+fn decode_lb(instr: u32) -> Rv32i {
+    let Itype { rs1, imm, rd } = decode_itype(instr);
+    Rv32i::Load {
+        mnemonic: Load::Lb,
+        dest: rd,
+        base: rs1,
+        offset: imm,
+    }
+}
+
+fn decode_sb(instr: u32) -> Rv32i {
+    let SBtype { rs1, rs2, imm } = decode_stype(instr);
+    Rv32i::Store {
+        mnemonic: Store::Sb,
+        src: rs2,
+        base: rs1,
+        offset: imm,
+    }
+}
+
+fn decode_addi(instr: u32) -> Rv32i {
+    let Itype { rs1, imm, rd } = decode_itype(instr);
+    Rv32i::RegImm {
+        mnemonic: RegImm::Addi,
+        dest: rd,
+        src: rs1,
+        i_immediate: imm,
+    }
+}
+
+fn decode_add(instr: u32) -> Rv32i {
+    let Rtype { rs1, rs2, rd } = decode_rtype(instr);
+    Rv32i::RegReg {
+        mnemonic: RegReg::Add,
+        dest: rd,
+        src1: rs1,
+        src2: rs2,
+    }
+}
+
 impl Rv32i {
     pub fn from(instr: u32) -> Result<Self, DecodeError> {
         let op = opcode!(instr);
         match op {
-            OP_LUI => {
-                let dest = rd!(instr);
-                let u_immediate = lui_u_immediate!(instr);
-                Ok(Self::Lui { dest, u_immediate })
-            }
+            OP_LUI => Ok(decode_lui(instr)),
             OP_AUIPC => {
+                // auipc is completely determined by the opcode
                 let dest = rd!(instr);
                 let u_immediate = lui_u_immediate!(instr);
                 Ok(Self::Auipc { dest, u_immediate })
             }
             OP_JAL => {
+                // jal is completely determined by the opcode
                 let dest = rd!(instr);
                 let offset = jal_offset!(instr);
                 Ok(Self::Jal { dest, offset })
             }
             OP_JALR => {
+                // jalr is completely determined by the opcode
                 let dest = rd!(instr);
                 let base = rs1!(instr);
                 let offset = imm_itype!(instr);
                 Ok(Self::Jalr { dest, base, offset })
             }
             OP_BRANCH => {
+                // Conditional branches are decoded by seeing a BRANCH
+                // opcode, and then using funct3 to determine which
+                // branch instruction is present
+                //
                 let src1 = rs1!(instr);
                 let src2 = rs2!(instr);
                 let offset = imm_btype!(instr).try_into().unwrap();
@@ -260,6 +331,9 @@ impl Rv32i {
                 })
             }
             OP_LOAD => {
+                // Loads are decoded by seeing a LOAD opcode, and then
+                // using funct3 to determine which load instruction is
+                // present.
                 let dest = rd!(instr);
                 let base = rs1!(instr);
                 let offset = imm_itype!(instr);
@@ -280,6 +354,9 @@ impl Rv32i {
                 })
             }
             OP_STORE => {
+                // Stores are decoded by seeing a STORE opcode, and
+                // then using funct3 to determine which store
+                // instruction is present.
                 let src = rs2!(instr);
                 let base = rs1!(instr);
                 let offset = imm_stype!(instr);
@@ -298,6 +375,11 @@ impl Rv32i {
                 })
             }
             OP_IMM => {
+                // Register-immediate computational instruction are
+                // decoded by seeing an IMM opcode, using
+                // funct3 to determine which instruction is present,
+                // and then if funct3 is srli, using bit 30 to distinguish
+                // between srli and srai.
                 let src = rs1!(instr);
                 let dest = rd!(instr);
                 let mut i_immediate = imm_itype!(instr);
@@ -328,6 +410,14 @@ impl Rv32i {
                 })
             }
             OP => {
+                // Register-register computational instruction are
+                // decoded by seeing an OP opcode, using
+                // funct3 to determine which instruction is present,
+                // and then
+                // - if funct3 is srl, using bit 30 to distinguish
+                //   between srl and sra.
+                // - if funct3 is add, using bit 30 to distinguish
+                //   between add and sub
                 let src1 = rs1!(instr);
                 let src2 = rs2!(instr);
                 let dest = rd!(instr);
