@@ -111,6 +111,15 @@ pub fn decode_jtype(instr: u32) -> UJtype {
     }
 }
 
+/// Stores the functions required to decode an instruction
+pub struct DecodeFunctions {
+    /// Call this function to decode the non-opcode fields
+    /// of the instruction
+    decode: fn(u32) -> Rv32i,
+    /// 
+    
+}
+
 #[derive(Debug, Error)]
 pub enum DecodeError {
     #[error("got invalid or unimplemented opcode 0x{0:x}")]

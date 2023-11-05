@@ -4,6 +4,8 @@
 //! unprivileged specification version 20191213.
 //!
 
+use std::collections::HashMap;
+
 use super::decode::decode_btype;
 use super::decode::decode_itype;
 use super::decode::decode_rtype;
@@ -271,6 +273,66 @@ fn decode_addi(instr: u32) -> Rv32i {
     }
 }
 
+fn decode_slli(instr: u32) -> Rv32i {
+    let Itype { rs1, imm, rd } = decode_itype(instr);
+    Rv32i::RegImm {
+        mnemonic: RegImm::Slli,
+        dest: rd,
+        src: rs1,
+        i_immediate: imm,
+    }
+}
+
+fn decode_slti(instr: u32) -> Rv32i {
+    let Itype { rs1, imm, rd } = decode_itype(instr);
+    Rv32i::RegImm {
+        mnemonic: RegImm::Slti,
+        dest: rd,
+        src: rs1,
+        i_immediate: imm,
+    }
+}
+
+fn decode_sltiu(instr: u32) -> Rv32i {
+    let Itype { rs1, imm, rd } = decode_itype(instr);
+    Rv32i::RegImm {
+        mnemonic: RegImm::Sltiu,
+        dest: rd,
+        src: rs1,
+        i_immediate: imm,
+    }
+}
+
+fn decode_xori(instr: u32) -> Rv32i {
+    let Itype { rs1, imm, rd } = decode_itype(instr);
+    Rv32i::RegImm {
+        mnemonic: RegImm::Xori,
+        dest: rd,
+        src: rs1,
+        i_immediate: imm,
+    }
+}
+
+fn decode_ori(instr: u32) -> Rv32i {
+    let Itype { rs1, imm, rd } = decode_itype(instr);
+    Rv32i::RegImm {
+        mnemonic: RegImm::Ori,
+        dest: rd,
+        src: rs1,
+        i_immediate: imm,
+    }
+}
+
+fn decode_andi(instr: u32) -> Rv32i {
+    let Itype { rs1, imm, rd } = decode_itype(instr);
+    Rv32i::RegImm {
+        mnemonic: RegImm::Andi,
+        dest: rd,
+        src: rs1,
+        i_immediate: imm,
+    }
+}
+
 fn decode_add(instr: u32) -> Rv32i {
     let Rtype { rs1, rs2, rd } = decode_rtype(instr);
     Rv32i::RegReg {
@@ -279,6 +341,81 @@ fn decode_add(instr: u32) -> Rv32i {
         src1: rs1,
         src2: rs2,
     }
+}
+
+fn decode_sub(instr: u32) -> Rv32i {
+    let Rtype { rs1, rs2, rd } = decode_rtype(instr);
+    Rv32i::RegReg {
+        mnemonic: RegReg::Sub,
+        dest: rd,
+        src1: rs1,
+        src2: rs2,
+    }
+}
+
+fn decode_sll(instr: u32) -> Rv32i {
+    let Rtype { rs1, rs2, rd } = decode_rtype(instr);
+    Rv32i::RegReg {
+        mnemonic: RegReg::Sll,
+        dest: rd,
+        src1: rs1,
+        src2: rs2,
+    }
+}
+
+fn decode_slt(instr: u32) -> Rv32i {
+    let Rtype { rs1, rs2, rd } = decode_rtype(instr);
+    Rv32i::RegReg {
+        mnemonic: RegReg::Slt,
+        dest: rd,
+        src1: rs1,
+        src2: rs2,
+    }
+}
+
+fn decode_sltu(instr: u32) -> Rv32i {
+    let Rtype { rs1, rs2, rd } = decode_rtype(instr);
+    Rv32i::RegReg {
+        mnemonic: RegReg::Sltu,
+        dest: rd,
+        src1: rs1,
+        src2: rs2,
+    }
+}
+
+fn decode_xor(instr: u32) -> Rv32i {
+    let Rtype { rs1, rs2, rd } = decode_rtype(instr);
+    Rv32i::RegReg {
+        mnemonic: RegReg::Xor,
+        dest: rd,
+        src1: rs1,
+        src2: rs2,
+    }
+}
+
+fn decode_or(instr: u32) -> Rv32i {
+    let Rtype { rs1, rs2, rd } = decode_rtype(instr);
+    Rv32i::RegReg {
+        mnemonic: RegReg::Or,
+        dest: rd,
+        src1: rs1,
+        src2: rs2,
+    }
+}
+
+fn decode_and(instr: u32) -> Rv32i {
+    let Rtype { rs1, rs2, rd } = decode_rtype(instr);
+    Rv32i::RegReg {
+        mnemonic: RegReg::And,
+        dest: rd,
+        src1: rs1,
+        src2: rs2,
+    }
+}
+
+pub fn decoders() -> HashMap<u32, fn(i32)->Rv32i> {
+    let mut signature_map = HashMap::new();
+    signature_map.insert(12, decode_lui)
 }
 
 impl Rv32i {
