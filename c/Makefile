@@ -1,7 +1,9 @@
+ISA=rv32im 
+
 # See NOTES.md on installing this compiler
 CC=riscv64-unknown-elf-gcc
-CFLAGS=-march=rv32i -mabi=ilp32
-LDFLAGS=-march=rv32i -mabi=ilp32
+CFLAGS=-march=$(ISA) -mabi=ilp32
+LDFLAGS=-march=$(ISA) -mabi=ilp32
 
 # Note startup.o is added by the linker.ld script.
 # -ffreestanding enables the C freestanding (i.e. not
@@ -15,5 +17,10 @@ LDFLAGS=-march=rv32i -mabi=ilp32
 hello.out: hello.c startup.o linker.ld Makefile
 	$(CC) $(CFLAGS) -T linker.ld -flto -Os -Wall -Wextra -ffreestanding -nostartfiles hello.c -o $@
 
-startup.o: startup.S
+startup.o: startup.S Makefile
 	$(CC) $(CFLAGS) -c $< -o startup.o
+
+.PHONY: clean
+
+clean:
+	rm -rf *.o hello.out
