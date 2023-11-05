@@ -2,7 +2,7 @@ use memory::Memory;
 
 use crate::{
     instr::{
-        decode::{DecodeError, Instr32},
+        decode::{DecodeError, Instr32, Decoder, BaseIsa},
         rv32i::{Branch, Load, RegImm, RegReg, Rv32i, Store},
     },
     mask,
@@ -495,9 +495,11 @@ impl Hart {
     pub fn step(&mut self) -> Result<(), Trap> {
         let instr = self.fetch_current_instruction();
 
+	let decoder = Decoder::new(BaseIsa::Rv32i, vec![]);
+	
         // Decoding the instruction may return traps, e.g. invalid
         // instruction.
-        let instr = Instr32::from(instr)?;
+        let instr = decoder.decode(instr)?;
 
         // Execute instruction here. That may produce further traps,
         // e.g. ecalls or invalid instructions discovered at the

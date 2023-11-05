@@ -8,9 +8,11 @@
 //! instruction is unspecified. Specific behaviour for reserved
 //! fields in instructions is documented where it occurs below.
 //!
+use std::collections::HashMap;
+
 use super::fields::*;
 
-use super::rv32i::Rv32i;
+use super::rv32i::{Rv32i, decoders};
 use thiserror::Error;
 
 // A signature will mean the value of an instruction with all
@@ -35,11 +37,11 @@ pub fn isbtype_signature(opcode: u32, funct3: u32) -> u32 {
 // be obtained by reading the opcode field.
 
 pub fn mask_rtype(instr: u32) -> u32 {
-    (mask!(7) << 25 | mask!(3) << 7 | mask!(7)) & instr
+    (mask!(7) << 25 | mask!(3) << 12 | mask!(7)) & instr
 }
 
 pub fn mask_isbtype(instr: u32) -> u32 {
-    (mask!(3) << 7 | mask!(7)) & instr
+    (mask!(3) << 12 | mask!(7)) & instr
 }
 
 pub struct Rtype {
@@ -111,14 +113,12 @@ pub fn decode_jtype(instr: u32) -> UJtype {
     }
 }
 
-/// Stores the functions required to decode an instruction
-pub struct DecodeFunctions {
-    /// Call this function to decode the non-opcode fields
-    /// of the instruction
-    decode: fn(u32) -> Rv32i,
-    /// 
-    
-}
+// /// Stores the functions required to decode an instruction
+// pub struct DecodeFunctions {
+//     /// Call this function to decode the non-opcode fields
+//     /// of the instruction
+//     decode: fn(u32) -> Rv32i,
+// }
 
 #[derive(Debug, Error)]
 pub enum DecodeError {
@@ -126,6 +126,8 @@ pub enum DecodeError {
     InvalidOpcode(u32),
     #[error("got invalid or unimplemented instruction 0x{0:x}")]
     InvalidInstruction(u32),
+    #[error("got invalid signature 0x{signature:b} for opcode 0x{opcode:b}")]
+    InvalidSignature{ signature: u32, opcode: u32 }
 }
 
 #[derive(Debug, Clone)]
@@ -170,18 +172,35 @@ pub enum Instr {
     Rv32i(Rv32i),
 }
 
+#[derive(Debug)]
+pub enum SignatureDecoder {
+    /// If the opcode determines the function directly, then only
+    /// the decoder function for the instruction is required.
+    DecoderFunction{decoder: fn(u32)->Rv32i},
+    /// Required if the opcode does not determine the instruction,
+    /// but the signature does. Maps signatures to the function that
+    /// can decode the instruction
+    SignatureMap{ signature_function: fn(u32) -> u32, signature_to_decoder: HashMap<u32, fn(u32)->Rv32i>} ,
+}
+
 /// The RISC-V instruction decoder
 ///
 /// The decoder is capable of handing different instruction classes.
 #[derive(Debug, Default)]
-struct Decoder {}
+pub struct Decoder {
+    opcode_to_decoder: HashMap<u32, SignatureDecoder>,
+}
 
 impl Decoder {
     pub fn new(base_isa: BaseIsa, isa_extensions: Vec<IsaExtension>) -> Self {
-        // Build a decoder out of the decoders contained in base_isa and
-        // isa_extensions.
-
-        Self {}
+	
+	let opcode_to_decoder = match base_isa {
+	    BaseIsa::Rv32i => {
+		decoders()
+	    },
+	    _ => unimplemented!("No other base ISA yet"),
+	};
+        Self { opcode_to_decoder }
     }
 
     /// Decode an instruction
@@ -208,7 +227,26 @@ impl Decoder {
     ///   the same opcode should be considered together)
     /// - The rules for how to decode should be stored in the ISAs themselves,
     ///   not the decoder.
-    pub fn decode(&self, instr: u32) -> Result<Instr, DecodeError> {
-        Err(DecodeError::InvalidInstruction(instr))
+    pub fn decode(&self, instr: u32) -> Result<Instr32, DecodeError> {
+
+	// First get the opcode
+	let opcode = opcode!(instr);
+	if let Some(signature_decoder) = self.opcode_to_decoder.get(&opcode) {
+
+	    // Use the opcode to determine whether a signature is required
+	    match signature_decoder {
+		SignatureDecoder::DecoderFunction { decoder } => Ok(decoder(instr).into()),
+		SignatureDecoder::SignatureMap { signature_function, signature_to_decoder } => {
+		    let signature = signature_function(instr);
+		    if let Some(decoder) = signature_to_decoder.get(&signature) {
+			Ok(decoder(instr).into())
+		    } else {
+			Err(DecodeError::InvalidSignature { signature, opcode })
+		    }
+		}
+	    }   
+	} else {
+	    Err(DecodeError::InvalidOpcode(opcode))
+	}
     }
 }

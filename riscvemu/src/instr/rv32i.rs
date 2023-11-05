@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use super::decode::SignatureDecoder;
 use super::decode::decode_btype;
 use super::decode::decode_itype;
 use super::decode::decode_rtype;
@@ -16,6 +17,8 @@ use super::decode::Itype;
 use super::decode::Rtype;
 use super::decode::SBtype;
 use super::decode::UJtype;
+use super::decode::isbtype_signature;
+use super::decode::mask_isbtype;
 use super::fields::*;
 use super::opcodes::*;
 
@@ -413,9 +416,24 @@ fn decode_and(instr: u32) -> Rv32i {
     }
 }
 
-pub fn decoders() -> HashMap<u32, fn(i32)->Rv32i> {
-    let mut signature_map = HashMap::new();
-    signature_map.insert(12, decode_lui)
+pub fn decoders() -> HashMap<u32, SignatureDecoder> {
+    let mut opcode_to_decoder = HashMap::new();
+
+    // lui
+    let decoder = decode_lui;
+    opcode_to_decoder.insert(OP_LUI, SignatureDecoder::DecoderFunction { decoder });
+
+    // addi
+    let mut signature_to_decoder = HashMap::<u32, fn(u32)->Rv32i>::new();
+    signature_to_decoder.insert(isbtype_signature(OP_IMM, FUNCT3_ADDI), decode_addi);
+    signature_to_decoder.insert(isbtype_signature(OP_IMM, FUNCT3_SLLI), decode_slli);
+    signature_to_decoder.insert(isbtype_signature(OP_IMM, FUNCT3_XORI), decode_xori);
+    signature_to_decoder.insert(isbtype_signature(OP_IMM, FUNCT3_ORI), decode_ori);
+    signature_to_decoder.insert(isbtype_signature(OP_IMM, FUNCT3_ANDI), decode_andi);
+    let signature_function = mask_isbtype;
+    opcode_to_decoder.insert(OP_IMM, SignatureDecoder::SignatureMap { signature_function, signature_to_decoder });
+    
+    opcode_to_decoder
 }
 
 impl Rv32i {
