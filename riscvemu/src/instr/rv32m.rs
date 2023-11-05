@@ -120,3 +120,4 @@ impl Rv32m {
 	    _ => Err(DecodeError::InvalidOpcode(op)),
 	}
     }
+}
