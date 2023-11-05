@@ -1,4 +1,4 @@
-ISA=rv32im 
+ISA=rv32i
 
 # See NOTES.md on installing this compiler
 CC=riscv64-unknown-elf-gcc

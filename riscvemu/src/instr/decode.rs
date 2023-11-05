@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use super::fields::*;
 
-use super::rv32i::{Rv32i, decoders};
+use super::rv32i::{decoders, Rv32i};
 use thiserror::Error;
 
 // A signature will mean the value of an instruction with all
@@ -44,75 +44,6 @@ pub fn mask_isbtype(instr: u32) -> u32 {
     (mask!(3) << 12 | mask!(7)) & instr
 }
 
-pub struct Rtype {
-    pub rs1: u8,
-    pub rs2: u8,
-    pub rd: u8,
-}
-
-pub struct Itype {
-    pub rs1: u8,
-    pub imm: u16,
-    pub rd: u8,
-}
-
-pub struct SBtype {
-    pub rs1: u8,
-    pub rs2: u8,
-    pub imm: u16,
-}
-
-pub struct UJtype {
-    pub rd: u8,
-    pub imm: u32,
-}
-
-pub fn decode_rtype(instr: u32) -> Rtype {
-    Rtype {
-        rs1: rs1!(instr),
-        rs2: rs2!(instr),
-        rd: rd!(instr),
-    }
-}
-
-pub fn decode_itype(instr: u32) -> Itype {
-    Itype {
-        rs1: rs1!(instr),
-        imm: imm_itype!(instr),
-        rd: rd!(instr),
-    }
-}
-
-pub fn decode_stype(instr: u32) -> SBtype {
-    SBtype {
-        rs1: rs1!(instr),
-        rs2: rs2!(instr),
-        imm: imm_stype!(instr),
-    }
-}
-
-pub fn decode_btype(instr: u32) -> SBtype {
-    SBtype {
-        rs1: rs1!(instr),
-        rs2: rs2!(instr),
-        imm: imm_btype!(instr).try_into().unwrap(),
-    }
-}
-
-pub fn decode_utype(instr: u32) -> UJtype {
-    UJtype {
-        rd: rd!(instr),
-        imm: lui_u_immediate!(instr),
-    }
-}
-
-pub fn decode_jtype(instr: u32) -> UJtype {
-    UJtype {
-        rd: rd!(instr),
-        imm: jal_offset!(instr),
-    }
-}
-
 // /// Stores the functions required to decode an instruction
 // pub struct DecodeFunctions {
 //     /// Call this function to decode the non-opcode fields
@@ -127,7 +58,7 @@ pub enum DecodeError {
     #[error("got invalid or unimplemented instruction 0x{0:x}")]
     InvalidInstruction(u32),
     #[error("got invalid signature 0x{signature:b} for opcode 0x{opcode:b}")]
-    InvalidSignature{ signature: u32, opcode: u32 }
+    InvalidSignature { signature: u32, opcode: u32 },
 }
 
 #[derive(Debug, Clone)]
@@ -176,11 +107,14 @@ pub enum Instr {
 pub enum SignatureDecoder {
     /// If the opcode determines the function directly, then only
     /// the decoder function for the instruction is required.
-    DecoderFunction{decoder: fn(u32)->Rv32i},
+    DecoderFunction { decoder: fn(u32) -> Rv32i },
     /// Required if the opcode does not determine the instruction,
     /// but the signature does. Maps signatures to the function that
     /// can decode the instruction
-    SignatureMap{ signature_function: fn(u32) -> u32, signature_to_decoder: HashMap<u32, fn(u32)->Rv32i>} ,
+    SignatureMap {
+        signature_function: fn(u32) -> u32,
+        signature_to_decoder: HashMap<u32, fn(u32) -> Rv32i>,
+    },
 }
 
 /// The RISC-V instruction decoder
@@ -193,13 +127,10 @@ pub struct Decoder {
 
 impl Decoder {
     pub fn new(base_isa: BaseIsa, isa_extensions: Vec<IsaExtension>) -> Self {
-	
-	let opcode_to_decoder = match base_isa {
-	    BaseIsa::Rv32i => {
-		decoders()
-	    },
-	    _ => unimplemented!("No other base ISA yet"),
-	};
+        let opcode_to_decoder = match base_isa {
+            BaseIsa::Rv32i => decoders(),
+            _ => unimplemented!("No other base ISA yet"),
+        };
         Self { opcode_to_decoder }
     }
 
@@ -228,25 +159,26 @@ impl Decoder {
     /// - The rules for how to decode should be stored in the ISAs themselves,
     ///   not the decoder.
     pub fn decode(&self, instr: u32) -> Result<Instr32, DecodeError> {
-
-	// First get the opcode
-	let opcode = opcode!(instr);
-	if let Some(signature_decoder) = self.opcode_to_decoder.get(&opcode) {
-
-	    // Use the opcode to determine whether a signature is required
-	    match signature_decoder {
-		SignatureDecoder::DecoderFunction { decoder } => Ok(decoder(instr).into()),
-		SignatureDecoder::SignatureMap { signature_function, signature_to_decoder } => {
-		    let signature = signature_function(instr);
-		    if let Some(decoder) = signature_to_decoder.get(&signature) {
-			Ok(decoder(instr).into())
-		    } else {
-			Err(DecodeError::InvalidSignature { signature, opcode })
-		    }
-		}
-	    }   
-	} else {
-	    Err(DecodeError::InvalidOpcode(opcode))
-	}
+        // First get the opcode
+        let opcode = opcode!(instr);
+        if let Some(signature_decoder) = self.opcode_to_decoder.get(&opcode) {
+            // Use the opcode to determine whether a signature is required
+            match signature_decoder {
+                SignatureDecoder::DecoderFunction { decoder } => Ok(decoder(instr).into()),
+                SignatureDecoder::SignatureMap {
+                    signature_function,
+                    signature_to_decoder,
+                } => {
+                    let signature = signature_function(instr);
+                    if let Some(decoder) = signature_to_decoder.get(&signature) {
+                        Ok(decoder(instr).into())
+                    } else {
+                        Err(DecodeError::InvalidSignature { signature, opcode })
+                    }
+                }
+            }
+        } else {
+            Err(DecodeError::InvalidOpcode(opcode))
+        }
     }
 }

@@ -2,7 +2,7 @@ use memory::Memory;
 
 use crate::{
     instr::{
-        decode::{DecodeError, Instr32, Decoder, BaseIsa},
+        decode::{BaseIsa, DecodeError, Decoder, Instr32},
         rv32i::{Branch, Load, RegImm, RegReg, Rv32i, Store},
     },
     mask,
@@ -400,7 +400,7 @@ impl Hart {
     }
 
     /// Add 4 to the program counter, wrapping if necessary
-    fn increment_pc(&mut self) {
+    pub fn increment_pc(&mut self) {
         self.pc = next_instruction_address(self.pc);
     }
 
@@ -495,8 +495,8 @@ impl Hart {
     pub fn step(&mut self) -> Result<(), Trap> {
         let instr = self.fetch_current_instruction();
 
-	let decoder = Decoder::new(BaseIsa::Rv32i, vec![]);
-	
+        let decoder = Decoder::new(BaseIsa::Rv32i, vec![]);
+
         // Decoding the instruction may return traps, e.g. invalid
         // instruction.
         let instr = decoder.decode(instr)?;
