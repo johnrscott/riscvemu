@@ -5,6 +5,37 @@ pub struct Rtype {
     pub rd: u8,
 }
 
+impl Rtype {
+    /// get the signature from the instruction to 
+    /// compare with map key. Signature does not include the opcode.
+pub fn mask(instr: u32) -> u32 {
+    (mask!(7) << 25 | mask!(3) << 12 | mask!(7)) & instr
+}
+
+    /// build signature that uniquely IDs the instruction
+    pub fn signature(funct3: u32, funct7: u32) -> u32 {
+/// make the signature here (no opcode)
+    }
+}
+
+/// map opcodes to a type that stores
+/// - Instruction type (e.g. Rtype)
+/// - either: map from signature to 32/64 bit execution functions
+///  or: just a single 32/64execution function (lui does not need signature)
+pub struct InstructionSpec<InstrType> {
+    pub instr_type: InstrType,
+    pub exec_fns: enum(map, fn)
+    // pub signature: Option<u32>,
+    // exec fns
+    // mnemonic?
+}
+
+// Use macros to build InstructionSpec for each instruction
+
+// To decode: read opcode, map to instruction spec. if
+// signature present, use InstrType::mask(instr) to 
+// get signature, and 
+
 #[derive(Clone, Copy)]
 pub struct Itype {
     pub rs1: u8,
