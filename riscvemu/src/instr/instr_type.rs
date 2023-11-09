@@ -1,4 +1,6 @@
+
 #[derive(Clone, Copy)]
+enum 
 pub struct Rtype {
     pub rs1: u8,
     pub rs2: u8,

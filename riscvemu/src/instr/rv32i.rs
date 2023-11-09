@@ -6,6 +6,8 @@
 
 use std::collections::HashMap;
 
+use crate::hart::Hart;
+
 use super::decode::decode_btype;
 use super::decode::decode_itype;
 use super::decode::decode_rtype;
@@ -25,6 +27,26 @@ use super::decode::Utype;
 use super::fields::*;
 use super::opcodes::*;
 
+#[derive(Debug)]
+struct Instr<InstrType> {
+    /// Instruction name, e.g. lui. All lower case, for
+    /// printing purposes only
+    mnemonic: String,
+    /// The (non-opcode) information decoded from the
+    /// instruction
+    instr_data: InstrType,
+    execute32: Option<fn(&mut Hart, instr_data: InstrType)>,
+    execute64: Option<fn(&mut Hart, instr_data: InstrType)>,
+}
+
+fn make_rvxleni_decoder() -> HashMap<u32, SignatureDecoder> {
+
+    let mut map = HashMap::new();
+    //make_instruction!(map, "lui", 0b0000101, 0b010101, 0b1010101, Itype, execute_lui_32bit, execute_lui_64_bit);
+
+    map
+}
+    
 /// RISC-V Instructions
 ///
 /// Field names below correspond to the names in the
