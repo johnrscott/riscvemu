@@ -1,51 +1,82 @@
 
 #[derive(Clone, Copy)]
-enum 
-pub struct Rtype {
-    pub rs1: u8,
-    pub rs2: u8,
-    pub rd: u8,
+pub enum InstrType {
+    Rtype {
+	pub rs1: u8,
+	pub rs2: u8,
+	pub rd: u8,
+    },
+    Itype {
+	pub rs1: u8,
+	pub imm: u16,
+	pub rd: u8,
+    },
+    /// A specialisation of I-type for shift
+    /// functions which store a shift amount, and
+    /// use bit 30 to indicate the type shift.
+    Ishtype {
+	pub rs1: u8,
+	pub shamt: u8,
+	pub rd: u8,
+    },
+    Stype {
+	pub rs1: u8,
+	pub rs2: u8,
+	pub imm: u16,
+    },
+    Btype {
+	pub rs1: u8,
+	pub rs2: u8,
+	pub imm: u16,
+    },
+    Utype {
+	pub rd: u8,
+	pub imm: u32,
+    },
+    Jtype {
+	pub rd: u8,
+	pub imm: u32,
+    }
 }
 
-#[derive(Clone, Copy)]
-pub struct Itype {
-    pub rs1: u8,
-    pub imm: u16,
-    pub rd: u8,
+
+impl InstrType {
+
+    /// Mask out the portion of the instruction not in the
+    /// signature, leaving only the part which is used to identify
+    /// the instruction (the signature)
+    pub fn mask(&self, instr: u32) -> u32 {
+	match self {
+	    Self::Rtype { .. } => (mask!(7) << 25 | mask!(3) << 12 | mask!(7)) & instr,
+	    
+	}
+	
+    }
+
+    /// build signature that uniquely IDs the instruction
+    pub fn signature(funct3: u32, funct7: u32) -> u32 {
+	/// make the signature here (no opcode)
+    }
 }
 
-#[derive(Clone, Copy)]
-pub struct Ishtype {
-    pub rs1: u8,
-    pub shamt: u8,
-    pub rd: u8,
+/// map opcodes to a type that stores
+/// - Instruction type (e.g. Rtype)
+/// - either: map from signature to 32/64 bit execution functions
+///  or: just a single 32/64execution function (lui does not need signature)
+pub struct InstructionSpec {
+    pub instr_type: InstrType,
+    pub exec_fns: enum(map, fn)
+    // pub signature: Option<u32>,
+    // exec fns
+    // mnemonic?
 }
 
-#[derive(Clone, Copy)]
-pub struct Stype {
-    pub rs1: u8,
-    pub rs2: u8,
-    pub imm: u16,
-}
+// Use macros to build InstructionSpec for each instruction
 
-#[derive(Clone, Copy)]
-pub struct Btype {
-    pub rs1: u8,
-    pub rs2: u8,
-    pub imm: u16,
-}
+// To decode: read opcode, map to instruction spec. if
+// signature present, use InstrType::mask(instr) to 
+// get signature, and 
 
-#[derive(Clone, Copy)]
-pub struct Utype {
-    pub rd: u8,
-    pub imm: u32,
-}
-
-#[derive(Clone, Copy)]
-pub struct Jtype {
-    pub rd: u8,
-    pub imm: u32,
-}
 
 impl From<u32> for Rtype {
     fn from(instr: u32) -> Rtype {
