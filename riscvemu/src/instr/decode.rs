@@ -10,6 +10,8 @@
 //!
 use std::collections::HashMap;
 
+use crate::hart::{ExecutionError, Hart};
+
 use super::fields::*;
 
 use super::rv32i::{decoders, Rv32i};
@@ -103,18 +105,47 @@ pub enum Instr {
     Rv32i(Rv32i),
 }
 
+
+
 #[derive(Debug)]
+// pub enum SignatureDecoder {
+//     /// If the opcode determines the function directly, then only
+//     /// the decoder function for the instruction is required.
+//     DecoderFunction { decoder: fn(u32) -> Rv32i },
+//     /// Required if the opcode does not determine the instruction,
+//     /// but the signature does. Maps signatures to the function that
+//     /// can decode the instruction
+//     SignatureMap {
+//         signature_function: fn(u32) -> u32,
+//         signature_to_decoder: HashMap<u32, fn(u32) -> Rv32i>,
+//     },
+// }
+
+// The decode process is as follows:
+//
+// 1. start with an instruction instr (u32). Set x = instr.
+// 2. Set mask = opcode_mask (extracts the opcode)
+// 3. apply mask to x, and compare the result to a set of values
+// 4. depending on the value found, either read a new (value-specific) mask,
+//    and go back to step 3; or, return a function which will execute the
+//    instruction in 32-bit or 64-bit mode.
+//
+
+/// This is a tree, containing a sequence of steps to decode an instruction
+///
+/// 
 pub enum SignatureDecoder {
-    /// If the opcode determines the function directly, then only
-    /// the decoder function for the instruction is required.
-    DecoderFunction { decoder: fn(u32) -> Rv32i },
-    /// Required if the opcode does not determine the instruction,
-    /// but the signature does. Maps signatures to the function that
-    /// can decode the instruction
-    SignatureMap {
-        signature_function: fn(u32) -> u32,
-        signature_to_decoder: HashMap<u32, fn(u32) -> Rv32i>,
+    /// Variant for when another step of decoding is needed. 
+    Decoder {
+	/// For the next decoding step, use this mask
+	next_mask: u32,
+	/// Then compare the value you get to this map to
+	/// obtain the next decoding step
+	value_map: HashMap<u32, SignatureDecoder>
     },
+    Executer {
+	xlen32_fn: Option<fn(&mut Hart, instr: u32) -> Result<(), ExecutionError>>,
+    }
 }
 
 /// The RISC-V instruction decoder
