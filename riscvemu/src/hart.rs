@@ -4,7 +4,7 @@ use crate::{
     instr::{
         decode::{mask_isbtype, DecodeError, ExecFn32, SignatureDecoder, isbtype_signature},
         exec::{execute_auipc_rv32i, execute_jal_rv32i, execute_jalr_rv32i, execute_lui_rv32i, execute_branch_rv32i},
-        opcodes::{OP_AUIPC, OP_BRANCH, OP_JAL, OP_JALR, OP_LUI, FUNCT3_BEQ},
+        opcodes::{OP_AUIPC, OP_BRANCH, OP_JAL, OP_JALR, OP_LUI, FUNCT3_BEQ, FUNCT3_BNE, FUNCT3_BLT, FUNCT3_BLTU, FUNCT3_BGE, FUNCT3_BGEU},
         rv32i::{Branch, Load, RegImm, RegReg, Store},
     },
     mask,
@@ -472,6 +472,41 @@ impl Hart {
             };
             value_map.insert(isbtype_signature(FUNCT3_BEQ), executer);
 
+            let executer = SignatureDecoder::Executer {
+                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
+		    execute_branch_rv32i(hart, Branch::Bne, instr)
+		})),
+            };
+            value_map.insert(isbtype_signature(FUNCT3_BNE), executer);
+
+            let executer = SignatureDecoder::Executer {
+                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
+		    execute_branch_rv32i(hart, Branch::Blt, instr)
+		})),
+            };
+            value_map.insert(isbtype_signature(FUNCT3_BLT), executer);
+
+            let executer = SignatureDecoder::Executer {
+                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
+		    execute_branch_rv32i(hart, Branch::Bge, instr)
+		})),
+            };
+            value_map.insert(isbtype_signature(FUNCT3_BGE), executer);
+	    
+            let executer = SignatureDecoder::Executer {
+                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
+		    execute_branch_rv32i(hart, Branch::Bltu, instr)
+		})),
+            };
+            value_map.insert(isbtype_signature(FUNCT3_BLTU), executer);
+
+            let executer = SignatureDecoder::Executer {
+                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
+		    execute_branch_rv32i(hart, Branch::Bgeu, instr)
+		})),
+            };
+            value_map.insert(isbtype_signature(FUNCT3_BGEU), executer);
+	    
             SignatureDecoder::Decoder {
                 next_mask,
                 value_map,
