@@ -10,9 +10,9 @@
 //! Instruction behaviour is defined in RISC-V unprivileged
 //! specification version 20191213
 
-use crate::hart::{ExecutionError, Hart, next_instruction_address, sign_extend};
+use crate::hart::{next_instruction_address, sign_extend, ExecutionError, Hart};
 
-use super::instr_type::{UJtype, decode_jtype};
+use super::instr_type::{decode_jtype, decode_utype, UJtype};
 
 /// Load upper immediate in 32-bit mode
 ///
@@ -23,7 +23,7 @@ pub fn execute_lui_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
     let UJtype {
         rd: dest,
         imm: u_immediate,
-    } = decode_jtype(instr);
+    } = decode_utype(instr);
     hart.set_x(dest, u_immediate << 12)?;
     hart.increment_pc();
     Ok(())
@@ -36,7 +36,11 @@ pub fn execute_lui_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
 /// the current value of the program counter. Store the
 /// result in the register dest. Set pc = pc + 4.
 ///
-fn execute_auipc_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
+pub fn execute_auipc_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let UJtype {
+        rd: dest,
+        imm: u_immediate,
+    } = decode_utype(instr);
     let value = hart.pc.wrapping_add(u_immediate << 12);
     hart.set_x(dest, value).unwrap();
     hart.increment_pc();

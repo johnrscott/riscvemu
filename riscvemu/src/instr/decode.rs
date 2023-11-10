@@ -58,8 +58,6 @@ pub enum DecodeError {
     MissingExecFunction(u32),
     #[error("instruction 0x{0:x} signature decoder is missing a map entry")]
     MissingValueInMap(u32),
-
-      
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,39 +66,39 @@ pub struct ExecFn32(pub fn(&mut Hart, instr: u32) -> Result<(), ExecutionError>)
 /// This is a tree, containing a sequence of steps to decode an instruction
 #[derive(Debug, Clone)]
 pub enum SignatureDecoder {
-    /// Variant for when another step of decoding is needed. 
+    /// Variant for when another step of decoding is needed.
     Decoder {
-	/// For the next decoding step, use this mask
-	next_mask: u32,
-	/// Then compare the value you get to this map to
-	/// obtain the next decoding step
-	value_map: HashMap<u32, SignatureDecoder>
+        /// For the next decoding step, use this mask
+        next_mask: u32,
+        /// Then compare the value you get to this map to
+        /// obtain the next decoding step
+        value_map: HashMap<u32, SignatureDecoder>,
     },
     /// This is the leaf node, when the instruction is known
-    Executer {
-	xlen32_fn: Option<ExecFn32>,
-    }
+    Executer { xlen32_fn: Option<ExecFn32> },
 }
 
 impl SignatureDecoder {
     pub fn decode(&self, instr: u32) -> Result<ExecFn32, DecodeError> {
-	match self {
-	    Self::Decoder { next_mask, value_map } => {
-		let value = next_mask & instr;
-		if let Some(next_decoder) = value_map.get(&value) {
-		    next_decoder.decode(instr)
-		} else {
-		    Err(DecodeError::MissingValueInMap(instr))
-		}
-	    }
-	    Self::Executer { xlen32_fn } => {
-		if let Some(exec_fn) = xlen32_fn {
-		    Ok(*exec_fn)
-		} else {
-		    Err(DecodeError::MissingExecFunction(instr))
-		}
-	    }
-	}
+        match self {
+            Self::Decoder {
+                next_mask,
+                value_map,
+            } => {
+                let value = next_mask & instr;
+                if let Some(next_decoder) = value_map.get(&value) {
+                    next_decoder.decode(instr)
+                } else {
+                    Err(DecodeError::MissingValueInMap(instr))
+                }
+            }
+            Self::Executer { xlen32_fn } => {
+                if let Some(exec_fn) = xlen32_fn {
+                    Ok(*exec_fn)
+                } else {
+                    Err(DecodeError::MissingExecFunction(instr))
+                }
+            }
+        }
     }
-
 }

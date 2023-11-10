@@ -2,8 +2,9 @@ use memory::Memory;
 
 use crate::{
     instr::{
-        decode::{DecodeError, SignatureDecoder, ExecFn32},
-        rv32i::{Branch, Load, RegImm, RegReg, Store}, exec::execute_lui_rv32i,
+        decode::{DecodeError, ExecFn32, SignatureDecoder},
+        exec::{execute_lui_rv32i, execute_auipc_rv32i},
+        rv32i::{Branch, Load, RegImm, RegReg, Store}, opcodes::{OP_LUI, OP_AUIPC},
     },
     mask,
 };
@@ -12,7 +13,7 @@ use self::{
     memory::{ReadError, Wordsize},
     registers::Registers,
 };
-use std::mem;
+use std::{mem, collections::HashMap};
 use thiserror::Error;
 
 pub mod memory;
@@ -116,12 +117,12 @@ pub fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), Ex
 /// the current value of the program counter. Store the
 /// result in the register dest. Set pc = pc + 4.
 ///
-fn execute_auipc_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
-    let value = hart.pc.wrapping_add(u_immediate << 12);
-    hart.set_x(dest, value).unwrap();
-    hart.increment_pc();
-    Ok(())
-}
+// fn execute_auipc_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
+//     let value = hart.pc.wrapping_add(u_immediate << 12);
+//     hart.set_x(dest, value).unwrap();
+//     hart.increment_pc();
+//     Ok(())
+// }
 
 /*
 /// Jump and link in 32-bit mode
@@ -500,16 +501,26 @@ impl Hart {
 
         // Decoding the instruction may return traps, e.g. invalid
         // instruction.
-	let decoder = SignatureDecoder::Executer {
-	    xlen32_fn: Some(ExecFn32(execute_lui_rv32i))
-	};
-        let exec_fn = decoder.decode(instr)?;
+        let lui_executer = SignatureDecoder::Executer {
+            xlen32_fn: Some(ExecFn32(execute_lui_rv32i)),
+        };
+        let auipc_executer = SignatureDecoder::Executer {
+            xlen32_fn: Some(ExecFn32(execute_auipc_rv32i)),
+        };
+	let mut value_map = HashMap::new();
+	value_map.insert(OP_LUI, lui_executer);
+	value_map.insert(OP_AUIPC, auipc_executer);
+	
+	let next_mask = mask!(7);
+	let decoder = SignatureDecoder::Decoder { next_mask, value_map };
+	
+	let exec_fn = decoder.decode(instr)?;
 
         // Execute instruction here. That may produce further traps,
         // e.g. ecalls or invalid instructions discovered at the
         // execution step
-	exec_fn.0(self, instr)?;
-	
+        exec_fn.0(self, instr)?;
+
         Ok(())
     }
 }
