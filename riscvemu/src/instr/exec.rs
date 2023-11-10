@@ -10,20 +10,20 @@
 //! Instruction behaviour is defined in RISC-V unprivileged
 //! specification version 20191213
 
-use crate::hart::{ExecutionError, Hart};
+use crate::hart::{ExecutionError, Hart, next_instruction_address, sign_extend};
 
-use super::decode::UJtype;
+use super::instr_type::{UJtype, decode_jtype};
 
 /// Load upper immediate in 32-bit mode
 ///
 /// Load the u_immediate into the upper 12 bits of the register
 /// dest and fill the lower 20 bits with zeros. Set pc = pc + 4.
 ///
-fn execute_lui_rv32i(hart: &mut Hart, instr: UJtype) -> Result<(), ExecutionError> {
+pub fn execute_lui_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let UJtype {
         rd: dest,
         imm: u_immediate,
-    } = instr;
+    } = decode_jtype(instr);
     hart.set_x(dest, u_immediate << 12)?;
     hart.increment_pc();
     Ok(())

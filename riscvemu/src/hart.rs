@@ -2,8 +2,8 @@ use memory::Memory;
 
 use crate::{
     instr::{
-        decode::{BaseIsa, DecodeError, Decoder, Instr32},
-        rv32i::{Branch, Load, RegImm, RegReg, Rv32i, Store},
+        decode::{DecodeError, SignatureDecoder, ExecFn32},
+        rv32i::{Branch, Load, RegImm, RegReg, Store}, exec::execute_lui_rv32i,
     },
     mask,
 };
@@ -17,6 +17,13 @@ use thiserror::Error;
 
 pub mod memory;
 pub mod registers;
+
+/// Calculate the address of the next instruction by adding
+/// four to the program counter (wrapping if necessary) and
+/// returning the result
+pub fn next_instruction_address(pc: u32) -> u32 {
+    pc.wrapping_add(4)
+}
 
 /// RISC-V Hardware Thread
 ///
@@ -69,7 +76,7 @@ macro_rules! interpret_i32_as_unsigned {
 /// Take an unsigned value (u8, u16 or u32), and a bit position for the
 /// sign bit, and copy the value of the sign bit into all the higher bits
 /// of the u32.
-fn sign_extend<T: Into<u32>>(value: T, sign_bit_position: u32) -> u32 {
+pub fn sign_extend<T: Into<u32>>(value: T, sign_bit_position: u32) -> u32 {
     let value: u32 = value.into();
     let sign_bit = 1 & (value >> sign_bit_position);
     if sign_bit == 1 {
@@ -82,7 +89,7 @@ fn sign_extend<T: Into<u32>>(value: T, sign_bit_position: u32) -> u32 {
 
 /// Check that an address is aligned to a byte_boundary specified.
 /// Return address-misaligned if not.
-fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), ExecutionError> {
+pub fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), ExecutionError> {
     if address % byte_alignment != 0 {
         // Section 2.2 intro of RISC-V unprivileged specification
         Err(ExecutionError::InstructionAddressMisaligned)
@@ -91,23 +98,16 @@ fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), Execut
     }
 }
 
-/// Calculate the address of the next instruction by adding
-/// four to the program counter (wrapping if necessary) and
-/// returning the result
-fn next_instruction_address(pc: u32) -> u32 {
-    pc.wrapping_add(4)
-}
-
 /// Load upper immediate in 32-bit mode
 ///
 /// Load the u_immediate into the upper 12 bits of the register
 /// dest and fill the lower 20 bits with zeros. Set pc = pc + 4.
 ///
-fn execute_lui_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
-    hart.set_x(dest, u_immediate << 12)?;
-    hart.increment_pc();
-    Ok(())
-}
+// fn execute_lui_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
+//     hart.set_x(dest, u_immediate << 12)?;
+//     hart.increment_pc();
+//     Ok(())
+// }
 
 /// Add upper immediate to program counter in 32-bit mode
 ///
@@ -123,6 +123,7 @@ fn execute_auipc_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<()
     Ok(())
 }
 
+/*
 /// Jump and link in 32-bit mode
 ///
 /// Store the address of the next instruction (pc + 4) in
@@ -364,6 +365,7 @@ fn execute_reg_reg_rv32i(
     hart.increment_pc();
     Ok(())
 }
+ */
 
 #[derive(Error, Debug)]
 pub enum RegisterError {
@@ -407,7 +409,7 @@ impl Hart {
     /// Add an offset to the program counter, wrapping if necessary.
     /// If the resulting address is not aligned on a 4-byte boundary,
     /// return an address-misaligned exception (pc remains modified).
-    fn jump_relative_to_pc(&mut self, offset: u32) -> Result<(), ExecutionError> {
+    pub fn jump_relative_to_pc(&mut self, offset: u32) -> Result<(), ExecutionError> {
         self.pc = self.pc.wrapping_add(offset);
         check_address_aligned(self.pc, 4)
     }
@@ -415,7 +417,7 @@ impl Hart {
     /// Jump to a new instruction address (set pc = new_pc). Return
     /// an address-misaligned exception if the new_pc is not 4-byte
     /// aligned (pc remains modified).
-    fn jump_to_address(&mut self, new_pc: u32) -> Result<(), ExecutionError> {
+    pub fn jump_to_address(&mut self, new_pc: u32) -> Result<(), ExecutionError> {
         self.pc = new_pc;
         check_address_aligned(self.pc, 4)
     }
@@ -438,6 +440,7 @@ impl Hart {
         Ok(value)
     }
 
+    /*
     fn execute(&mut self, instr: Instr32) -> Result<(), ExecutionError> {
         match instr.clone() {
             Instr32::Rv32i(rv32i_instr) => {
@@ -485,7 +488,7 @@ impl Hart {
             }
         }
     }
-
+     */
     /// Returns the instruction at the current program counter
     pub fn fetch_current_instruction(&mut self) -> u32 {
         self.read_memory(self.pc, Wordsize::Word)
@@ -495,17 +498,18 @@ impl Hart {
     pub fn step(&mut self) -> Result<(), Trap> {
         let instr = self.fetch_current_instruction();
 
-        let decoder = Decoder::new(BaseIsa::Rv32i, vec![]);
-
         // Decoding the instruction may return traps, e.g. invalid
         // instruction.
-        let instr = decoder.decode(instr)?;
+	let decoder = SignatureDecoder::Executer {
+	    xlen32_fn: Some(ExecFn32(execute_lui_rv32i))
+	};
+        let exec_fn = decoder.decode(instr)?;
 
         // Execute instruction here. That may produce further traps,
         // e.g. ecalls or invalid instructions discovered at the
         // execution step
-        self.execute(instr)?;
-
+	exec_fn.0(self, instr)?;
+	
         Ok(())
     }
 }
@@ -521,7 +525,7 @@ pub enum Trap {
 #[derive(Error, Debug)]
 pub enum ExecutionError {
     #[error("invalid instruction {0:?}")]
-    InvalidInstruction(Instr32),
+    InvalidInstruction(u32),
     #[error("instruction address should be aligned to a 4-byte boundary")]
     InstructionAddressMisaligned,
     #[error("register access error: {0}")]
