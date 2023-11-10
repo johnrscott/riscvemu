@@ -61,6 +61,12 @@ pub enum DecodeError {
     InvalidInstruction(u32),
     #[error("got invalid signature 0x{signature:b} for opcode 0x{opcode:b}")]
     InvalidSignature { signature: u32, opcode: u32 },
+    #[error("instruction 0x{0:x} is missing an execution function")]
+    MissingExecFunction(u32),
+    #[error("instruction 0x{0:x} signature decoder is missing a map entry")]
+    MissingValueInMap(u32),
+
+      
 }
 
 #[derive(Debug, Clone)]
@@ -107,7 +113,6 @@ pub enum Instr {
 
 
 
-#[derive(Debug)]
 // pub enum SignatureDecoder {
 //     /// If the opcode determines the function directly, then only
 //     /// the decoder function for the instruction is required.
@@ -131,9 +136,10 @@ pub enum Instr {
 //    instruction in 32-bit or 64-bit mode.
 //
 
+struct ExecFn32(fn(&mut Hart, instr: u32) -> Result<(), ExecutionError>);
+
 /// This is a tree, containing a sequence of steps to decode an instruction
-///
-/// 
+#[derive(Debug, Clone)]
 pub enum SignatureDecoder {
     /// Variant for when another step of decoding is needed. 
     Decoder {
@@ -143,9 +149,33 @@ pub enum SignatureDecoder {
 	/// obtain the next decoding step
 	value_map: HashMap<u32, SignatureDecoder>
     },
+    /// This is the leaf node, when the instruction is known
     Executer {
-	xlen32_fn: Option<fn(&mut Hart, instr: u32) -> Result<(), ExecutionError>>,
+	xlen32_fn: Option<ExecFn32>,
     }
+}
+
+impl SignatureDecoder {
+    fn get_exec_fn(&self, instr: u32) -> Result<ExecFn32, DecodeError> {
+	match self {
+	    Self::Decoder { next_mask, value_map } => {
+		let value = next_mask & instr;
+		if let Some(next_decoder) = value_map.get(&value) {
+		    next_decoder.get_exec_fn(instr)
+		} else {
+		    Err(DecodeError::MissingValueInMap(instr))
+		}
+	    }
+	    Self::Executer { xlen32_fn } => {
+		if let Some(exec_fn) = xlen32_fn {
+		    Ok(exec_fn)
+		} else {
+		    Err(DecodeError::MissingExecFunction)
+		}
+	    }
+	}
+    }
+
 }
 
 /// The RISC-V instruction decoder
@@ -153,63 +183,20 @@ pub enum SignatureDecoder {
 /// The decoder is capable of handing different instruction classes.
 #[derive(Debug, Default)]
 pub struct Decoder {
-    opcode_to_decoder: HashMap<u32, SignatureDecoder>,
+    signature_decoder: SignatureDecoder
 }
 
 impl Decoder {
-    pub fn new(base_isa: BaseIsa, isa_extensions: Vec<IsaExtension>) -> Self {
-        let opcode_to_decoder = match base_isa {
-            BaseIsa::Rv32i => decoders(),
-            _ => unimplemented!("No other base ISA yet"),
-        };
-        Self { opcode_to_decoder }
+    pub fn new() -> Self {
+	let mut signature_decoder = SignatureDecoder::Executer { xlen32_fn: () };
+        Self { signature_decoder }
     }
 
     /// Decode an instruction
-    ///
-    /// If the instruction is a valid encoding of one of the instructions
-    /// in the decoder, return the decoded instruction. Otherwise, return
-    /// an error.
-    ///
-    /// Decoding happens with the following steps:
-    /// - read the opcode field first
-    ///   - if the opcode field determines the instruction, decode and return
-    ///   - else, use opcode to determine either funct3 or funct7 to read next
-    /// - read funct3/funct7 if required
-    ///   - if funct3/funct7 determines the isntruction, decode and return
-    ///   - elsde read the other of funct7/funct3
-    /// - sometimes, ad-hoc actions are required to decode instruction, e,g,
-    ///   reading high bits in srli and srai. Use these to decode and return
-    ///   if necessary.
-    ///
-    /// Requirements:
-    /// - the decoder should not attempt to decode ISA-by-ISA, because multiple
-    ///   different ISAs can share an opcode (e.g. rv32i and rv32m share OP).
-    ///   The decoding process for different ISAs should be merged (i.e. all of
-    ///   the same opcode should be considered together)
-    /// - The rules for how to decode should be stored in the ISAs themselves,
-    ///   not the decoder.
-    pub fn decode(&self, instr: u32) -> Result<Instr32, DecodeError> {
+    pub fn decode(&self, instr: u32) -> Result<ExecFn32, DecodeError> {
         // First get the opcode
-        let opcode = opcode!(instr);
-        if let Some(signature_decoder) = self.opcode_to_decoder.get(&opcode) {
-            // Use the opcode to determine whether a signature is required
-            match signature_decoder {
-                SignatureDecoder::DecoderFunction { decoder } => Ok(decoder(instr).into()),
-                SignatureDecoder::SignatureMap {
-                    signature_function,
-                    signature_to_decoder,
-                } => {
-                    let signature = signature_function(instr);
-                    if let Some(decoder) = signature_to_decoder.get(&signature) {
-                        Ok(decoder(instr).into())
-                    } else {
-                        Err(DecodeError::InvalidSignature { signature, opcode })
-                    }
-                }
-            }
-        } else {
-            Err(DecodeError::InvalidOpcode(opcode))
-        }
+        let mut value = opcode!(instr);
+
+	
     }
 }
