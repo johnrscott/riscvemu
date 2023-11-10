@@ -12,7 +12,13 @@
 
 use crate::hart::{next_instruction_address, sign_extend, ExecutionError, Hart};
 
-use super::instr_type::{decode_jtype, decode_utype, UJtype};
+use super::{
+    instr_type::{decode_btype, decode_itype, decode_jtype, decode_utype, Itype, SBtype, UJtype},
+    rv32i::Branch,
+};
+
+use std::mem;
+use super::fields::*;
 
 /// Load upper immediate in 32-bit mode
 ///
@@ -52,7 +58,11 @@ pub fn execute_auipc_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionE
 /// Store the address of the next instruction (pc + 4) in
 /// the register dest. Then set pc = pc + offset (an
 /// unconditional jump relative to the program counter).
-fn execute_jal_rv32i(hart: &mut Hart, dest: u8, offset: u32) -> Result<(), ExecutionError> {
+pub fn execute_jal_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let UJtype {
+        rd: dest,
+        imm: offset,
+    } = decode_jtype(instr);
     let return_address = next_instruction_address(hart.pc);
     hart.set_x(dest, return_address)?;
     let relative_address = sign_extend(offset, 20);
@@ -65,16 +75,61 @@ fn execute_jal_rv32i(hart: &mut Hart, dest: u8, offset: u32) -> Result<(), Execu
 /// the register dest. Then compute base + offset, set the
 /// least significant bit to zero, and set the pc to the
 /// result.
-fn execute_jalr_rv32i(
-    hart: &mut Hart,
-    dest: u8,
-    base: u8,
-    offset: u16,
-) -> Result<(), ExecutionError> {
+pub fn execute_jalr_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let Itype {
+        rs1: base,
+        imm: offset,
+        rd: dest,
+    } = decode_itype(instr);
     let return_address = next_instruction_address(hart.pc);
     hart.set_x(dest, return_address)?;
     let relative_address = sign_extend(offset, 11);
     let base_address = hart.x(base)?;
     let new_pc = 0xffff_fffe & base_address.wrapping_add(relative_address);
     hart.jump_to_address(new_pc)
+}
+
+/// Execute a conditional branch in 32-bit mode
+///
+/// Compute a condition specified by the mnemonic between the values
+/// of the registers src1 and src2. If the result is false, do nothing.
+/// Else, compute a pc-relative address by sign-extending offset, and
+/// jump to that address, raising an address-misaligned exception if the
+/// resulting program counter is not aligned to a 4-byte boundary.
+pub fn execute_branch_rv32i(
+    hart: &mut Hart,
+    mnemonic: Branch,
+    instr: u32,
+) -> Result<(), ExecutionError> {
+    let SBtype {
+        rs1: src1,
+        rs2: src2,
+        imm: offset,
+    } = decode_btype(instr);
+    let src1 = hart.x(src1)?;
+    let src2 = hart.x(src2)?;
+    let branch_taken = match mnemonic {
+        Branch::Beq => src1 == src2,
+        Branch::Bne => src1 != src2,
+        Branch::Blt => {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            let src2: i32 = interpret_u32_as_signed!(src2);
+            src1 < src2
+        }
+        Branch::Bge => {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            let src2: i32 = interpret_u32_as_signed!(src2);
+            src1 >= src2
+        }
+        Branch::Bltu => src1 < src2,
+        Branch::Bgeu => src1 >= src2,
+    };
+
+    if branch_taken {
+        let relative_address = sign_extend(offset, 11);
+        hart.jump_relative_to_pc(relative_address)
+    } else {
+        hart.increment_pc();
+        Ok(())
+    }
 }

@@ -24,12 +24,12 @@ use thiserror::Error;
 // do not need signatures because the opcode already determines
 // the instruction
 
-pub fn rtype_signature(opcode: u32, funct3: u32, funct7: u32) -> u32 {
-    funct7 << 25 | funct3 << 12 | opcode
+pub fn rtype_signature(funct3: u32, funct7: u32) -> u32 {
+    funct7 << 25 | funct3 << 12
 }
 
-pub fn isbtype_signature(opcode: u32, funct3: u32) -> u32 {
-    funct3 << 12 | opcode
+pub fn isbtype_signature(funct3: u32) -> u32 {
+    funct3 << 12
 }
 
 // Masking an instruction means setting all the non-signature fields
@@ -39,11 +39,11 @@ pub fn isbtype_signature(opcode: u32, funct3: u32) -> u32 {
 // be obtained by reading the opcode field.
 
 pub fn mask_rtype(instr: u32) -> u32 {
-    (mask!(7) << 25 | mask!(3) << 12 | mask!(7)) & instr
+    (mask!(7) << 25 | mask!(3) << 12) & instr
 }
 
 pub fn mask_isbtype(instr: u32) -> u32 {
-    (mask!(3) << 12 | mask!(7)) & instr
+    (mask!(3) << 12) & instr
 }
 
 #[derive(Debug, Error)]

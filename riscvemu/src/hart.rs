@@ -2,18 +2,21 @@ use memory::Memory;
 
 use crate::{
     instr::{
-        decode::{DecodeError, ExecFn32, SignatureDecoder},
-        exec::{execute_lui_rv32i, execute_auipc_rv32i},
-        rv32i::{Branch, Load, RegImm, RegReg, Store}, opcodes::{OP_LUI, OP_AUIPC},
+        decode::{mask_isbtype, DecodeError, ExecFn32, SignatureDecoder, isbtype_signature},
+        exec::{execute_auipc_rv32i, execute_jal_rv32i, execute_jalr_rv32i, execute_lui_rv32i, execute_branch_rv32i},
+        opcodes::{OP_AUIPC, OP_BRANCH, OP_JAL, OP_JALR, OP_LUI, FUNCT3_BEQ},
+        rv32i::{Branch, Load, RegImm, RegReg, Store},
     },
     mask,
 };
+
+use crate::instr::fields::*;
 
 use self::{
     memory::{ReadError, Wordsize},
     registers::Registers,
 };
-use std::{mem, collections::HashMap};
+use std::{collections::HashMap, mem};
 use thiserror::Error;
 
 pub mod memory;
@@ -58,20 +61,6 @@ pub struct Hart {
     pub pc: u32,
     pub registers: Registers,
     pub memory: Memory,
-}
-
-macro_rules! interpret_u32_as_signed {
-    ($value:expr) => {{
-        let signed: i32 = unsafe { mem::transmute($value) };
-        signed
-    }};
-}
-
-macro_rules! interpret_i32_as_unsigned {
-    ($value:expr) => {{
-        let unsigned: u32 = unsafe { mem::transmute($value) };
-        unsigned
-    }};
 }
 
 /// Take an unsigned value (u8, u16 or u32), and a bit position for the
@@ -125,17 +114,6 @@ pub fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), Ex
 // }
 
 /*
-/// Jump and link in 32-bit mode
-///
-/// Store the address of the next instruction (pc + 4) in
-/// the register dest. Then set pc = pc + offset (an
-/// unconditional jump relative to the program counter).
-fn execute_jal_rv32i(hart: &mut Hart, dest: u8, offset: u32) -> Result<(), ExecutionError> {
-    let return_address = next_instruction_address(hart.pc);
-    hart.set_x(dest, return_address)?;
-    let relative_address = sign_extend(offset, 20);
-    hart.jump_relative_to_pc(relative_address)
-}
 
 /// Jump and link register in 32-bit mode
 ///
@@ -155,48 +133,6 @@ fn execute_jalr_rv32i(
     let base_address = hart.x(base)?;
     let new_pc = 0xffff_fffe & base_address.wrapping_add(relative_address);
     hart.jump_to_address(new_pc)
-}
-
-/// Execute a conditional branch in 32-bit mode
-///
-/// Compute a condition specified by the mnemonic between the values
-/// of the registers src1 and src2. If the result is false, do nothing.
-/// Else, compute a pc-relative address by sign-extending offset, and
-/// jump to that address, raising an address-misaligned exception if the
-/// resulting program counter is not aligned to a 4-byte boundary.
-fn execute_branch_rv32i(
-    hart: &mut Hart,
-    mnemonic: Branch,
-    src1: u8,
-    src2: u8,
-    offset: u16,
-) -> Result<(), ExecutionError> {
-    let src1 = hart.x(src1)?;
-    let src2 = hart.x(src2)?;
-    let branch_taken = match mnemonic {
-        Branch::Beq => src1 == src2,
-        Branch::Bne => src1 != src2,
-        Branch::Blt => {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
-            src1 < src2
-        }
-        Branch::Bge => {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
-            src1 >= src2
-        }
-        Branch::Bltu => src1 < src2,
-        Branch::Bgeu => src1 >= src2,
-    };
-
-    if branch_taken {
-        let relative_address = sign_extend(offset, 11);
-        hart.jump_relative_to_pc(relative_address)
-    } else {
-        hart.increment_pc();
-        Ok(())
-    }
 }
 
 /// Execute a load instruction in 32-bit mode
@@ -501,20 +437,54 @@ impl Hart {
 
         // Decoding the instruction may return traps, e.g. invalid
         // instruction.
-        let lui_executer = SignatureDecoder::Executer {
+
+        let next_mask = mask!(7);
+        let mut value_map = HashMap::new();
+
+        let executer = SignatureDecoder::Executer {
             xlen32_fn: Some(ExecFn32(execute_lui_rv32i)),
         };
-        let auipc_executer = SignatureDecoder::Executer {
+        value_map.insert(OP_LUI, executer);
+
+        let executer = SignatureDecoder::Executer {
             xlen32_fn: Some(ExecFn32(execute_auipc_rv32i)),
         };
-	let mut value_map = HashMap::new();
-	value_map.insert(OP_LUI, lui_executer);
-	value_map.insert(OP_AUIPC, auipc_executer);
-	
-	let next_mask = mask!(7);
-	let decoder = SignatureDecoder::Decoder { next_mask, value_map };
-	
-	let exec_fn = decoder.decode(instr)?;
+        value_map.insert(OP_AUIPC, executer);
+
+        let executer = SignatureDecoder::Executer {
+            xlen32_fn: Some(ExecFn32(execute_jal_rv32i)),
+        };
+        value_map.insert(OP_JAL, executer);
+
+        let executer = SignatureDecoder::Executer {
+            xlen32_fn: Some(ExecFn32(execute_jalr_rv32i)),
+        };
+        value_map.insert(OP_JALR, executer);
+
+        let branch_decoder = {
+            let next_mask = mask_isbtype(instr);
+            let mut value_map = HashMap::new();
+
+            let executer = SignatureDecoder::Executer {
+                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
+		    execute_branch_rv32i(hart, Branch::Beq, instr)
+		})),
+            };
+            value_map.insert(isbtype_signature(FUNCT3_BEQ), executer);
+
+            SignatureDecoder::Decoder {
+                next_mask,
+                value_map,
+            }
+        };
+        value_map.insert(OP_BRANCH, branch_decoder);
+
+        let decoder = SignatureDecoder::Decoder {
+            next_mask,
+            value_map,
+        };
+
+        let exec_fn = decoder.decode(instr)?;
 
         // Execute instruction here. That may produce further traps,
         // e.g. ecalls or invalid instructions discovered at the

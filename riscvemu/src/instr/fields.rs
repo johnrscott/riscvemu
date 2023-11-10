@@ -155,3 +155,21 @@ macro_rules! lui_u_immediate {
     };
 }
 pub use lui_u_immediate;
+
+#[macro_export]
+macro_rules! interpret_u32_as_signed {
+    ($value:expr) => {{
+        let signed: i32 = unsafe { mem::transmute($value) };
+        signed
+    }};
+}
+pub use interpret_u32_as_signed;
+
+#[macro_export]
+macro_rules! interpret_i32_as_unsigned {
+    ($value:expr) => {{
+        let unsigned: u32 = unsafe { mem::transmute($value) };
+        unsigned
+    }};
+}
+pub use interpret_i32_as_unsigned;
