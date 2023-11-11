@@ -65,21 +65,21 @@ pub struct ExecFn32(pub fn(&mut Hart, instr: u32) -> Result<(), ExecutionError>)
 
 /// This is a tree, containing a sequence of steps to decode an instruction
 #[derive(Debug, Clone)]
-pub enum SignatureDecoder {
+pub enum Decoder {
     /// Variant for when another step of decoding is needed.
     Decoder {
         /// For the next decoding step, use this mask
         next_mask: u32,
         /// Then compare the value you get to this map to
         /// obtain the next decoding step
-        value_map: HashMap<u32, SignatureDecoder>,
+        value_map: HashMap<u32, Decoder>,
     },
     /// This is the leaf node, when the instruction is known
     Executer { xlen32_fn: Option<ExecFn32> },
 }
 
-impl SignatureDecoder {
-    pub fn next_mask_and_map(&self) -> Option<(&u32, &HashMap<u32, SignatureDecoder>)> {
+impl Decoder {
+    pub fn next_mask_and_map(&self) -> Option<(&u32, &HashMap<u32, Decoder>)> {
         match self {
             Self::Decoder {
                 next_mask,

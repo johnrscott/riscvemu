@@ -5,7 +5,7 @@
 //!
 
 use super::{
-    decode::{ExecFn32, SignatureDecoder},
+    decode::{ExecFn32, Decoder},
     exec::{execute_auipc_rv32i, execute_jal_rv32i, execute_jalr_rv32i, execute_lui_rv32i},
     opcodes::{OP_AUIPC, OP_JAL, OP_JALR, OP_LUI},
 };
@@ -182,20 +182,26 @@ pub enum Rv32i {
 }
 */
 
-fn opcode_determined(opcode: u32, exec32: ExecFn32) -> SignatureDecoder {
+fn opcode_determined(opcode: u32, exec32: ExecFn32) -> Decoder {
     let next_mask = mask!(7); // opcode mask
     let mut value_map = HashMap::new();
 
-    let executer = SignatureDecoder::Executer {
+    let executer = Decoder::Executer {
         xlen32_fn: Some(exec32),
     };
     value_map.insert(opcode, executer);
-    SignatureDecoder::Decoder {
+    Decoder::Decoder {
         next_mask,
         value_map,
     }
 }
 
+fn make_rv32i(&mut decoder: Decoder){
+
+}
+
+
+/*
 pub fn make_rv32i() -> Vec<SignatureDecoder> {
     let mut vec = Vec::new();
     vec.push(opcode_determined(OP_LUI, ExecFn32(execute_lui_rv32i)));
@@ -265,3 +271,4 @@ pub fn combine_decoders(decoders: Vec<SignatureDecoder>) -> SignatureDecoder {
 
     SignatureDecoder::Decoder { next_mask: 0, value_map: HashMap::new() }
 }
+*/
