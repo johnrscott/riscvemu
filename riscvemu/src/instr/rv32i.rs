@@ -4,8 +4,12 @@
 //! unprivileged specification version 20191213.
 //!
 
-use super::{decode::{SignatureDecoder, ExecFn32}, opcodes::{OP_LUI, OP_AUIPC, OP_JAL, OP_JALR}, exec::{execute_lui_rv32i, execute_auipc_rv32i, execute_jal_rv32i, execute_jalr_rv32i}};
-use std::collections::HashMap;
+use super::{
+    decode::{ExecFn32, SignatureDecoder},
+    exec::{execute_auipc_rv32i, execute_jal_rv32i, execute_jalr_rv32i, execute_lui_rv32i},
+    opcodes::{OP_AUIPC, OP_JAL, OP_JALR, OP_LUI},
+};
+use std::collections::{HashMap, hash_map::Entry};
 
 /// In RV32I and RV64I, If branch is taken, set pc = pc + offset,
 /// where offset is a multiple of two; else do nothing. The
@@ -178,11 +182,10 @@ pub enum Rv32i {
 }
 */
 
-
 fn opcode_determined(opcode: u32, exec32: ExecFn32) -> SignatureDecoder {
     let next_mask = mask!(7); // opcode mask
     let mut value_map = HashMap::new();
-    
+
     let executer = SignatureDecoder::Executer {
         xlen32_fn: Some(exec32),
     };
@@ -202,25 +205,50 @@ pub fn make_rv32i() -> Vec<SignatureDecoder> {
     vec
 }
 
-
 /// The purpose of this function is to combine the decoders for each
 /// separate function into one decoder tree that will decode any of
 /// the instructions covered by the inputs
 pub fn combine_decoders(decoders: Vec<SignatureDecoder>) -> SignatureDecoder {
 
-    // This will probably be a recursive function
-
-    // For all the decoders which are Decoder variants, collect
-    // together those which have the same next_mask. For these,
-    // merge them by merging together their value maps.
+    // The decoders list which is the argument all have a next_mask.
+    // Collect together those which have the same next mask. Store
+    // them in this map for now. It maps next_mask values to vectors
+    // of value_maps which have this next_mask
+    let mut next_mask_to_value_maps = HashMap::new();
     
-    // Need to collect together all the decoders with the same
-    // 
-
-    
-    let mut decoder;
-
     for decoder in decoders {
+	// If the decoder has a next_mask, and is not an executer, add
+	// it to the map.
+	// Note: at the top level, we are not expecting an executers. This
+	// may indicate a problem with the structure of the program
+	if let SignatureDecoder::Decoder { next_mask, value_map } = decoder {
+
+	    match next_mask_to_value_maps.entry(next_mask) {
+		Entry::Vacant(e) => { e.insert(vec![value_map]); },
+		Entry::Occupied(mut e) => { e.get_mut().push(value_map); }
+            }
+	}
+    }
+
+    // Now, loop over the map and process the decoders which have the same
+    // next_mask
+    for (next_mask, value_maps_vector) in next_mask_to_value_maps.into_iter() {
+
+	// Loop over the value_maps corresponding to this next_mask and merge
+	// them.
+	let mut new_value_map = HashMap::new();
+	for value_map in value_maps_vector {
+	    new_value_map.extend(value_map);
+	}
+
+	// At this point, the new_value_map contains all the possible values
+	// that can result from using the mask. For each, there is a decoder
+	// specifying what to do next. 
 	
-    }     
+	// For every entry in this new value map, if it is a decoder,
+	// apply this function again to 
+	
+    }
+
+    SignatureDecoder::Decoder { next_mask: 0, value_map: HashMap::new() }
 }

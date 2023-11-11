@@ -79,6 +79,16 @@ pub enum SignatureDecoder {
 }
 
 impl SignatureDecoder {
+    pub fn next_mask_and_map(&self) -> Option<(&u32, &HashMap<u32, SignatureDecoder>)> {
+        match self {
+            Self::Decoder {
+                next_mask,
+                value_map,
+            } => Some((next_mask, value_map)),
+            _ => None,
+        }
+    }
+
     pub fn decode(&self, instr: u32) -> Result<ExecFn32, DecodeError> {
         match self {
             Self::Decoder {

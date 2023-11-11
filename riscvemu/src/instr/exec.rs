@@ -17,8 +17,8 @@ use super::{
     rv32i::Branch,
 };
 
-use std::mem;
 use super::fields::*;
+use std::mem;
 
 /// Load upper immediate in 32-bit mode
 ///
