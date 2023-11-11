@@ -4,6 +4,9 @@
 //! unprivileged specification version 20191213.
 //!
 
+use super::{decode::{SignatureDecoder, ExecFn32}, opcodes::{OP_LUI, OP_AUIPC, OP_JAL, OP_JALR}, exec::{execute_lui_rv32i, execute_auipc_rv32i, execute_jal_rv32i, execute_jalr_rv32i}};
+use std::collections::HashMap;
+
 /// In RV32I and RV64I, If branch is taken, set pc = pc + offset,
 /// where offset is a multiple of two; else do nothing. The
 /// offset is 13 bits long.
@@ -174,3 +177,50 @@ pub enum Rv32i {
     Jalr(Itype),
 }
 */
+
+
+fn opcode_determined(opcode: u32, exec32: ExecFn32) -> SignatureDecoder {
+    let next_mask = mask!(7); // opcode mask
+    let mut value_map = HashMap::new();
+    
+    let executer = SignatureDecoder::Executer {
+        xlen32_fn: Some(exec32),
+    };
+    value_map.insert(opcode, executer);
+    SignatureDecoder::Decoder {
+        next_mask,
+        value_map,
+    }
+}
+
+pub fn make_rv32i() -> Vec<SignatureDecoder> {
+    let mut vec = Vec::new();
+    vec.push(opcode_determined(OP_LUI, ExecFn32(execute_lui_rv32i)));
+    vec.push(opcode_determined(OP_AUIPC, ExecFn32(execute_auipc_rv32i)));
+    vec.push(opcode_determined(OP_JAL, ExecFn32(execute_jal_rv32i)));
+    vec.push(opcode_determined(OP_JALR, ExecFn32(execute_jalr_rv32i)));
+    vec
+}
+
+
+/// The purpose of this function is to combine the decoders for each
+/// separate function into one decoder tree that will decode any of
+/// the instructions covered by the inputs
+pub fn combine_decoders(decoders: Vec<SignatureDecoder>) -> SignatureDecoder {
+
+    // This will probably be a recursive function
+
+    // For all the decoders which are Decoder variants, collect
+    // together those which have the same next_mask. For these,
+    // merge them by merging together their value maps.
+    
+    // Need to collect together all the decoders with the same
+    // 
+
+    
+    let mut decoder;
+
+    for decoder in decoders {
+	
+    }     
+}
