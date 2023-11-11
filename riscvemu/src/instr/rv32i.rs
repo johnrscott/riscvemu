@@ -210,7 +210,7 @@ pub fn make_rv32i() -> Vec<SignatureDecoder> {
 /// the instructions covered by the inputs
 pub fn combine_decoders(decoders: Vec<SignatureDecoder>) -> SignatureDecoder {
 
-    // The decoders list which is the argument all have a next_mask.
+    // The decoders list (the argument) all have a next_mask.
     // Collect together those which have the same next mask. Store
     // them in this map for now. It maps next_mask values to vectors
     // of value_maps which have this next_mask
@@ -230,23 +230,36 @@ pub fn combine_decoders(decoders: Vec<SignatureDecoder>) -> SignatureDecoder {
 	}
     }
 
-    // Now, loop over the map and process the decoders which have the same
-    // next_mask
+    let mut decoders_vector
+    
+    // Now we have grouped together by mask, it is time to group together
+    // by value. This will produce lists of decoders that need to be combined
+    // again
     for (next_mask, value_maps_vector) in next_mask_to_value_maps.into_iter() {
 
-	// Loop over the value_maps corresponding to this next_mask and merge
-	// them.
-	let mut new_value_map = HashMap::new();
-	for value_map in value_maps_vector {
-	    new_value_map.extend(value_map);
+	// value_maps_vector is a list of maps mapping values to decoders. This
+	// needs to be converted into a map from values to vectors of decoders
+	// (which correspond to the same value)
+	let mut value_to_decoders_vector = HashMap::new();
+	for value_map in value_maps_vector.into_iter() {
+	    for (value, decoder) in value_map.into_iter() {
+		match value_to_decoders_vector.entry(value) {
+		    Entry::Vacant(e) => { e.insert(vec![decoder]); },
+		    Entry::Occupied(mut e) => { e.get_mut().push(decoder); }
+		}
+		
+	    }
 	}
 
-	// At this point, the new_value_map contains all the possible values
-	// that can result from using the mask. For each, there is a decoder
-	// specifying what to do next. 
-	
-	// For every entry in this new value map, if it is a decoder,
-	// apply this function again to 
+	// Now that values are mapped to decoders, each of these decoder vectors
+	// can be combined into one using this function (recursively)
+	let mut value_map = HashMap::new();
+	for (value, decoders) in value_to_decoders_vector.into_iter() {
+	    value_map.insert(value, combine_decoders(decoders));
+	}
+
+	// Create this decoder and add it to the back
+	let 
 	
     }
 
