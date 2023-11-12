@@ -22,7 +22,7 @@ pub fn test() {
 /// This is not the first step; the first step is never
 /// an execution function, because decoding based on at
 /// least the opcode is always required first.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum NextStep {
     Decode(Decoder),
     Exec(fn() -> ()),
@@ -64,13 +64,14 @@ impl NextStep {
 /// The mask can be used to pick out first the opcode, then funct3 or
 /// funct7, or any other fields required for decoding.
 ///
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Decoder {
     mask: u32,
     value_map: HashMap<u32, NextStep>,
 }
 
 /// Represents a node and subsequent edge in the decoder tree
+#[derive(Debug, Copy, Clone)]
 pub struct MaskWithValue {
     mask: u32,
     value: u32,
@@ -95,6 +96,12 @@ impl Decoder {
         }
     }
 
+    /// Get the next step by applying mask to instruction and checking value
+    fn next_step_for_instr(&self, instr: u32) -> Result<&NextStep, DecoderError> {
+        let value = self.mask & instr;
+        self.next_step_for_value(&value)
+    }
+
     fn mask_matches(&self, mask: &u32) -> bool {
         self.mask == *mask
     }
@@ -106,12 +113,6 @@ impl Decoder {
     fn is_consistent(&self, mask_with_value: &MaskWithValue) -> bool {
         let MaskWithValue { mask, value } = mask_with_value;
         self.mask_matches(mask) && self.contains_value(value)
-    }
-
-    /// Get the next step by applying mask to instruction and checking value
-    fn next_step_for_instr(&self, instr: u32) -> Result<&NextStep, DecoderError> {
-        let value = self.mask & instr;
-        self.next_step_for_value(&value)
     }
 
     pub fn get_exec(&self, instr: u32) -> Result<fn() -> (), DecoderError> {
@@ -171,7 +172,7 @@ impl Decoder {
         exec: fn() -> (),
     ) -> Result<(), DecoderError> {
 
-	// Check if at least on mask/value is given -- this is
+	// Check if at least one mask/value is given -- this is
 	// required because with no mask or value, there is nothing
 	// the decoder can do to check the instruction.
         if masks_with_values.len() == 0 {
@@ -179,7 +180,7 @@ impl Decoder {
         }
 
 	// The gist of the algorithm is to traverse the tree along
-	// the branch specified by mask/value pairs, checking that
+	// the branch specified by mask/value pairs, checking that this
 	// part of the branch is consistent with the mask/value vector.
 	// Then, upon reaching a node with the value missing, use
 	// the tail part of the mask/value vector to construct the
@@ -188,7 +189,13 @@ impl Decoder {
 	//
 	// Most of the function does the first part. The creating
 	// and attaching the tail of the branch happens just after
-	// the loop {} below finishes.
+	// the loop {} below finishes. The content of that bit is in
+	// the the NextStep::from_masks_with_values() function above.
+
+	// For reference, this is a method of a struct which represents
+	// a node of the decoder tree. It also has a map with keys
+	// (confusingly) called values, which point to either more
+	// of this class, or execution functions (which are the leaves).
 	
 	// Begin with the route of the tree. The decoder variable
 	// will successively point to nodes moving down the branch
@@ -198,7 +205,7 @@ impl Decoder {
 	// Make an iterator which successively pops from the end
 	// of the masks/values vector (peekable means you can see
 	// whether the value after the current one is there or not)
-	let mut it = masks_with_values.drain(0..).peekable();
+	let mut it = masks_with_values.into_iter().rev().peekable();
 
         // Starting at the end of the vector, successively remove
         // items one by one, checking that they are consistent
@@ -207,9 +214,10 @@ impl Decoder {
 
 	    // Get the current mask and value (popping from the end of vector)
 	    if let Some(MaskWithValue { mask, value }) = it.next() {
-
+		println!("{mask:x},{value:x}");
 		// Check the mask is compatible with the decoder (i.e.
 		// the mask in this node matches mask)
+		println!("test{decoder:?}, {mask}");
 		if !decoder.mask_matches(&mask) {
                     return Err(DecoderError::AmbiguousMask);
 		}
@@ -282,6 +290,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn 
+    fn check_new_decoder() {
+	let mask = 0x7f;
+	let decoder = Decoder::new(mask);
+	assert_eq!(decoder.mask, mask);
+	assert_eq!(decoder.value_map, HashMap::new());
+    }
+
+    #[test]
+    fn check_basic_decoding() {
+
+	fn exec1() {}
+	fn exec2() {}
+	fn exec3() {}
+
+	let mask = 0x0f;
+	let mut decoder = Decoder::new(mask);
+
+	// Define a set of mask/value pairs
+	let mv1 = MaskWithValue { mask, value: 1 };
+	let mv2 = MaskWithValue { mask: 0xf0, value: 0x20 };
+	let masks_with_values = vec![mv2, mv1];
+	decoder.push_instruction(masks_with_values, exec1).unwrap();
+	let exec = decoder.get_exec(0x21).unwrap();
+	assert!(exec == exec1);
+
+	// Now insert a new decoding process that shares a single
+	// step
+	let mv2 = MaskWithValue { mask: 0xf0, value: 0x30 };
+	let masks_with_values = vec![mv2, mv1];
+	decoder.push_instruction(masks_with_values, exec2).unwrap();
+	let exec = decoder.get_exec(0x31).unwrap();
+	assert!(exec == exec2);	
+	// Check previous decoding still works
+	let exec = decoder.get_exec(0x21).unwrap();
+	assert!(exec == exec1);	
+	
+	// Now insert a longer decoding process
+	let mv2 = MaskWithValue { mask: 0xf0, value: 0x40 };
+	let mv3 = MaskWithValue { mask: 0xf00, value: 0x500 };
+	let masks_with_values = vec![mv3, mv2, mv1];
+	decoder.push_instruction(masks_with_values, exec3).unwrap();
+	let exec = decoder.get_exec(0x541).unwrap();
+	assert!(exec == exec3);	
+	// Check previous decoding still works
+	let exec = decoder.get_exec(0x531).unwrap();
+	assert!(exec == exec2);	
+	let exec = decoder.get_exec(0x521).unwrap();
+	assert!(exec == exec1);	
+	
+
+    }
     
 }
