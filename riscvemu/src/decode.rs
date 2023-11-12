@@ -3,14 +3,14 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DecoderError {
-    #[error("missing next step for instruction 0x{instr:x} using mask 0x{mask:x}")]
-    MissingNextStep { instr: u32, mask: u32 },
+    #[error("missing next step for mask 0x{mask:x} and value 0x{value:x}")]
+    MissingNextStep { mask: u32, value: u32 },
     #[error("attempt to add ambiguous decoding (conflicting mask 0x{mask:x}")]
     AmbiguousDecodingMask { mask: u32 },
     #[error("attempt to add decoding conflicting with existing exec function")]
     ConflictingExec,
-    #[error("missing first mask")]
-    MissingFirstMask,
+    #[error("at least one decoder and value is compulsory in push_instruction")]
+    NoDecodingMaskSpecified,
 }
 
 pub fn test() {
@@ -54,9 +54,16 @@ pub struct Decoder {
     value_map: HashMap<u32, NextStep>,
 }
 
+/// Represents a node and subsequent edge in the decoder tree
 struct MaskWithValue {
     mask: u32,
     value: u32,
+}
+
+fn make_new_value_map(masks_with_values: Vec<MaskWithValue>, exec: fn()->()) -> HashMap<u32, NextStep> {
+
+
+    
 }
 
 impl Decoder {
@@ -66,28 +73,42 @@ impl Decoder {
             ..Self::default()
         }
     }
-
-    fn next_step(&self, instr: u32) -> Result<&NextStep, DecoderError> {
-        let value = self.mask & instr;
-        if let Some(next_step) = self.value_map.get(&value) {
+    
+    fn next_step_for_value(&self, value: &u32) -> Result<&NextStep, DecoderError> {
+        if let Some(next_step) = self.value_map.get(value) {
             Ok(next_step)
         } else {
             Err(DecoderError::MissingNextStep {
-                instr,
                 mask: self.mask,
+		value: *value,
             })
-        }
+        }	
+    }
+
+    fn mask_matches(&self, mask: &u32) -> bool {
+	self.mask == *mask
+    }
+
+    fn contains_value(&self, value: &u32) -> bool {
+	self.value_map.contains_key(value)
+    }
+
+    fn is_consistent(&self, mask_with_value: &MaskWithValue) -> bool {
+	let MaskWithValue { mask, value } = mask_with_value;
+	self.mask_matches(mask) && self.contains_value(value)
+    }
+    
+    /// Get the next step by applying mask to instruction and checking value
+    fn next_step_for_instr(&self, instr: u32) -> Result<&NextStep, DecoderError> {
+        let value = self.mask & instr;
+	self.next_step_for_value(&value)
     }
 
     pub fn get_exec(&self, instr: u32) -> Result<fn() -> (), DecoderError> {
-        match self.next_step(instr)? {
+        match self.next_step_for_instr(instr)? {
             NextStep::Decode(decoder) => decoder.get_exec(instr),
             NextStep::Exec(exec) => Ok(*exec),
         }
-    }
-
-    fn push_decode_step(&mut self, value: u32, next_step: NextStep) {
-        self.value_map.insert(value, next_step);
     }
 
     /// Add an instruction, specified by a sequence of masks and expected values
@@ -96,68 +117,46 @@ impl Decoder {
     /// instruction. Each mask is checked in turn, with a matching value
     /// meaning the decoder will use the next mask and look for the next
     /// value, continuing until the execution function is reached.
+    ///
+    /// The decoder is a tree, where each node contains a mask that will
+    /// be applied, and each edge contains a value that can be obtained
+    /// from this mask. Decoding an instruction means following a branch
+    /// from the root mask to a leaf, which holds the function to execute
+    /// the instruction.
+    ///
+    /// Adding an instruction to the decoder amounts to adding a new branch
+    /// to the tree.
+    ///
+    /// The masks_with_vector vector must contain at least one item,
+    /// otherwise an error variant is returned.
+    ///
+    /// When inserting into an already populated decoder tree, two
+    /// errors can happen:
+    /// 1. the mask following a value can conflict with the mask already
+    ///    in the tree. This represents a decoding ambiguity, because the
+    ///    decoder will not be able to decide which mask to apply next,
+    ///    and causes an error variant to be returned here.
+    /// 2. the branch being added to the tree may be a subset of
+    ///    an already existing branch. In this case, either the same
+    ///    instruction is already present, or the new decoding is not
+    ///    possible because it already decodes an already existing
+    ///    instruction
+    ///
+    /// If an error variant is returned, the function has the strong
+    /// exception guarantee that the state of the decoder has not changed.
+    ///
     pub fn push_instruction(
         &mut self,
         masks_with_values: Vec<MaskWithValue>,
         exec: fn() -> (),
     ) -> Result<(), DecoderError> {
-        let mut decoder = self;
-        let mut masks_with_values_iter = masks_with_values.iter();
-
-        // Get the first list value
-        let mut mask_with_value = masks_with_values_iter.next();
-        if let None = mask_with_value {
-            return Err(DecoderError::MissingFirstMask);
+        if masks_with_values.len() == 0 {
+            return Err(DecoderError::NoDecodingMaskSpecified);
         }
 
-        loop {
-            let MaskWithValue { mask, value } = mask_with_value.expect("must be present else bug");
+	
 
-            // Check mask matches
-            if decoder.mask != *mask {
-                return Err(DecoderError::AmbiguousDecodingMask { mask: *mask });
-            }
-            // Check value is present in map
-            if let Some(next_step) = decoder.value_map.get_mut(&value) {
-                match next_step {
-                    NextStep::Decode(next_decoder) => decoder = next_decoder,
-                    NextStep::Exec(_) => return Err(DecoderError::ConflictingExec),
-                }
-
-                mask_with_value = masks_with_values_iter.next();
-                if let None = mask_with_value {
-                    break;
-                }
-            } else {
-                // There is no map entry for this value. That means that
-                // we have reached the node in the tree (decoder) where
-                // the new branch needs to be added.
-                break;
-            }
-        }
-
-        // Now, decoder is a node in the tree containing a map that does not
-        // contain value. The iterator is at the position where its mask matches
-	// decoder, but decoder.value_map does not contain the value, or,
-	// the iterator is None, meaning 
-
-        // Decoder (self) is a tree, where breaking into branches
-        // happens at the map. Each node contains a mask. Each
-        // branch represents a possible value from that mask.
-        // This function needs to insert a branch from the root
-        // down to the leaf (containing the exec function).
-
-        // The root node is always present, with self.mask as the
-        // mask value. From then on, branches either exist or
-        // do not exist.
-
-        // If a branch exists, proceed down it (meaning masks and
-        // fields match).
-
-        // When you get to a node or branch that doesn't exist,
-        // start inserting new branches and nodes all the way down
-        // to the leaf (the execution function).
-
+	
         Ok(())
     }
 }
