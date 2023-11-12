@@ -210,7 +210,7 @@ pub fn make_rv32i() -> Vec<SignatureDecoder> {
     vec.push(opcode_determined(OP_JALR, ExecFn32(execute_jalr_rv32i)));
     vec
 }
-
+*/
 /// The purpose of this function is to combine the decoders for each
 /// separate function into one decoder tree that will decode any of
 /// the instructions covered by the inputs
