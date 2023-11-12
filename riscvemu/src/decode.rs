@@ -22,18 +22,34 @@ pub fn test() {
 /// This is not the first step; the first step is never
 /// an execution function, because decoding based on at
 /// least the opcode is always required first.
+#[derive(Debug)]
 enum NextStep {
     Decode(Decoder),
     Exec(fn() -> ()),
 }
 
 impl NextStep {
-    pub fn exec_step(exec: fn() -> ()) -> Self {
-        Self::Exec(exec)
-    }
 
-    pub fn decode_step(decoder: Decoder) -> Self {
-        Self::Decode(decoder)
+    /// masks_with_values is in reverse order; values at the end of the
+    /// vector will get inserted into decoder first
+    fn from_masks_with_values(mut masks_with_values: Vec<MaskWithValue>, exec: fn() -> ()) -> Self {
+        let length = masks_with_values.len();
+        if length == 0 {
+            Self::Exec(exec)
+        } else {
+            let mut value_map = HashMap::new();
+            // Get the last element and drop it from the vector
+            let MaskWithValue { mask, value } = masks_with_values
+                .drain(length - 1..)
+                .next()
+                .expect("since the vector has at least one element, this will work");
+            // Get the next step, which recursively constructs all the next steps
+            // all the way down to the end
+            let next_step = Self::from_masks_with_values(masks_with_values, exec);
+            value_map.insert(value, next_step);
+            let decoder = Decoder { mask, value_map };
+            Self::Decode(decoder)
+        }
     }
 }
 
@@ -48,7 +64,7 @@ impl NextStep {
 /// The mask can be used to pick out first the opcode, then funct3 or
 /// funct7, or any other fields required for decoding.
 ///
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Decoder {
     mask: u32,
     value_map: HashMap<u32, NextStep>,
@@ -60,12 +76,6 @@ struct MaskWithValue {
     value: u32,
 }
 
-fn make_new_value_map(masks_with_values: Vec<MaskWithValue>, exec: fn()->()) -> HashMap<u32, NextStep> {
-
-
-    
-}
-
 impl Decoder {
     pub fn new(mask: u32) -> Self {
         Self {
@@ -73,35 +83,35 @@ impl Decoder {
             ..Self::default()
         }
     }
-    
+
     fn next_step_for_value(&self, value: &u32) -> Result<&NextStep, DecoderError> {
         if let Some(next_step) = self.value_map.get(value) {
             Ok(next_step)
         } else {
             Err(DecoderError::MissingNextStep {
                 mask: self.mask,
-		value: *value,
+                value: *value,
             })
-        }	
+        }
     }
 
     fn mask_matches(&self, mask: &u32) -> bool {
-	self.mask == *mask
+        self.mask == *mask
     }
 
     fn contains_value(&self, value: &u32) -> bool {
-	self.value_map.contains_key(value)
+        self.value_map.contains_key(value)
     }
 
     fn is_consistent(&self, mask_with_value: &MaskWithValue) -> bool {
-	let MaskWithValue { mask, value } = mask_with_value;
-	self.mask_matches(mask) && self.contains_value(value)
+        let MaskWithValue { mask, value } = mask_with_value;
+        self.mask_matches(mask) && self.contains_value(value)
     }
-    
+
     /// Get the next step by applying mask to instruction and checking value
     fn next_step_for_instr(&self, instr: u32) -> Result<&NextStep, DecoderError> {
         let value = self.mask & instr;
-	self.next_step_for_value(&value)
+        self.next_step_for_value(&value)
     }
 
     pub fn get_exec(&self, instr: u32) -> Result<fn() -> (), DecoderError> {
@@ -154,9 +164,28 @@ impl Decoder {
             return Err(DecoderError::NoDecodingMaskSpecified);
         }
 
-	
-
-	
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn check_next_step_from_masks_with_values() {
+
+	fn execute() { println!("Exec")}
+	
+	let mv1 = MaskWithValue { mask: 0x1, value: 0x2 };
+	let mv2 = MaskWithValue { mask: 0x3, value: 0x4 };
+	let mv3 = MaskWithValue { mask: 0x5, value: 0x5 };
+	let masks_with_values = vec![mv3, mv2, mv1];
+	let next_steps = NextStep::from_masks_with_values(masks_with_values, execute);
+	println!("{next_steps:?}");
+	
+	assert_eq!(0,1);
+	
+    }
+
 }
