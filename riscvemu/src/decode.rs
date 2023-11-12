@@ -13,10 +13,6 @@ pub enum DecoderError {
     NoDecodingMaskSpecified,
 }
 
-pub fn test() {
-    println!("Executed!");
-}
-
 /// Next step in the decoding process
 ///
 /// This is not the first step; the first step is never
@@ -74,6 +70,50 @@ pub struct Decoder {
 pub struct MaskWithValue {
     mask: u32,
     value: u32,
+}
+
+enum NextNode<'a> {
+    AnotherDecoder(&'a mut Decoder),
+    MissingValue,
+}
+
+impl NextNode<'_> {
+
+    /// Progress from the current node to the next node using
+    /// the value specified. Return variant depending on whether
+    /// another decoder is found or whether the value is missing
+    /// from the current node.
+    fn next_node<'a>(
+        decoder: &'a mut Decoder,
+        value: u32,
+    ) -> Result<NextNode<'a>, DecoderError> {
+        // Check if the value is present in the map for this node
+        if !decoder.contains_value(&value) {
+            // If the value is not present in the decoder,
+            // then break here. At this point, the matching
+            // part of the decoder branch (the head) has been
+            // fully traversed, and it is time to attach the
+            // tail to the decoder returned here, at the value
+            // specified
+            return Ok(NextNode::MissingValue);
+        } else if let Some(next_decoder) = decoder.next_decoder(value) {
+            // If the value is present, and there is a decoder, move
+            // on to that node
+            Ok(NextNode::AnotherDecoder(next_decoder))
+        } else {
+            // If on the other hand, the next step is an
+            // execution function, then there is no way to
+            // proceed without causing ambiguous next step.
+            // There are two cases: first, if
+            // masks_with_values is empty, then we are going
+            // to try to insert a new exec function
+            // overwriting a previously existing one (an
+            // error). If masks_with_values is non-empty, then
+            // we need to insert more decoders, which will
+            // overwrite this execution function.
+            Err(DecoderError::AmbiguousNextStep)
+        }
+    }
 }
 
 impl Decoder {
@@ -178,43 +218,11 @@ impl Decoder {
                     return Err(DecoderError::AmbiguousMask);
                 }
 
-                // Check if the value is present in the map for this node
-                if !decoder.contains_value(&value) {
-                    // If the value is not present in the decoder,
-                    // then break here. At this point, the matching
-                    // part of the decoder branch (the head) has been
-                    // fully traversed, and it is time to attach the
-                    // tail to the decoder returned here, at the value
-                    // specified
-                    return Ok((value, decoder));
-                } else if let Some(next_decoder) = decoder.next_decoder(value) {
-		    // If the value is present, and there is a decoder, move
-		    // on to that node
-		    decoder = next_decoder;
-                } else {
-                    // If on the other hand, the next step is an
-                    // execution function, then there is no way to
-		    // proceed without causing ambiguous next step.
-		    // There are two cases: first, if
-		    // masks_with_values is empty, then we are going
-		    // to try to insert a new exec function
-		    // overwriting a previously existing one (an
-		    // error). If masks_with_values is non-empty, then
-		    // we need to insert more decoders, which will
-		    // overwrite this execution function.
-                    return Err(DecoderError::AmbiguousNextStep);
+                match NextNode::next_node(decoder, value)? {
+		    // This would be good -- need to figure out how
+                    NextNode::MissingValue => return Ok((value, decoder)),
+                    NextNode::AnotherDecoder(d) => decoder = d,
                 }
-            } else {
-                // If there are no more masks/values left, then we have
-                // walked a branch where every mask agreed and every value
-                // had a decoder in the map, including the final one (which
-                // pointed to the decoder stored in the decoder variable).
-                // This is an error, because the current masks_and_values would
-                // introduce an ambiguity with what is already in the tree. The
-                // error is an ambiguous-next-step error, because the current
-                // next step is a decoder, but the current masks_and_values
-                // implies it should be an exec function.
-                return Err(DecoderError::AmbiguousNextStep);
             }
         }
     }
