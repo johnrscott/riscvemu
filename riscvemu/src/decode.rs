@@ -123,16 +123,14 @@ impl Decoder {
 
     /// Get a mutable reference to the next decoder, if there is one.
     fn next_decoder(&mut self, value: u32) -> Option<&mut Decoder> {
-        let next_step = self
-            .value_map
-            .get_mut(&value)?;
+        let next_step = self.value_map.get_mut(&value)?;
 
-	match next_step {
+        match next_step {
             NextStep::Decode(d) => Some(d),
-            NextStep::Exec(_) => None
-	}
+            NextStep::Exec(_) => None,
+        }
     }
-    
+
     /// Return (new_value, last decoder), or error
     fn match_branch_head(
         &mut self,
@@ -181,39 +179,30 @@ impl Decoder {
                 }
 
                 // Check if the value is present in the map for this node
-                if decoder.contains_value(&value) {
-                    // If the value is in the map, then this mask/value pair
-                    // is compatible with the tree. Get the next step.
-		    if let Some(next_decoder) = decoder.next_decoder(value) {
-			decoder = next_decoder;
-		    } else {
-			// If on the other hand, the next step is an
-			// execution function, but there are still
-			// items left in masks_with_values, then there
-			// will be a next-step ambiguity. Return
-			// error.
-                        if masks_with_values.len() != 0 {
-                            return Err(DecoderError::AmbiguousNextStep);
-                        } else {
-                            // Otherwise, if the length of masks
-                            // with values is zero (there are no
-                            // more values to pop), then we are in
-                            // fact re-inserting the same decoder
-                            // as was previously inserted, with a
-                            // new exec function. We will consider
-                            // this to be a next-step error, even
-                            // though the caller could be trying
-                            // to re-insert the same exec function.
-                            return Err(DecoderError::AmbiguousNextStep);
-                        }	
-		    }
-                } else {
-                    // If, on the other hand, the value is not present in the
-                    // decoder, then break here. At this point, the matching
-                    // part of the decoder branch (the head) has been fully
-                    // traversed, and it is time to attach the tail to the
-                    // decoder returned here, at the value specified
+                if !decoder.contains_value(&value) {
+                    // If the value is not present in the decoder,
+                    // then break here. At this point, the matching
+                    // part of the decoder branch (the head) has been
+                    // fully traversed, and it is time to attach the
+                    // tail to the decoder returned here, at the value
+                    // specified
                     return Ok((value, decoder));
+                } else if let Some(next_decoder) = decoder.next_decoder(value) {
+		    // If the value is present, and there is a decoder, move
+		    // on to that node
+		    decoder = next_decoder;
+                } else {
+                    // If on the other hand, the next step is an
+                    // execution function, then there is no way to
+		    // proceed without causing ambiguous next step.
+		    // There are two cases: first, if
+		    // masks_with_values is empty, then we are going
+		    // to try to insert a new exec function
+		    // overwriting a previously existing one (an
+		    // error). If masks_with_values is non-empty, then
+		    // we need to insert more decoders, which will
+		    // overwrite this execution function.
+                    return Err(DecoderError::AmbiguousNextStep);
                 }
             } else {
                 // If there are no more masks/values left, then we have
