@@ -39,7 +39,8 @@ impl NextStep {
         } else {
             let mut value_map = HashMap::new();
             // Get the last element and drop it from the vector
-            let MaskWithValue { mask, value } = masks_with_values.pop()
+            let MaskWithValue { mask, value } = masks_with_values
+                .pop()
                 .expect("the vector has at least one element, this will work");
             // Get the next step, which recursively constructs all the next steps
             // all the way down to the end
@@ -120,12 +121,23 @@ impl Decoder {
         }
     }
 
+    /// Get a mutable reference to the next decoder, if there is one.
+    fn next_decoder(&mut self, value: u32) -> Option<&mut Decoder> {
+        let next_step = self
+            .value_map
+            .get_mut(&value)?;
+
+	match next_step {
+            NextStep::Decode(d) => Some(d),
+            NextStep::Exec(_) => None
+	}
+    }
+    
     /// Return (new_value, last decoder), or error
-    fn match_decode_branch_head(
+    fn match_branch_head(
         &mut self,
         masks_with_values: &mut Vec<MaskWithValue>,
     ) -> Result<(u32, &mut Decoder), DecoderError> {
-
         // Check if at least one mask/value is given -- this is
         // required because with no mask or value, there is nothing
         // the decoder can do to check the instruction.
@@ -159,14 +171,11 @@ impl Decoder {
         // Starting at the end of the vector, successively remove
         // items one by one, checking that they are consistent
         // with the tree structure of the decoder
-        let new_value = loop {
-	    
+        loop {
             // Get the current mask and value (popping from the end of vector)
             if let Some(MaskWithValue { mask, value }) = masks_with_values.pop() {
-                println!("{mask:x},{value:x}");
                 // Check the mask is compatible with the decoder (i.e.
                 // the mask in this node matches mask)
-                println!("test{decoder:?}, {mask}");
                 if !decoder.mask_matches(&mask) {
                     return Err(DecoderError::AmbiguousMask);
                 }
@@ -175,39 +184,36 @@ impl Decoder {
                 if decoder.contains_value(&value) {
                     // If the value is in the map, then this mask/value pair
                     // is compatible with the tree. Get the next step.
-                    let next_step = decoder
-                        .value_map
-                        .get_mut(&value)
-                        .expect("it is present, because we just checked");
-
-                    // If the next step is an execution function, but there are
-                    // still items left in masks_with_values, then there will be
-                    // a next-step ambiguity. Return error.
-                    decoder = match next_step {
-                        NextStep::Decode(d) => d,
-                        NextStep::Exec(_) => {
-                            if masks_with_values.len() != 0 {
-                                return Err(DecoderError::AmbiguousNextStep);
-                            } else {
-                                // Otherwise, if the length of masks
-                                // with values is zero (there are no
-                                // more values to pop), then we are in
-                                // fact re-inserting the same decoder
-                                // as was previously inserted, with a
-                                // new exec function. We will consider
-                                // this to be a next-step error, even
-                                // though the caller could be trying
-                                // to re-insert the same exec function.
-                                return Err(DecoderError::AmbiguousNextStep);
-                            }
-                        }
-                    }
+		    if let Some(next_decoder) = decoder.next_decoder(value) {
+			decoder = next_decoder;
+		    } else {
+			// If on the other hand, the next step is an
+			// execution function, but there are still
+			// items left in masks_with_values, then there
+			// will be a next-step ambiguity. Return
+			// error.
+                        if masks_with_values.len() != 0 {
+                            return Err(DecoderError::AmbiguousNextStep);
+                        } else {
+                            // Otherwise, if the length of masks
+                            // with values is zero (there are no
+                            // more values to pop), then we are in
+                            // fact re-inserting the same decoder
+                            // as was previously inserted, with a
+                            // new exec function. We will consider
+                            // this to be a next-step error, even
+                            // though the caller could be trying
+                            // to re-insert the same exec function.
+                            return Err(DecoderError::AmbiguousNextStep);
+                        }	
+		    }
                 } else {
                     // If, on the other hand, the value is not present in the
-                    // decoder, then break here. At this point, it is time to
-                    // add the tail of the branch on to the decoder. Return the
-                    // value for use outside the loop (as new_value)
-                    break value;
+                    // decoder, then break here. At this point, the matching
+                    // part of the decoder branch (the head) has been fully
+                    // traversed, and it is time to attach the tail to the
+                    // decoder returned here, at the value specified
+                    return Ok((value, decoder));
                 }
             } else {
                 // If there are no more masks/values left, then we have
@@ -221,9 +227,7 @@ impl Decoder {
                 // implies it should be an exec function.
                 return Err(DecoderError::AmbiguousNextStep);
             }
-        };
-
-        Ok((new_value, decoder))
+        }
     }
 
     /// Add an instruction, specified by a sequence of masks and expected values
@@ -275,10 +279,9 @@ impl Decoder {
         // Match the portion of the tree which agrees with the decoder,
         // returning the node which needs a new branch attaching, and the
         // new_value where the branch tail should be attached. Note
-	// masks_with_values is modified in place (items are repeatedly
-	// popped from the end).
-        let (new_value, decoder) =
-            self.match_decode_branch_head(&mut masks_with_values)?;
+        // masks_with_values is modified in place (items are repeatedly
+        // popped from the end).
+        let (new_value, decoder) = self.match_branch_head(&mut masks_with_values)?;
 
         // The state at this point is that decoder points to some node in
         // the decode tree, and it is an iterator which contains the remaining
