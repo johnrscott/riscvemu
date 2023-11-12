@@ -1,10 +1,16 @@
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::{hash_map::Entry, HashMap};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DecoderError {
     #[error("missing next step for instruction 0x{instr:x} using mask 0x{mask:x}")]
     MissingNextStep { instr: u32, mask: u32 },
+    #[error("attempt to add ambiguous decoding (conflicting mask 0x{mask:x}")]
+    AmbiguousDecodingMask { mask: u32 },
+    #[error("attempt to add decoding conflicting with existing exec function")]
+    ConflictingExec,
+    #[error("missing first mask")]
+    MissingFirstMask,
 }
 
 pub fn test() {
@@ -22,15 +28,13 @@ enum NextStep {
 }
 
 impl NextStep {
-    pub fn exec_step(exec: fn() -> ()) -> Self{
-	Self::Exec(exec)
+    pub fn exec_step(exec: fn() -> ()) -> Self {
+        Self::Exec(exec)
     }
 
     pub fn decode_step(decoder: Decoder) -> Self {
-	Self::Decode(decoder)
+        Self::Decode(decoder)
     }
-
-    
 }
 
 /// Contains information required to decode an instruction
@@ -56,18 +60,13 @@ struct MaskWithValue {
 }
 
 impl Decoder {
-    /// Create a new decoder
-    ///
-    /// Specify the top level mask. This is the first part of the
-    /// instruction that will be read (in RISC-V, the opcode field).
-    ///
     pub fn new(mask: u32) -> Self {
         Self {
             mask,
             ..Self::default()
         }
     }
-    
+
     fn next_step(&self, instr: u32) -> Result<&NextStep, DecoderError> {
         let value = self.mask & instr;
         if let Some(next_step) = self.value_map.get(&value) {
@@ -88,9 +87,9 @@ impl Decoder {
     }
 
     fn push_decode_step(&mut self, value: u32, next_step: NextStep) {
-	self.value_map.insert(value, next_step);
+        self.value_map.insert(value, next_step);
     }
-    
+
     /// Add an instruction, specified by a sequence of masks and expected values
     ///
     /// The list of mask/value pairs is what will be used to identify the
@@ -99,28 +98,66 @@ impl Decoder {
     /// value, continuing until the execution function is reached.
     pub fn push_instruction(
         &mut self,
-	first_value: u32,
         masks_with_values: Vec<MaskWithValue>,
         exec: fn() -> (),
-    ) -> Result<(), DecoderError> {	
+    ) -> Result<(), DecoderError> {
+        let mut decoder = self;
+        let mut masks_with_values_iter = masks_with_values.iter();
 
-	// Decoder (self) is a tree, where breaking into branches
-	// happens at the map. Each node contains a mask. Each
-	// branch represents a possible value from that mask.
-	// This function needs to insert a branch from the root
-	// down to the leaf (containing the exec function).
+        // Get the first list value
+        let mut mask_with_value = masks_with_values_iter.next();
+        if let None = mask_with_value {
+            return Err(DecoderError::MissingFirstMask);
+        }
 
-	// The root node is always present, with self.mask as the
-	// mask value. From then on, branches either exist or
-	// do not exist.
+        loop {
+            let MaskWithValue { mask, value } = mask_with_value.expect("must be present else bug");
 
-	// If a branch exists, proceed down it (meaning masks and
-	// fields match).
+            // Check mask matches
+            if decoder.mask != *mask {
+                return Err(DecoderError::AmbiguousDecodingMask { mask: *mask });
+            }
+            // Check value is present in map
+            if let Some(next_step) = decoder.value_map.get_mut(&value) {
+                match next_step {
+                    NextStep::Decode(next_decoder) => decoder = next_decoder,
+                    NextStep::Exec(_) => return Err(DecoderError::ConflictingExec),
+                }
 
-	// When you get to a node or branch that doesn't exist,
-	// start inserting new branches and nodes all the way down
-	// to the leaf (the execution function).
+                mask_with_value = masks_with_values_iter.next();
+                if let None = mask_with_value {
+                    break;
+                }
+            } else {
+                // There is no map entry for this value. That means that
+                // we have reached the node in the tree (decoder) where
+                // the new branch needs to be added.
+                break;
+            }
+        }
 
-	Ok(())
+        // Now, decoder is a node in the tree containing a map that does not
+        // contain value. The iterator is at the position where its mask matches
+	// decoder, but decoder.value_map does not contain the value, or,
+	// the iterator is None, meaning 
+
+        // Decoder (self) is a tree, where breaking into branches
+        // happens at the map. Each node contains a mask. Each
+        // branch represents a possible value from that mask.
+        // This function needs to insert a branch from the root
+        // down to the leaf (containing the exec function).
+
+        // The root node is always present, with self.mask as the
+        // mask value. From then on, branches either exist or
+        // do not exist.
+
+        // If a branch exists, proceed down it (meaning masks and
+        // fields match).
+
+        // When you get to a node or branch that doesn't exist,
+        // start inserting new branches and nodes all the way down
+        // to the leaf (the execution function).
+
+        Ok(())
     }
 }
