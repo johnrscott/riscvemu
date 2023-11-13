@@ -74,7 +74,7 @@ pub struct MaskWithValue {
 
 enum NextNode<'a> {
     AnotherDecoder(&'a mut Decoder),
-    MissingValue,
+    MissingValue(&'a mut Decoder, u32),
 }
 
 impl NextNode<'_> {
@@ -95,7 +95,7 @@ impl NextNode<'_> {
             // fully traversed, and it is time to attach the
             // tail to the decoder returned here, at the value
             // specified
-            return Ok(NextNode::MissingValue);
+            return Ok(NextNode::MissingValue(decoder, value));
         } else if let Some(next_decoder) = decoder.next_decoder(value) {
             // If the value is present, and there is a decoder, move
             // on to that node
@@ -220,15 +220,12 @@ impl Decoder {
                     return Err(DecoderError::AmbiguousMask);
                 }
 		
-                decoder = match NextNode::next_node(decoder, value)? {
-		    // This would be good -- need to figure out how
-                    NextNode::MissingValue => break,
-                    NextNode::AnotherDecoder(d) => d,
+		match NextNode::next_node(decoder, value)? {
+                    NextNode::MissingValue(decoder, value) => return Ok((value, decoder)),
+                    NextNode::AnotherDecoder(d) => decoder = d,
                 };
             }
         }
-	
-	Ok((value, decoder))
     }
 
     /// Add an instruction, specified by a sequence of masks and expected values
