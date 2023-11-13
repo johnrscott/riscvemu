@@ -205,26 +205,30 @@ impl Decoder {
         // will successively point to nodes moving down the branch
         // specified by the masks/values
         let mut decoder = self;
-
+	let mut value;
+	
         // Starting at the end of the vector, successively remove
         // items one by one, checking that they are consistent
         // with the tree structure of the decoder
         loop {
             // Get the current mask and value (popping from the end of vector)
-            if let Some(MaskWithValue { mask, value }) = masks_with_values.pop() {
+            if let Some(MaskWithValue { mask, value: new_value }) = masks_with_values.pop() {
+		value = new_value;
                 // Check the mask is compatible with the decoder (i.e.
                 // the mask in this node matches mask)
                 if !decoder.mask_matches(&mask) {
                     return Err(DecoderError::AmbiguousMask);
                 }
-
-                match NextNode::next_node(decoder, value)? {
+		
+                decoder = match NextNode::next_node(decoder, value)? {
 		    // This would be good -- need to figure out how
-                    NextNode::MissingValue => return Ok((value, decoder)),
-                    NextNode::AnotherDecoder(d) => decoder = d,
-                }
+                    NextNode::MissingValue => break,
+                    NextNode::AnotherDecoder(d) => d,
+                };
             }
         }
+	
+	Ok((value, decoder))
     }
 
     /// Add an instruction, specified by a sequence of masks and expected values
