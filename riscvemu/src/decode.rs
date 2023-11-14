@@ -51,8 +51,8 @@ impl<F: Copy> NextStep<F> {
 /// Represents a node and subsequent edge in the decoder tree
 #[derive(Debug, Copy, Clone)]
 pub struct MaskWithValue {
-    mask: u32,
-    value: u32,
+    pub mask: u32,
+    pub value: u32,
 }
 
 /// Used when pushing a new instruction to the decoder to determine

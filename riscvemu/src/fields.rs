@@ -1,80 +1,175 @@
-use std::mem;
-
-pub fn n_bit_mask(num_bits: u64) -> u64 {
-    (1 << num_bits) - 1
-}
-
-pub fn extract_bit_range(instr: u64, start: u64, width: u64) -> u64 {
-    let end = start + width - 1;
-    if end >= 64 {
-        panic!("This field [{end}:{start}] does not fall within a u64");
-    }
-    n_bit_mask(width) & (instr >> start)
-}
-
-pub fn opcode(instr: u32) -> u8 {
-    extract_bit_range(instr.into(), 0, 7) as u8
-}
-
-pub fn rd(instr: u32) -> u8 {
-    extract_bit_range(instr.into(), 7, 5) as u8
-}
-
-pub fn funct3(instr: u32) -> u8 {
-    extract_bit_range(instr.into(), 12, 3) as u8
-}
-
-pub fn rs1(instr: u32) -> u8 {
-    extract_bit_range(instr.into(), 15, 5) as u8
-}
-
-pub fn rs2(instr: u32) -> u8 {
-    extract_bit_range(instr.into(), 20, 5) as u8
-}
-
-pub fn funct7(instr: u32) -> u8 {
-    extract_bit_range(instr.into(), 25, 7) as u8
-}
-
-pub fn imm_itype(instr: u32) -> i16 {
-    let mut unsigned = extract_bit_range(instr.into(), 20, 12) as u16;
-    let sign_bit = 1 & (unsigned >> 11);
-    if sign_bit == 1 {
-        unsigned = 0xf000u16 | unsigned;
-    }
-    unsafe { mem::transmute(unsigned) }
-}
-
-pub fn imm_stype(instr: u32) -> i16 {
-    let imm11_5 = funct7(instr) as u16;
-    let imm4_0 = rd(instr) as u16;
-    let mut unsigned = (imm11_5 << 4) | imm4_0;
-    let sign_bit = 1 & (unsigned >> 11);
-    if sign_bit == 1 {
-        unsigned = 0xf000u16 | unsigned;
-    }
-    unsafe { mem::transmute(unsigned) }
-}
-
-/// Interpret the n least significant bits of
-/// value (u32) as signed (i32) by manually
-/// sign-extending based on bit n-1 and casting
-/// to a signed type. When you use this macro,
-/// make sure to include the type of the result
-/// (e.g. x: i16 = interpret_as_signed!(...))
+/// Make a bit-mask of n bits using mask!(n)
 #[macro_export]
-macro_rules! interpret_as_signed {
-    ($value:expr, $n:expr) => {{
-        let sign_bit = 1 & ($value >> ($n - 1));
-        let sign_extended = if sign_bit == 1 {
-            let all_ones = ((0 * $value).wrapping_sub(1));
-            let sign_extension = all_ones - mask!($n);
-            sign_extension | $value
-        } else {
-            $value
-        };
-        unsafe { std::mem::transmute(sign_extended) }
+macro_rules! mask {
+    ($n:expr) => {
+        (1 << $n) - 1
+    };
+}
+pub use mask;
+
+/// Mask a value to n least significant bits and
+/// shift it left by s bits
+#[macro_export]
+macro_rules! mask_and_shift {
+    ($val:expr, $m:expr, $s:expr) => {
+        (mask!($m) & $val) << $s
+    };
+}
+pub use mask_and_shift;
+
+/// Return val[end:start]
+#[macro_export]
+macro_rules! extract_field {
+    ($val:expr, $end:expr, $start:expr) => {{
+        mask!($end - $start + 1) & ($val >> $start)
     }};
 }
-pub use interpret_as_signed;
+pub use extract_field;
 
+#[macro_export]
+macro_rules! opcode {
+    ($instr:expr) => {
+        extract_field!($instr, 6, 0)
+    };
+}
+pub use opcode;
+
+#[macro_export]
+macro_rules! funct3 {
+    ($instr:expr) => {
+        extract_field!($instr, 14, 12)
+    };
+}
+pub use funct3;
+
+#[macro_export]
+macro_rules! funct7 {
+    ($instr:expr) => {
+        extract_field!($instr, 31, 25)
+    };
+}
+pub use funct7;
+
+/// Return the offset including the least-significant
+/// zero (i.e. 21 bits long)
+#[macro_export]
+macro_rules! jal_offset {
+    ($instr:expr) => {{
+        let imm20 = extract_field!($instr, 31, 31);
+        let imm19_12 = extract_field!($instr, 19, 12);
+        let imm11 = extract_field!($instr, 20, 20);
+        let imm10_1 = extract_field!($instr, 30, 21);
+        (imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1)
+    }};
+}
+pub use jal_offset;
+
+/// The shift amount for RV32I and RV64I is stored in the lower
+/// portion of what would be the imm field in an itype instruction.
+/// For 32-bit operation, the field is 5 bits, and for 64-bit
+/// operation it is 6 bits. This function returns a u8 that includes
+/// the full 6-bit field, which is important for checking whether
+/// the field is valid in 64-bit mode.
+#[macro_export]
+macro_rules! shamt {
+    ($instr:expr) => {{
+        let shamt: u8 = extract_field!($instr, 25, 20).try_into().unwrap();
+        shamt
+    }};
+}
+pub use shamt;
+
+/// The flag for being an arithmetic (instead of logical)
+/// right shift is stored in bit 30 of the instruction.
+/// Used to distinguish sra, srl, srai, srli.
+#[macro_export]
+macro_rules! is_arithmetic_shift {
+    ($instr:expr) => {
+        extract_field!($instr, 30, 30) == 1
+    };
+}
+pub use is_arithmetic_shift;
+
+#[macro_export]
+macro_rules! imm_itype {
+    ($instr:expr) => {{
+        let imm: u16 = extract_field!($instr, 31, 20).try_into().unwrap();
+        imm
+    }};
+}
+pub use imm_itype;
+
+#[macro_export]
+macro_rules! imm_stype {
+    ($instr:expr) => {{
+        let imm11_5: u16 = extract_field!($instr, 31, 25).try_into().unwrap();
+        let imm4_0: u16 = extract_field!($instr, 11, 7).try_into().unwrap();
+        (imm11_5 << 5) | imm4_0
+    }};
+}
+pub use imm_stype;
+
+#[macro_export]
+macro_rules! imm_btype {
+    ($instr:expr) => {{
+        let imm12 = extract_field!($instr, 31, 31);
+        let imm11 = extract_field!($instr, 7, 7);
+        let imm10_5 = extract_field!($instr, 30, 25);
+        let imm4_1 = extract_field!($instr, 11, 8);
+        (imm12 << 12) | (imm11 << 11) | (imm10_5 << 5) | (imm4_1 << 1)
+    }};
+}
+pub use imm_btype;
+
+#[macro_export]
+macro_rules! rd {
+    ($instr:expr) => {{
+        let rd: u8 = extract_field!($instr, 11, 7).try_into().unwrap();
+        rd
+    }};
+}
+pub use rd;
+
+#[macro_export]
+macro_rules! rs1 {
+    ($instr:expr) => {{
+        let rs1: u8 = extract_field!($instr, 19, 15).try_into().unwrap();
+        rs1
+    }};
+}
+pub use rs1;
+
+#[macro_export]
+macro_rules! rs2 {
+    ($instr:expr) => {{
+        let rs2: u8 = extract_field!($instr, 24, 20).try_into().unwrap();
+        rs2
+    }};
+}
+pub use rs2;
+
+#[macro_export]
+macro_rules! lui_u_immediate {
+    ($instr:expr) => {
+        extract_field!($instr, 31, 12)
+    };
+}
+pub use lui_u_immediate;
+
+#[macro_export]
+macro_rules! interpret_u32_as_signed {
+    ($value:expr) => {{
+        let signed: i32 = unsafe { mem::transmute($value) };
+        signed
+    }};
+}
+pub use interpret_u32_as_signed;
+
+#[macro_export]
+macro_rules! interpret_i32_as_unsigned {
+    ($value:expr) => {{
+        let unsigned: u32 = unsafe { mem::transmute($value) };
+        unsigned
+    }};
+}
+pub use interpret_i32_as_unsigned;

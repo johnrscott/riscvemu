@@ -1,28 +1,11 @@
 use memory::Memory;
 
-use crate::{
-    instr::{
-        decode::{isbtype_signature, mask_isbtype, DecodeError, ExecFn32, Decoder},
-        exec::{
-            execute_auipc_rv32i, execute_branch_rv32i, execute_jal_rv32i, execute_jalr_rv32i,
-            execute_lui_rv32i,
-        },
-        opcodes::{
-            FUNCT3_BEQ, FUNCT3_BGE, FUNCT3_BGEU, FUNCT3_BLT, FUNCT3_BLTU, FUNCT3_BNE, OP_AUIPC,
-            OP_BRANCH, OP_JAL, OP_JALR, OP_LUI,
-        },
-        rv32i::{Branch, Load, RegImm, RegReg, Store},
-    },
-    mask,
-};
-
-use crate::instr::fields::*;
-
 use self::{
     memory::{ReadError, Wordsize},
     registers::Registers,
 };
-use std::collections::HashMap;
+
+
 use thiserror::Error;
 
 pub mod memory;
@@ -443,87 +426,6 @@ impl Hart {
 
         // Decoding the instruction may return traps, e.g. invalid
         // instruction.
-
-        let next_mask = mask!(7);
-        let mut value_map = HashMap::new();
-
-        let executer = Decoder::Executer {
-            xlen32_fn: Some(ExecFn32(execute_lui_rv32i)),
-        };
-        value_map.insert(OP_LUI, executer);
-
-        let executer = Decoder::Executer {
-            xlen32_fn: Some(ExecFn32(execute_auipc_rv32i)),
-        };
-        value_map.insert(OP_AUIPC, executer);
-
-        let executer = Decoder::Executer {
-            xlen32_fn: Some(ExecFn32(execute_jal_rv32i)),
-        };
-        value_map.insert(OP_JAL, executer);
-
-        let executer = Decoder::Executer {
-            xlen32_fn: Some(ExecFn32(execute_jalr_rv32i)),
-        };
-        value_map.insert(OP_JALR, executer);
-
-        let branch_decoder = {
-            let next_mask = mask_isbtype(instr);
-            let mut value_map = HashMap::new();
-
-            let executer = Decoder::Executer {
-                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
-                    execute_branch_rv32i(hart, Branch::Beq, instr)
-                })),
-            };
-            value_map.insert(isbtype_signature(FUNCT3_BEQ), executer);
-
-            let executer = Decoder::Executer {
-                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
-                    execute_branch_rv32i(hart, Branch::Bne, instr)
-                })),
-            };
-            value_map.insert(isbtype_signature(FUNCT3_BNE), executer);
-
-            let executer = Decoder::Executer {
-                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
-                    execute_branch_rv32i(hart, Branch::Blt, instr)
-                })),
-            };
-            value_map.insert(isbtype_signature(FUNCT3_BLT), executer);
-
-            let executer = Decoder::Executer {
-                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
-                    execute_branch_rv32i(hart, Branch::Bge, instr)
-                })),
-            };
-            value_map.insert(isbtype_signature(FUNCT3_BGE), executer);
-
-            let executer = Decoder::Executer {
-                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
-                    execute_branch_rv32i(hart, Branch::Bltu, instr)
-                })),
-            };
-            value_map.insert(isbtype_signature(FUNCT3_BLTU), executer);
-
-            let executer = Decoder::Executer {
-                xlen32_fn: Some(ExecFn32(|hart: &mut Hart, instr: u32| {
-                    execute_branch_rv32i(hart, Branch::Bgeu, instr)
-                })),
-            };
-            value_map.insert(isbtype_signature(FUNCT3_BGEU), executer);
-
-            Decoder::Decoder {
-                next_mask,
-                value_map,
-            }
-        };
-        value_map.insert(OP_BRANCH, branch_decoder);
-
-        let decoder = Decoder::Decoder {
-            next_mask,
-            value_map,
-        };
 
         let exec_fn = decoder.decode(instr)?;
 
