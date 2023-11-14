@@ -19,16 +19,16 @@ pub enum DecoderError {
 /// an execution function, because decoding based on at
 /// least the opcode is always required first.
 #[derive(Debug, PartialEq, Eq)]
-enum NextStep {
-    Decode(Decoder),
-    Exec(fn() -> ()),
+enum NextStep<F: Copy> {
+    Decode(Decoder<F>),
+    Exec(F),
 }
 
-impl NextStep {
+impl<F: Copy> NextStep<F> {
     /// masks_with_values is in reverse order; values at the end of the
     /// vector will get inserted into decoder first. This is because it
     /// is easier to remove items from the end of a vector (for the recursion)
-    fn from_masks_with_values(mut masks_with_values: Vec<MaskWithValue>, exec: fn() -> ()) -> Self {
+    fn from_masks_with_values(mut masks_with_values: Vec<MaskWithValue>, exec: F) -> Self {
         let length = masks_with_values.len();
         if length == 0 {
             Self::Exec(exec)
@@ -48,23 +48,6 @@ impl NextStep {
     }
 }
 
-/// Contains information required to decode an instruction
-///
-/// Decoding happens in multiple steps, each of which involves masking
-/// out a portion of the function and then comparing the result with a
-/// set of values. Depending on the value obtained, decoding proceeds
-/// to the next step. The next step may either be another Decoder, or
-/// a function that can be used to execute the function.
-///
-/// The mask can be used to pick out first the opcode, then funct3 or
-/// funct7, or any other fields required for decoding.
-///
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct Decoder {
-    mask: u32,
-    value_map: HashMap<u32, NextStep>,
-}
-
 /// Represents a node and subsequent edge in the decoder tree
 #[derive(Debug, Copy, Clone)]
 pub struct MaskWithValue {
@@ -72,21 +55,24 @@ pub struct MaskWithValue {
     value: u32,
 }
 
-enum NextNode<'a> {
-    AnotherDecoder(&'a mut Decoder),
-    MissingValue(&'a mut Decoder, u32),
+/// Used when pushing a new instruction to the decoder to determine
+/// whether there is already a matching decode branch, or whether
+/// a value corresponding to a mask is missing.
+enum NextNode<'a, F: Copy> {
+    AnotherDecoder(&'a mut Decoder<F>),
+    MissingValue(&'a mut Decoder<F>, u32),
 }
 
-impl NextNode<'_> {
+impl<F: Copy> NextNode<'_, F> {
 
     /// Progress from the current node to the next node using
     /// the value specified. Return variant depending on whether
     /// another decoder is found or whether the value is missing
     /// from the current node.
     fn next_node<'a>(
-        decoder: &'a mut Decoder,
+        decoder: &'a mut Decoder<F>,
         value: u32,
-    ) -> Result<NextNode<'a>, DecoderError> {
+    ) -> Result<NextNode<'a, F>, DecoderError> {
         // Check if the value is present in the map for this node
         if !decoder.contains_value(&value) {
             // If the value is not present in the decoder,
@@ -116,15 +102,38 @@ impl NextNode<'_> {
     }
 }
 
-impl Decoder {
+/// Contains information required to decode an instruction
+///
+/// Decoding happens in multiple steps, each of which involves masking
+/// out a portion of the function and then comparing the result with a
+/// set of values. Depending on the value obtained, decoding proceeds
+/// to the next step. The next step may either be another Decoder, or
+/// a function that can be used to execute the function.
+///
+/// The mask can be used to pick out first the opcode, then funct3 or
+/// funct7, or any other fields required for decoding.
+///
+/// The decoder is a tree where nodes store masks and the branches
+/// following nodes are labelled with values obtained after applying
+/// the masks. The leaf nodes store a function that can be executed,
+/// of type F. (F can be any type that implements copy, if you want
+/// to store anything else at the leaf nodes.)
+/// 
+#[derive(Debug, PartialEq, Eq)]
+pub struct Decoder<F: Copy> {
+    mask: u32,
+    value_map: HashMap<u32, NextStep<F>>,
+}
+
+impl<F: Copy> Decoder<F> {
     pub fn new(mask: u32) -> Self {
         Self {
             mask,
-            ..Self::default()
+	    value_map: HashMap::new()
         }
     }
 
-    fn next_step_for_value(&self, value: &u32) -> Result<&NextStep, DecoderError> {
+    fn next_step_for_value(&self, value: &u32) -> Result<&NextStep<F>, DecoderError> {
         if let Some(next_step) = self.value_map.get(value) {
             Ok(next_step)
         } else {
@@ -136,7 +145,7 @@ impl Decoder {
     }
 
     /// Get the next step by applying mask to instruction and checking value
-    fn next_step_for_instr(&self, instr: u32) -> Result<&NextStep, DecoderError> {
+    fn next_step_for_instr(&self, instr: u32) -> Result<&NextStep<F>, DecoderError> {
         let value = self.mask & instr;
         self.next_step_for_value(&value)
     }
@@ -154,7 +163,7 @@ impl Decoder {
         self.mask_matches(mask) && self.contains_value(value)
     }
 
-    pub fn get_exec(&self, instr: u32) -> Result<fn() -> (), DecoderError> {
+    pub fn get_exec(&self, instr: u32) -> Result<F, DecoderError> {
         match self.next_step_for_instr(instr)? {
             NextStep::Decode(decoder) => decoder.get_exec(instr),
             NextStep::Exec(exec) => Ok(*exec),
@@ -162,7 +171,7 @@ impl Decoder {
     }
 
     /// Get a mutable reference to the next decoder, if there is one.
-    fn next_decoder(&mut self, value: u32) -> Option<&mut Decoder> {
+    fn next_decoder(&mut self, value: u32) -> Option<&mut Decoder<F>> {
         let next_step = self.value_map.get_mut(&value)?;
 
         match next_step {
@@ -175,7 +184,7 @@ impl Decoder {
     fn match_branch_head(
         &mut self,
         masks_with_values: &mut Vec<MaskWithValue>,
-    ) -> Result<(u32, &mut Decoder), DecoderError> {
+    ) -> Result<(u32, &mut Decoder<F>), DecoderError> {
         // Check if at least one mask/value is given -- this is
         // required because with no mask or value, there is nothing
         // the decoder can do to check the instruction.
@@ -272,7 +281,7 @@ impl Decoder {
     pub fn push_instruction(
         &mut self,
         mut masks_with_values: Vec<MaskWithValue>,
-        exec: fn() -> (),
+        exec: F,
     ) -> Result<(), DecoderError> {
         // Match the portion of the tree which agrees with the decoder,
         // returning the node which needs a new branch attaching, and the
@@ -299,7 +308,7 @@ mod tests {
     #[test]
     fn check_new_decoder() {
         let mask = 0x7f;
-        let decoder = Decoder::new(mask);
+        let decoder = Decoder::<fn()->()>::new(mask);
         assert_eq!(decoder.mask, mask);
         assert_eq!(decoder.value_map, HashMap::new());
     }
@@ -311,7 +320,7 @@ mod tests {
         fn exec3() {}
 
         let mask = 0x0f;
-        let mut decoder = Decoder::new(mask);
+        let mut decoder = Decoder::<fn()->()>::new(mask);
 
         // Define a set of mask/value pairs
         let mv1 = MaskWithValue { mask, value: 1 };
