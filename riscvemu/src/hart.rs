@@ -22,7 +22,7 @@ use self::{
     memory::{ReadError, Wordsize},
     registers::Registers,
 };
-use std::{collections::HashMap, mem};
+use std::collections::HashMap;
 use thiserror::Error;
 
 pub mod memory;

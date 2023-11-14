@@ -5,7 +5,8 @@
 //pub mod register_file;
 
 //pub mod elf_utils;
-//pub mod hart;
+pub mod hart;
 //pub mod instr;
 
+pub mod exec;
 pub mod decode;
