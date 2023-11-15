@@ -4,7 +4,20 @@
 //! unprivileged specification version 20191213.
 //!
 
-use crate::{decode::{Decoder, MaskWithValue}, hart::{ExecutionError, Hart}, exec::execute_lui_rv32i, opcodes::OP_LUI, mask};
+use crate::{
+    decode::{Decoder, DecoderError, MaskWithValue},
+    exec::{
+        execute_auipc_rv32i, execute_beq_rv32i, execute_bge_rv32i, execute_bgeu_rv32i,
+        execute_blt_rv32i, execute_bltu_rv32i, execute_bne_rv32i, execute_jal_rv32i,
+        execute_jalr_rv32i, execute_lui_rv32i, execute_lb_rv32i, execute_lh_rv32i, execute_lw_rv32i, execute_lbu_rv32i, execute_lhu_rv32i,
+    },
+    hart::{ExecutionError, Hart},
+    mask, mask_and_shift,
+    opcodes::{
+        FUNCT3_BEQ, FUNCT3_BGE, FUNCT3_BGEU, FUNCT3_BLT, FUNCT3_BLTU, FUNCT3_BNE, FUNCT3_JALR,
+        OP_AUIPC, OP_BRANCH, OP_JAL, OP_JALR, OP_LUI, OP_LOAD, FUNCT3_B, FUNCT3_H, FUNCT3_W, FUNCT3_HU, FUNCT3_BU,
+    },
+};
 
 /// In RV32I and RV64I, If branch is taken, set pc = pc + offset,
 /// where offset is a multiple of two; else do nothing. The
@@ -177,11 +190,57 @@ pub enum Rv32i {
 }
 */
 
-fn make_rv32i(decoder: &mut Decoder<fn(&mut Hart, u32)->Result<(),ExecutionError>>) {
-
-    let masks_with_values = vec![
-	MaskWithValue { mask: mask!(7), value: OP_LUI}
-    ];
-    decoder.push_instruction(masks_with_values, execute_lui_rv32i);
+fn opcode_determined(
+    decoder: &mut Decoder<fn(&mut Hart, u32) -> Result<(), ExecutionError>>,
+    opcode: u32,
+    exec: fn(&mut Hart, u32) -> Result<(), ExecutionError>,
+) -> Result<(), DecoderError> {
+    let masks_with_values = vec![MaskWithValue {
+        mask: mask!(7),
+        value: opcode,
+    }];
+    decoder.push_instruction(masks_with_values, exec)
 }
 
+fn opcode_funct3_determined(
+    decoder: &mut Decoder<fn(&mut Hart, u32) -> Result<(), ExecutionError>>,
+    opcode: u32,
+    funct3: u32,
+    exec: fn(&mut Hart, u32) -> Result<(), ExecutionError>,
+) -> Result<(), DecoderError> {
+    let masks_with_values = vec![
+        MaskWithValue {
+            mask: mask!(3) << 12,
+            value: funct3 << 12,
+        },
+        MaskWithValue {
+            mask: mask!(7),
+            value: opcode,
+        },
+    ];
+    decoder.push_instruction(masks_with_values, exec)
+}
+
+pub fn make_rv32i(
+    decoder: &mut Decoder<fn(&mut Hart, u32) -> Result<(), ExecutionError>>,
+) -> Result<(), DecoderError> {
+    // Opcode determines instruction
+    opcode_determined(decoder, OP_LUI, execute_lui_rv32i)?;
+    opcode_determined(decoder, OP_AUIPC, execute_auipc_rv32i)?;
+    opcode_determined(decoder, OP_JAL, execute_jal_rv32i)?;
+
+    // Opcode and funct3 determines instruction
+    opcode_funct3_determined(decoder, OP_JALR, FUNCT3_JALR, execute_jalr_rv32i)?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BEQ, execute_beq_rv32i)?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BNE, execute_bne_rv32i)?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BLT, execute_blt_rv32i)?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BGE, execute_bge_rv32i)?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BLTU, execute_bltu_rv32i)?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BGEU, execute_bgeu_rv32i)?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_B, execute_lb_rv32i)?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_H, execute_lh_rv32i)?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_W, execute_lw_rv32i)?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_BU, execute_lbu_rv32i)?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_HU, execute_lhu_rv32i)
+    
+}

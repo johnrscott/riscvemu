@@ -5,7 +5,11 @@ use self::{
     registers::Registers,
 };
 
-
+use crate::{
+    decode::{Decoder, DecoderError},
+    fields::*,
+    rv32i::make_rv32i,
+};
 use thiserror::Error;
 
 pub mod memory;
@@ -426,13 +430,16 @@ impl Hart {
 
         // Decoding the instruction may return traps, e.g. invalid
         // instruction.
+        let mut decoder =
+            Decoder::<fn(&mut Hart, u32) -> Result<(), ExecutionError>>::new(mask!(7));
+        make_rv32i(&mut decoder)?;
 
-        let exec_fn = decoder.decode(instr)?;
+        let exec_fn = decoder.get_exec(instr)?;
 
         // Execute instruction here. That may produce further traps,
         // e.g. ecalls or invalid instructions discovered at the
         // execution step
-        exec_fn.0(self, instr)?;
+        exec_fn(self, instr)?;
 
         Ok(())
     }
@@ -441,7 +448,7 @@ impl Hart {
 #[derive(Error, Debug)]
 pub enum Trap {
     #[error("instruction decode failed: {0}")]
-    InstructionDecodeFailed(DecodeError),
+    InstructionDecodeFailed(DecoderError),
     #[error("instruction execution failed: {0}")]
     InstructionExecutionFailed(ExecutionError),
 }
@@ -470,8 +477,8 @@ impl From<ReadError> for ExecutionError {
     }
 }
 
-impl From<DecodeError> for Trap {
-    fn from(d: DecodeError) -> Trap {
+impl From<DecoderError> for Trap {
+    fn from(d: DecoderError) -> Trap {
         Trap::InstructionDecodeFailed(d)
     }
 }
@@ -486,7 +493,7 @@ impl From<ExecutionError> for Trap {
 mod tests {
 
     use super::*;
-    use crate::instr::encode::*;
+    use crate::encode::*;
 
     #[test]
     fn check_lui() -> Result<(), &'static str> {

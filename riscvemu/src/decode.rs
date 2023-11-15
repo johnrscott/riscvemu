@@ -64,7 +64,6 @@ enum NextNode<'a, F: Copy> {
 }
 
 impl<F: Copy> NextNode<'_, F> {
-
     /// Progress from the current node to the next node using
     /// the value specified. Return variant depending on whether
     /// another decoder is found or whether the value is missing
@@ -118,7 +117,7 @@ impl<F: Copy> NextNode<'_, F> {
 /// the masks. The leaf nodes store a function that can be executed,
 /// of type F. (F can be any type that implements copy, if you want
 /// to store anything else at the leaf nodes.)
-/// 
+///
 #[derive(Debug, PartialEq, Eq)]
 pub struct Decoder<F: Copy> {
     mask: u32,
@@ -129,7 +128,7 @@ impl<F: Copy> Decoder<F> {
     pub fn new(mask: u32) -> Self {
         Self {
             mask,
-	    value_map: HashMap::new()
+            value_map: HashMap::new(),
         }
     }
 
@@ -214,22 +213,26 @@ impl<F: Copy> Decoder<F> {
         // will successively point to nodes moving down the branch
         // specified by the masks/values
         let mut decoder = self;
-	let mut value;
-	
+        let mut value;
+
         // Starting at the end of the vector, successively remove
         // items one by one, checking that they are consistent
         // with the tree structure of the decoder
         loop {
             // Get the current mask and value (popping from the end of vector)
-            if let Some(MaskWithValue { mask, value: new_value }) = masks_with_values.pop() {
-		value = new_value;
+            if let Some(MaskWithValue {
+                mask,
+                value: new_value,
+            }) = masks_with_values.pop()
+            {
+                value = new_value;
                 // Check the mask is compatible with the decoder (i.e.
                 // the mask in this node matches mask)
                 if !decoder.mask_matches(&mask) {
                     return Err(DecoderError::AmbiguousMask);
                 }
-		
-		match NextNode::next_node(decoder, value)? {
+
+                match NextNode::next_node(decoder, value)? {
                     NextNode::MissingValue(decoder, value) => return Ok((value, decoder)),
                     NextNode::AnotherDecoder(d) => decoder = d,
                 };
@@ -308,7 +311,7 @@ mod tests {
     #[test]
     fn check_new_decoder() {
         let mask = 0x7f;
-        let decoder = Decoder::<fn()->()>::new(mask);
+        let decoder = Decoder::<fn() -> ()>::new(mask);
         assert_eq!(decoder.mask, mask);
         assert_eq!(decoder.value_map, HashMap::new());
     }
@@ -320,7 +323,7 @@ mod tests {
         fn exec3() {}
 
         let mask = 0x0f;
-        let mut decoder = Decoder::<fn()->()>::new(mask);
+        let mut decoder = Decoder::<fn() -> ()>::new(mask);
 
         // Define a set of mask/value pairs
         let mv1 = MaskWithValue { mask, value: 1 };

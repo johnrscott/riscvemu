@@ -10,7 +10,7 @@
 //! Instruction behaviour is defined in RISC-V unprivileged
 //! specification version 20191213
 
-use crate::hart::{next_instruction_address, sign_extend, ExecutionError, Hart};
+use crate::hart::{next_instruction_address, sign_extend, ExecutionError, Hart, memory::Wordsize};
 
 use super::{
     instr_type::{decode_btype, decode_itype, decode_jtype, decode_utype, Itype, SBtype, UJtype},
@@ -88,18 +88,7 @@ pub fn execute_jalr_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionEr
     hart.jump_to_address(new_pc)
 }
 
-/// Execute a conditional branch in 32-bit mode
-///
-/// Compute a condition specified by the mnemonic between the values
-/// of the registers src1 and src2. If the result is false, do nothing.
-/// Else, compute a pc-relative address by sign-extending offset, and
-/// jump to that address, raising an address-misaligned exception if the
-/// resulting program counter is not aligned to a 4-byte boundary.
-pub fn execute_branch_rv32i(
-    hart: &mut Hart,
-    mnemonic: Branch,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+fn get_branch_data(hart: &Hart, instr: u32) -> Result<(u32, u32, u16), ExecutionError> {
     let SBtype {
         rs1: src1,
         rs2: src2,
@@ -107,28 +96,170 @@ pub fn execute_branch_rv32i(
     } = decode_btype(instr);
     let src1 = hart.x(src1)?;
     let src2 = hart.x(src2)?;
-    let branch_taken = match mnemonic {
-        Branch::Beq => src1 == src2,
-        Branch::Bne => src1 != src2,
-        Branch::Blt => {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
-            src1 < src2
-        }
-        Branch::Bge => {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
-            src1 >= src2
-        }
-        Branch::Bltu => src1 < src2,
-        Branch::Bgeu => src1 >= src2,
-    };
+    Ok((src1, src2, offset))
+}
 
+fn do_branch(hart: &mut Hart, branch_taken: bool, offset: u16) {
     if branch_taken {
         let relative_address = sign_extend(offset, 11);
-        hart.jump_relative_to_pc(relative_address)
+        hart.jump_relative_to_pc(relative_address);
     } else {
         hart.increment_pc();
-        Ok(())
     }
+}
+
+pub fn execute_beq_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, offset) = get_branch_data(hart, instr)?;
+    let branch_taken = src1 == src2;
+    do_branch(hart, branch_taken, offset);
+    Ok(())
+}
+
+pub fn execute_bne_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, offset) = get_branch_data(hart, instr)?;
+    let branch_taken = src1 != src2;
+    do_branch(hart, branch_taken, offset);
+    Ok(())
+}
+
+pub fn execute_blt_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, offset) = get_branch_data(hart, instr)?;
+    let branch_taken = {
+        let src1: i32 = interpret_u32_as_signed!(src1);
+        let src2: i32 = interpret_u32_as_signed!(src2);
+        src1 < src2
+    };
+    do_branch(hart, branch_taken, offset);
+    Ok(())
+}
+
+pub fn execute_bge_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, offset) = get_branch_data(hart, instr)?;
+    let branch_taken = {
+        let src1: i32 = interpret_u32_as_signed!(src1);
+        let src2: i32 = interpret_u32_as_signed!(src2);
+        src1 >= src2
+    };
+    do_branch(hart, branch_taken, offset);
+    Ok(())
+}
+
+pub fn execute_bltu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, offset) = get_branch_data(hart, instr)?;
+    let branch_taken = src1 < src2;
+    do_branch(hart, branch_taken, offset);
+    Ok(())
+}
+
+pub fn execute_bgeu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, offset) = get_branch_data(hart, instr)?;
+    let branch_taken = src1 >= src2;
+    do_branch(hart, branch_taken, offset);
+    Ok(())
+}
+
+pub fn execute_lb_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let Itype {
+        rs1: base,
+        imm: offset,
+        rd: dest,
+    } = decode_itype(instr);
+    let base_address = hart.x(base)?;
+    let offset = sign_extend(offset, 11);
+    let load_address = base_address.wrapping_add(offset);
+    let load_data = sign_extend(
+            u32::try_from(
+                hart.memory
+                    .read(load_address.into(), Wordsize::Byte)
+                    .unwrap(),
+            )
+            .unwrap(),
+            7,
+        );
+    hart.set_x(dest, load_data)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_lh_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let Itype {
+        rs1: base,
+        imm: offset,
+        rd: dest,
+    } = decode_itype(instr);
+    let base_address = hart.x(base)?;
+    let offset = sign_extend(offset, 11);
+    let load_address = base_address.wrapping_add(offset);
+    let load_data = sign_extend(
+            u32::try_from(
+                hart.memory
+                    .read(load_address.into(), Wordsize::Halfword)
+                    .unwrap(),
+            )
+            .unwrap(),
+            15,
+        );
+    hart.set_x(dest, load_data)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_lw_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let Itype {
+        rs1: base,
+        imm: offset,
+        rd: dest,
+    } = decode_itype(instr);
+    let base_address = hart.x(base)?;
+    let offset = sign_extend(offset, 11);
+    let load_address = base_address.wrapping_add(offset);
+    let load_data = hart
+            .memory
+            .read(load_address.into(), Wordsize::Word)
+            .unwrap()
+            .try_into()
+            .unwrap();
+    hart.set_x(dest, load_data)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_lbu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let Itype {
+        rs1: base,
+        imm: offset,
+        rd: dest,
+    } = decode_itype(instr);
+    let base_address = hart.x(base)?;
+    let offset = sign_extend(offset, 11);
+    let load_address = base_address.wrapping_add(offset);
+    let load_data = hart
+            .memory
+            .read(load_address.into(), Wordsize::Byte)
+            .unwrap()
+            .try_into()
+            .unwrap();
+    hart.set_x(dest, load_data)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_lhu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let Itype {
+        rs1: base,
+        imm: offset,
+        rd: dest,
+    } = decode_itype(instr);
+    let base_address = hart.x(base)?;
+    let offset = sign_extend(offset, 11);
+    let load_address = base_address.wrapping_add(offset);
+    let load_data = hart
+            .memory
+            .read(load_address.into(), Wordsize::Halfword)
+            .unwrap()
+            .try_into()
+            .unwrap();
+    hart.set_x(dest, load_data)?;
+    hart.increment_pc();
+    Ok(())
 }

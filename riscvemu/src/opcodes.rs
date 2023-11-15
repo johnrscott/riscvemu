@@ -12,6 +12,8 @@ pub const OP_STORE: u32 = 0b0100011;
 pub const OP_MISC_MEM: u32 = 0b0001111;
 pub const OP_SYSTEM: u32 = 0b1110011;
 
+pub const FUNCT3_JALR: u32 = 0b000;
+
 // Conditional branches
 pub const FUNCT3_BEQ: u32 = 0b000;
 pub const FUNCT3_BNE: u32 = 0b001;

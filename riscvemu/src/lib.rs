@@ -8,9 +8,10 @@
 pub mod hart;
 //pub mod instr;
 
-pub mod instr_type;
-pub mod exec;
 pub mod decode;
-pub mod rv32i;
-pub mod opcodes;
+pub mod encode;
+pub mod exec;
 pub mod fields;
+pub mod instr_type;
+pub mod opcodes;
+pub mod rv32i;
