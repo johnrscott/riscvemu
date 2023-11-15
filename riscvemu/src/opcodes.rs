@@ -71,3 +71,8 @@ pub const FUNCT3_REMU: u32 = 0b111;
 pub const FUNCT7_SUB: u32 = 0b0100000;
 pub const FUNCT7_SRA: u32 = 0b0100000;
 pub const FUNCT7_MULDIV: u32 = 0b0000001;
+
+// Shift instruction "funct7" (really they are more like I-type)
+pub const FUNCT7_SLLI: u32 = 0b0000000;
+pub const FUNCT7_SRLI: u32 = 0b0000000;
+pub const FUNCT7_SRAI: u32 = 0b0100000;

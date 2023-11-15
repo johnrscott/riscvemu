@@ -9,13 +9,13 @@ use crate::{
     exec::{
         execute_auipc_rv32i, execute_beq_rv32i, execute_bge_rv32i, execute_bgeu_rv32i,
         execute_blt_rv32i, execute_bltu_rv32i, execute_bne_rv32i, execute_jal_rv32i,
-        execute_jalr_rv32i, execute_lui_rv32i, execute_lb_rv32i, execute_lh_rv32i, execute_lw_rv32i, execute_lbu_rv32i, execute_lhu_rv32i,
+        execute_jalr_rv32i, execute_lui_rv32i, execute_lb_rv32i, execute_lh_rv32i, execute_lw_rv32i, execute_lbu_rv32i, execute_lhu_rv32i, execute_sb_rv32i, execute_sh_rv32i, execute_sw_rv32i, execute_addi_rv32i, execute_slti_rv32i, execute_sltiu_rv32i, execute_xori_rv32i, execute_ori_rv32i, execute_andi_rv32i, execute_slli_rv32i, execute_srli_rv32i, execute_srai_rv32i,
     },
     hart::{ExecutionError, Hart},
     mask, mask_and_shift,
     opcodes::{
         FUNCT3_BEQ, FUNCT3_BGE, FUNCT3_BGEU, FUNCT3_BLT, FUNCT3_BLTU, FUNCT3_BNE, FUNCT3_JALR,
-        OP_AUIPC, OP_BRANCH, OP_JAL, OP_JALR, OP_LUI, OP_LOAD, FUNCT3_B, FUNCT3_H, FUNCT3_W, FUNCT3_HU, FUNCT3_BU,
+        OP_AUIPC, OP_BRANCH, OP_JAL, OP_JALR, OP_LUI, OP_LOAD, FUNCT3_B, FUNCT3_H, FUNCT3_W, FUNCT3_HU, FUNCT3_BU, OP_STORE, OP_IMM, FUNCT3_ADDI, FUNCT3_SLTI, FUNCT3_SLTIU, FUNCT3_XORI, FUNCT3_ORI, FUNCT3_ANDI, FUNCT3_SLLI, FUNCT3_SRLI, FUNCT3_SRAI, FUNCT7_SLLI, FUNCT7_SRLI, FUNCT7_SRAI,
     },
 };
 
@@ -221,6 +221,32 @@ fn opcode_funct3_determined(
     decoder.push_instruction(masks_with_values, exec)
 }
 
+/// This also covers the shift instructions which use a special version
+/// if I-type.
+fn opcode_funct3_funct7_determined(
+    decoder: &mut Decoder<fn(&mut Hart, u32) -> Result<(), ExecutionError>>,
+    opcode: u32,
+    funct3: u32,
+    funct7: u32,
+    exec: fn(&mut Hart, u32) -> Result<(), ExecutionError>,
+) -> Result<(), DecoderError> {
+    let masks_with_values = vec![
+        MaskWithValue {
+            mask: mask!(7) << 25,
+            value: funct7 << 25,
+        },
+        MaskWithValue {
+            mask: mask!(3) << 12,
+            value: funct3 << 12,
+        },
+        MaskWithValue {
+            mask: mask!(7),
+            value: opcode,
+        },
+    ];
+    decoder.push_instruction(masks_with_values, exec)
+}
+
 pub fn make_rv32i(
     decoder: &mut Decoder<fn(&mut Hart, u32) -> Result<(), ExecutionError>>,
 ) -> Result<(), DecoderError> {
@@ -241,6 +267,19 @@ pub fn make_rv32i(
     opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_H, execute_lh_rv32i)?;
     opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_W, execute_lw_rv32i)?;
     opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_BU, execute_lbu_rv32i)?;
-    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_HU, execute_lhu_rv32i)
-    
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_HU, execute_lhu_rv32i)?;
+    opcode_funct3_determined(decoder, OP_STORE, FUNCT3_B, execute_sb_rv32i)?;
+    opcode_funct3_determined(decoder, OP_STORE, FUNCT3_H, execute_sh_rv32i)?;
+    opcode_funct3_determined(decoder, OP_STORE, FUNCT3_W, execute_sw_rv32i)?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ADDI, execute_addi_rv32i)?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_SLTI, execute_slti_rv32i)?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_SLTIU, execute_sltiu_rv32i)?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_XORI, execute_xori_rv32i)?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ORI, execute_ori_rv32i)?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ANDI, execute_andi_rv32i)?;
+
+    // Shift instructions (opcode, funct3, and part of immediate determined)
+    opcode_funct3_funct7_determined(decoder, OP_IMM, FUNCT3_SLLI, FUNCT7_SLLI, execute_slli_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP_IMM, FUNCT3_SRLI, FUNCT7_SRLI, execute_srli_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP_IMM, FUNCT3_SRAI, FUNCT7_SRAI, execute_srai_rv32i)
 }
