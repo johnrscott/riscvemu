@@ -7,15 +7,24 @@
 use crate::{
     decode::{Decoder, DecoderError, MaskWithValue},
     exec::{
-        execute_auipc_rv32i, execute_beq_rv32i, execute_bge_rv32i, execute_bgeu_rv32i,
-        execute_blt_rv32i, execute_bltu_rv32i, execute_bne_rv32i, execute_jal_rv32i,
-        execute_jalr_rv32i, execute_lui_rv32i, execute_lb_rv32i, execute_lh_rv32i, execute_lw_rv32i, execute_lbu_rv32i, execute_lhu_rv32i, execute_sb_rv32i, execute_sh_rv32i, execute_sw_rv32i, execute_addi_rv32i, execute_slti_rv32i, execute_sltiu_rv32i, execute_xori_rv32i, execute_ori_rv32i, execute_andi_rv32i, execute_slli_rv32i, execute_srli_rv32i, execute_srai_rv32i,
+        execute_add_rv32i, execute_addi_rv32i, execute_andi_rv32i, execute_auipc_rv32i,
+        execute_beq_rv32i, execute_bge_rv32i, execute_bgeu_rv32i, execute_blt_rv32i,
+        execute_bltu_rv32i, execute_bne_rv32i, execute_jal_rv32i, execute_jalr_rv32i,
+        execute_lb_rv32i, execute_lbu_rv32i, execute_lh_rv32i, execute_lhu_rv32i,
+        execute_lui_rv32i, execute_lw_rv32i, execute_ori_rv32i, execute_sb_rv32i, execute_sh_rv32i,
+        execute_sll_rv32i, execute_slli_rv32i, execute_slt_rv32i, execute_slti_rv32i,
+        execute_sltiu_rv32i, execute_sltu_rv32i, execute_srai_rv32i, execute_srli_rv32i,
+        execute_sub_rv32i, execute_sw_rv32i, execute_xori_rv32i, execute_xor_rv32i, execute_srl_rv32i, execute_sra_rv32i, execute_or_rv32i, execute_and_rv32i,
     },
     hart::{ExecutionError, Hart},
     mask, mask_and_shift,
     opcodes::{
-        FUNCT3_BEQ, FUNCT3_BGE, FUNCT3_BGEU, FUNCT3_BLT, FUNCT3_BLTU, FUNCT3_BNE, FUNCT3_JALR,
-        OP_AUIPC, OP_BRANCH, OP_JAL, OP_JALR, OP_LUI, OP_LOAD, FUNCT3_B, FUNCT3_H, FUNCT3_W, FUNCT3_HU, FUNCT3_BU, OP_STORE, OP_IMM, FUNCT3_ADDI, FUNCT3_SLTI, FUNCT3_SLTIU, FUNCT3_XORI, FUNCT3_ORI, FUNCT3_ANDI, FUNCT3_SLLI, FUNCT3_SRLI, FUNCT3_SRAI, FUNCT7_SLLI, FUNCT7_SRLI, FUNCT7_SRAI,
+        FUNCT3_ADD, FUNCT3_ADDI, FUNCT3_ANDI, FUNCT3_B, FUNCT3_BEQ, FUNCT3_BGE, FUNCT3_BGEU,
+        FUNCT3_BLT, FUNCT3_BLTU, FUNCT3_BNE, FUNCT3_BU, FUNCT3_H, FUNCT3_HU, FUNCT3_JALR,
+        FUNCT3_ORI, FUNCT3_SLL, FUNCT3_SLLI, FUNCT3_SLT, FUNCT3_SLTI, FUNCT3_SLTIU, FUNCT3_SLTU,
+        FUNCT3_SRAI, FUNCT3_SRLI, FUNCT3_SUB, FUNCT3_W, FUNCT3_XORI, FUNCT7_ADD, FUNCT7_SLL,
+        FUNCT7_SLLI, FUNCT7_SLT, FUNCT7_SLTU, FUNCT7_SRAI, FUNCT7_SRLI, FUNCT7_SUB, OP, OP_AUIPC,
+        OP_BRANCH, OP_IMM, OP_JAL, OP_JALR, OP_LOAD, OP_LUI, OP_STORE, FUNCT3_XOR, FUNCT7_XOR, FUNCT3_SRL, FUNCT7_SRL, FUNCT3_SRA, FUNCT7_SRA, FUNCT3_OR, FUNCT7_OR, FUNCT3_AND, FUNCT7_AND,
     },
 };
 
@@ -254,7 +263,7 @@ pub fn make_rv32i(
     opcode_determined(decoder, OP_LUI, execute_lui_rv32i)?;
     opcode_determined(decoder, OP_AUIPC, execute_auipc_rv32i)?;
     opcode_determined(decoder, OP_JAL, execute_jal_rv32i)?;
-
+    
     // Opcode and funct3 determines instruction
     opcode_funct3_determined(decoder, OP_JALR, FUNCT3_JALR, execute_jalr_rv32i)?;
     opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BEQ, execute_beq_rv32i)?;
@@ -279,7 +288,37 @@ pub fn make_rv32i(
     opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ANDI, execute_andi_rv32i)?;
 
     // Shift instructions (opcode, funct3, and part of immediate determined)
-    opcode_funct3_funct7_determined(decoder, OP_IMM, FUNCT3_SLLI, FUNCT7_SLLI, execute_slli_rv32i)?;
-    opcode_funct3_funct7_determined(decoder, OP_IMM, FUNCT3_SRLI, FUNCT7_SRLI, execute_srli_rv32i)?;
-    opcode_funct3_funct7_determined(decoder, OP_IMM, FUNCT3_SRAI, FUNCT7_SRAI, execute_srai_rv32i)
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP_IMM,
+        FUNCT3_SLLI,
+        FUNCT7_SLLI,
+        execute_slli_rv32i,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP_IMM,
+        FUNCT3_SRLI,
+        FUNCT7_SRLI,
+        execute_srli_rv32i,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP_IMM,
+        FUNCT3_SRAI,
+        FUNCT7_SRAI,
+        execute_srai_rv32i,
+    )?;
+
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_ADD, FUNCT7_ADD, execute_add_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SUB, FUNCT7_SUB, execute_sub_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SLL, FUNCT7_SLL, execute_sll_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SLT, FUNCT7_SLT, execute_slt_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SLTU, FUNCT7_SLTU, execute_sltu_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_XOR, FUNCT7_XOR, execute_xor_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SRL, FUNCT7_SRL, execute_srl_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SRA, FUNCT7_SRA, execute_sra_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_OR, FUNCT7_OR, execute_or_rv32i)?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_AND, FUNCT7_AND, execute_and_rv32i)
+
 }

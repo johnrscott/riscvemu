@@ -10,7 +10,10 @@
 //! Instruction behaviour is defined in RISC-V unprivileged
 //! specification version 20191213
 
-use crate::{hart::{next_instruction_address, sign_extend, ExecutionError, Hart, memory::Wordsize}, instr_type::decode_stype};
+use crate::{
+    hart::{memory::Wordsize, next_instruction_address, sign_extend, ExecutionError, Hart},
+    instr_type::{decode_rtype, decode_stype, Rtype},
+};
 
 use super::{
     instr_type::{decode_btype, decode_itype, decode_jtype, decode_utype, Itype, SBtype, UJtype},
@@ -168,14 +171,14 @@ pub fn execute_lb_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErro
     let offset = sign_extend(offset, 11);
     let load_address = base_address.wrapping_add(offset);
     let load_data = sign_extend(
-            u32::try_from(
-                hart.memory
-                    .read(load_address.into(), Wordsize::Byte)
-                    .unwrap(),
-            )
-            .unwrap(),
-            7,
-        );
+        u32::try_from(
+            hart.memory
+                .read(load_address.into(), Wordsize::Byte)
+                .unwrap(),
+        )
+        .unwrap(),
+        7,
+    );
     hart.set_x(dest, load_data)?;
     hart.increment_pc();
     Ok(())
@@ -191,14 +194,14 @@ pub fn execute_lh_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErro
     let offset = sign_extend(offset, 11);
     let load_address = base_address.wrapping_add(offset);
     let load_data = sign_extend(
-            u32::try_from(
-                hart.memory
-                    .read(load_address.into(), Wordsize::Halfword)
-                    .unwrap(),
-            )
-            .unwrap(),
-            15,
-        );
+        u32::try_from(
+            hart.memory
+                .read(load_address.into(), Wordsize::Halfword)
+                .unwrap(),
+        )
+        .unwrap(),
+        15,
+    );
     hart.set_x(dest, load_data)?;
     hart.increment_pc();
     Ok(())
@@ -214,11 +217,11 @@ pub fn execute_lw_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErro
     let offset = sign_extend(offset, 11);
     let load_address = base_address.wrapping_add(offset);
     let load_data = hart
-            .memory
-            .read(load_address.into(), Wordsize::Word)
-            .unwrap()
-            .try_into()
-            .unwrap();
+        .memory
+        .read(load_address.into(), Wordsize::Word)
+        .unwrap()
+        .try_into()
+        .unwrap();
     hart.set_x(dest, load_data)?;
     hart.increment_pc();
     Ok(())
@@ -234,11 +237,11 @@ pub fn execute_lbu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
     let offset = sign_extend(offset, 11);
     let load_address = base_address.wrapping_add(offset);
     let load_data = hart
-            .memory
-            .read(load_address.into(), Wordsize::Byte)
-            .unwrap()
-            .try_into()
-            .unwrap();
+        .memory
+        .read(load_address.into(), Wordsize::Byte)
+        .unwrap()
+        .try_into()
+        .unwrap();
     hart.set_x(dest, load_data)?;
     hart.increment_pc();
     Ok(())
@@ -254,21 +257,22 @@ pub fn execute_lhu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
     let offset = sign_extend(offset, 11);
     let load_address = base_address.wrapping_add(offset);
     let load_data = hart
-            .memory
-            .read(load_address.into(), Wordsize::Halfword)
-            .unwrap()
-            .try_into()
-            .unwrap();
+        .memory
+        .read(load_address.into(), Wordsize::Halfword)
+        .unwrap()
+        .try_into()
+        .unwrap();
     hart.set_x(dest, load_data)?;
     hart.increment_pc();
     Ok(())
 }
 
-pub fn execute_sb_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
-    let SBtype { rs1: base, rs2: src, imm: offset } = decode_stype(instr);
+pub fn execute_sb_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let SBtype {
+        rs1: base,
+        rs2: src,
+        imm: offset,
+    } = decode_stype(instr);
     let base_address = hart.x(base)?;
     let offset = sign_extend(offset, 11);
     let store_address = base_address.wrapping_add(offset);
@@ -280,11 +284,12 @@ pub fn execute_sb_rv32i(
     Ok(())
 }
 
-pub fn execute_sh_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
-    let SBtype { rs1: base, rs2: src, imm: offset } = decode_stype(instr);
+pub fn execute_sh_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let SBtype {
+        rs1: base,
+        rs2: src,
+        imm: offset,
+    } = decode_stype(instr);
     let base_address = hart.x(base)?;
     let offset = sign_extend(offset, 11);
     let store_address = base_address.wrapping_add(offset);
@@ -296,11 +301,12 @@ pub fn execute_sh_rv32i(
     Ok(())
 }
 
-pub fn execute_sw_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
-    let SBtype { rs1: base, rs2: src, imm: offset } = decode_stype(instr);
+pub fn execute_sw_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let SBtype {
+        rs1: base,
+        rs2: src,
+        imm: offset,
+    } = decode_stype(instr);
     let base_address = hart.x(base)?;
     let offset = sign_extend(offset, 11);
     let store_address = base_address.wrapping_add(offset);
@@ -313,16 +319,17 @@ pub fn execute_sw_rv32i(
 }
 
 fn reg_imm_values(hart: &Hart, instr: u32) -> Result<(u32, u8, u32), ExecutionError> {
-    let Itype { rs1: src, imm: i_immediate, rd: dest } = decode_itype(instr);
+    let Itype {
+        rs1: src,
+        imm: i_immediate,
+        rd: dest,
+    } = decode_itype(instr);
     let src: u32 = hart.x(src)?;
     let i_immediate = sign_extend(i_immediate, 11);
     Ok((src, dest, i_immediate))
 }
 
-pub fn execute_addi_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+pub fn execute_addi_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src, dest, i_immediate) = reg_imm_values(hart, instr)?;
     let value = src.wrapping_add(i_immediate);
     hart.set_x(dest, value)?;
@@ -330,10 +337,7 @@ pub fn execute_addi_rv32i(
     Ok(())
 }
 
-pub fn execute_slti_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+pub fn execute_slti_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src, dest, i_immediate) = reg_imm_values(hart, instr)?;
     let value = {
         let src: i32 = interpret_u32_as_signed!(src);
@@ -345,10 +349,7 @@ pub fn execute_slti_rv32i(
     Ok(())
 }
 
-pub fn execute_sltiu_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+pub fn execute_sltiu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src, dest, i_immediate) = reg_imm_values(hart, instr)?;
     let value = (src < i_immediate) as u32;
     hart.set_x(dest, value)?;
@@ -356,10 +357,7 @@ pub fn execute_sltiu_rv32i(
     Ok(())
 }
 
-pub fn execute_andi_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+pub fn execute_andi_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src, dest, i_immediate) = reg_imm_values(hart, instr)?;
     let value = src & i_immediate;
     hart.set_x(dest, value)?;
@@ -367,10 +365,7 @@ pub fn execute_andi_rv32i(
     Ok(())
 }
 
-pub fn execute_ori_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+pub fn execute_ori_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src, dest, i_immediate) = reg_imm_values(hart, instr)?;
     let value = src | i_immediate;
     hart.set_x(dest, value)?;
@@ -378,10 +373,7 @@ pub fn execute_ori_rv32i(
     Ok(())
 }
 
-pub fn execute_xori_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+pub fn execute_xori_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src, dest, i_immediate) = reg_imm_values(hart, instr)?;
     let value = src ^ i_immediate;
     hart.set_x(dest, value)?;
@@ -389,10 +381,7 @@ pub fn execute_xori_rv32i(
     Ok(())
 }
 
-pub fn execute_slli_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+pub fn execute_slli_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src, dest, i_immediate) = reg_imm_values(hart, instr)?;
     let value = src << (0x1f & i_immediate);
     hart.set_x(dest, value)?;
@@ -400,10 +389,7 @@ pub fn execute_slli_rv32i(
     Ok(())
 }
 
-pub fn execute_srli_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+pub fn execute_srli_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src, dest, i_immediate) = reg_imm_values(hart, instr)?;
     let value = src >> (0x1f & i_immediate);
     hart.set_x(dest, value)?;
@@ -411,14 +397,109 @@ pub fn execute_srli_rv32i(
     Ok(())
 }
 
-pub fn execute_srai_rv32i(
-    hart: &mut Hart,
-    instr: u32,
-) -> Result<(), ExecutionError> {
+pub fn execute_srai_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src, dest, i_immediate) = reg_imm_values(hart, instr)?;
     let value = {
         let src: i32 = interpret_u32_as_signed!(src);
         interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
+    };
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+fn reg_reg_values(hart: &Hart, instr: u32) -> Result<(u32, u32, u8), ExecutionError> {
+    let Rtype {
+        rs1: src1,
+        rs2: src2,
+        rd: dest,
+    } = decode_rtype(instr);
+    let src1: u32 = hart.x(src1)?;
+    let src2: u32 = hart.x(src2)?;
+    Ok((src1, src2, dest))
+}
+
+pub fn execute_add_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = src1.wrapping_add(src2);
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_sub_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = src1.wrapping_sub(src2);
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_slt_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = {
+        let src1: i32 = interpret_u32_as_signed!(src1);
+        let src2: i32 = interpret_u32_as_signed!(src2);
+        (src1 < src2) as u32
+    };
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_sltu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = (src1 < src2) as u32;
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_and_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = (src1 & src2) as u32;
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_or_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = (src1 | src2) as u32;
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_xor_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = (src1 ^ src2) as u32;
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_sll_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = src1 << (0x1f & src2);
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_srl_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = src1 >> (0x1f & src2);
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
+}
+
+pub fn execute_sra_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = {
+        let src1: i32 = interpret_u32_as_signed!(src1);
+        interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
     };
     hart.set_x(dest, value)?;
     hart.increment_pc();

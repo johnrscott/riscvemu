@@ -68,8 +68,17 @@ pub const FUNCT3_REM: u32 = 0b110;
 pub const FUNCT3_REMU: u32 = 0b111;
 
 // Register-register opcodes
+pub const FUNCT7_ADD: u32 = 0b0000000;
 pub const FUNCT7_SUB: u32 = 0b0100000;
 pub const FUNCT7_SRA: u32 = 0b0100000;
+pub const FUNCT7_SLL: u32 = 0b0000000;
+pub const FUNCT7_SLT: u32 = 0b0000000;
+pub const FUNCT7_SLTU: u32 = 0b0000000;
+pub const FUNCT7_XOR: u32 = 0b0000000;
+pub const FUNCT7_SRL: u32 = 0b0000000;
+pub const FUNCT7_OR: u32 = 0b0000000;
+pub const FUNCT7_AND: u32 = 0b0000000;
+
 pub const FUNCT7_MULDIV: u32 = 0b0000001;
 
 // Shift instruction "funct7" (really they are more like I-type)
