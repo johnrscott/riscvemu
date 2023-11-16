@@ -7,7 +7,7 @@ use self::{
 
 use crate::{
     decode::{Decoder, DecoderError},
-    rv32i::make_rv32i,
+    rv32i::{make_rv32i, Exec32},
 };
 use thiserror::Error;
 
@@ -50,31 +50,32 @@ pub fn next_instruction_address(pc: u32) -> u32 {
 ///
 /// The default Hart has the memory, registers and pc all initialised
 /// to zero.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Hart {
+    decoder: Decoder<Exec32>,
     pub pc: u32,
     pub registers: Registers,
     pub memory: Memory,
 }
 
-/// Check that an address is aligned to a byte_boundary specified.
-/// Return address-misaligned if not.
-pub fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), ExecutionError> {
-    if address % byte_alignment != 0 {
-        // Section 2.2 intro of RISC-V unprivileged specification
-        Err(ExecutionError::InstructionAddressMisaligned)
-    } else {
-        Ok(())
+impl Default for Hart {
+
+    /// The default hart implements the RV32I base instructions
+    fn default() -> Self {
+	let mut hart = Self {
+	    decoder: Decoder::new(mask!(7)),
+	    pc: 0,
+	    registers: Registers::default(),
+	    memory: Memory::default(),
+	};
+
+	make_rv32i(&mut hart.decoder).expect("adding these instructions should work");
+	hart	
     }
 }
 
-#[derive(Error, Debug)]
-pub enum RegisterError {
-    #[error("encountered invalid register index {0}")]
-    RegisterIndexInvalid(u8),
-}
-
 impl Hart {
+    
     /// Read the value of the register xn
     pub fn x(&self, n: u8) -> Result<u32, RegisterError> {
         if n < 32 {
@@ -150,13 +151,7 @@ impl Hart {
     pub fn step(&mut self) -> Result<(), Trap> {
         let instr = self.fetch_current_instruction();
 
-        // Decoding the instruction may return traps, e.g. invalid
-        // instruction.
-        let mut decoder =
-            Decoder::<fn(&mut Hart, u32) -> Result<(), ExecutionError>>::new(mask!(7));
-        make_rv32i(&mut decoder)?;
-
-        let exec_fn = decoder.get_exec(instr)?;
+        let exec_fn = self.decoder.get_exec(instr)?;
 
         // Execute instruction here. That may produce further traps,
         // e.g. ecalls or invalid instructions discovered at the
@@ -165,6 +160,23 @@ impl Hart {
 
         Ok(())
     }
+}
+
+/// Check that an address is aligned to a byte_boundary specified.
+/// Return address-misaligned if not.
+pub fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), ExecutionError> {
+    if address % byte_alignment != 0 {
+        // Section 2.2 intro of RISC-V unprivileged specification
+        Err(ExecutionError::InstructionAddressMisaligned)
+    } else {
+        Ok(())
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum RegisterError {
+    #[error("encountered invalid register index {0}")]
+    RegisterIndexInvalid(u8),
 }
 
 #[derive(Error, Debug)]
@@ -1018,3 +1030,4 @@ mod tests {
         Ok(())
     }
 }
+
