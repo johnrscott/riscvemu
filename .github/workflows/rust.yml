@@ -22,5 +22,3 @@ jobs:
       run: cargo test --verbose
     - name: Run clippy
       run: cargo clippy --verbose
-    - name: Test coverage
-      run: cargo tarpaulin
