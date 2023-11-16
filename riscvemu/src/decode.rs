@@ -68,10 +68,7 @@ impl<F: Copy> NextNode<'_, F> {
     /// the value specified. Return variant depending on whether
     /// another decoder is found or whether the value is missing
     /// from the current node.
-    fn new(
-        decoder: &mut Decoder<F>,
-        value: u32,
-    ) -> Result<NextNode<'_, F>, DecoderError> {
+    fn new(decoder: &mut Decoder<F>, value: u32) -> Result<NextNode<'_, F>, DecoderError> {
         // Check if the value is present in the map for this node
         if !decoder.contains_value(&value) {
             // If the value is not present in the decoder,

@@ -262,9 +262,7 @@ fn opcode_funct3_funct7_determined(
     decoder.push_instruction(masks_with_values, exec)
 }
 
-pub fn make_rv32i(
-    decoder: &mut Decoder<Exec32>,
-) -> Result<(), DecoderError> {
+pub fn make_rv32i(decoder: &mut Decoder<Exec32>) -> Result<(), DecoderError> {
     // Opcode determines instruction
     opcode_determined(decoder, OP_LUI, execute_lui_rv32i)?;
     opcode_determined(decoder, OP_AUIPC, execute_auipc_rv32i)?;

@@ -107,7 +107,7 @@ fn do_branch(hart: &mut Hart, branch_taken: bool, offset: u16) -> Result<(), Exe
         hart.jump_relative_to_pc(relative_address)
     } else {
         hart.increment_pc();
-	Ok(())
+        Ok(())
     }
 }
 

@@ -92,10 +92,7 @@ pub fn find_function_symbol(file_path: &String, symbol_name: &String) -> Option<
     None
 }
 
-fn section_data<'a>(
-    header: &SectionHeader,
-    file: &'a ElfBytes<'_, AnyEndian>,
-) -> &'a [u8] {
+fn section_data<'a>(header: &SectionHeader, file: &'a ElfBytes<'_, AnyEndian>) -> &'a [u8] {
     let data_pair = file
         .section_data(header)
         .expect("valid section data corresponding to the section header");

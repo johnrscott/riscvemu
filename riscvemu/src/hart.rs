@@ -1,27 +1,17 @@
-use memory::Memory;
-
 use self::{
     memory::{ReadError, Wordsize},
     registers::Registers,
 };
-
+use crate::fields::mask;
 use crate::{
     decode::{Decoder, DecoderError},
     rv32i::{make_rv32i, Exec32},
 };
+use memory::Memory;
 use thiserror::Error;
 
 pub mod memory;
 pub mod registers;
-
-use crate::fields::mask;
-
-/// Calculate the address of the next instruction by adding
-/// four to the program counter (wrapping if necessary) and
-/// returning the result
-pub fn next_instruction_address(pc: u32) -> u32 {
-    pc.wrapping_add(4)
-}
 
 /// RISC-V Hardware Thread
 ///
@@ -59,23 +49,21 @@ pub struct Hart {
 }
 
 impl Default for Hart {
-
     /// The default hart implements the RV32I base instructions
     fn default() -> Self {
-	let mut hart = Self {
-	    decoder: Decoder::new(mask!(7)),
-	    pc: 0,
-	    registers: Registers::default(),
-	    memory: Memory::default(),
-	};
+        let mut hart = Self {
+            decoder: Decoder::new(mask!(7)),
+            pc: 0,
+            registers: Registers::default(),
+            memory: Memory::default(),
+        };
 
-	make_rv32i(&mut hart.decoder).expect("adding these instructions should work");
-	hart	
+        make_rv32i(&mut hart.decoder).expect("adding these instructions should work");
+        hart
     }
 }
 
 impl Hart {
-    
     /// Read the value of the register xn
     pub fn x(&self, n: u8) -> Result<u32, RegisterError> {
         if n < 32 {
@@ -150,16 +138,17 @@ impl Hart {
 
     pub fn step(&mut self) -> Result<(), Trap> {
         let instr = self.fetch_current_instruction();
-
         let exec_fn = self.decoder.get_exec(instr)?;
-
-        // Execute instruction here. That may produce further traps,
-        // e.g. ecalls or invalid instructions discovered at the
-        // execution step
         exec_fn(self, instr)?;
-
-        Ok(())
+	Ok(())
     }
+}
+
+/// Calculate the address of the next instruction by adding
+/// four to the program counter (wrapping if necessary) and
+/// returning the result
+pub fn next_instruction_address(pc: u32) -> u32 {
+    pc.wrapping_add(4)
 }
 
 /// Check that an address is aligned to a byte_boundary specified.
@@ -1030,4 +1019,3 @@ mod tests {
         Ok(())
     }
 }
-
