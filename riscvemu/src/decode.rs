@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -68,10 +68,10 @@ impl<F: Copy> NextNode<'_, F> {
     /// the value specified. Return variant depending on whether
     /// another decoder is found or whether the value is missing
     /// from the current node.
-    fn next_node<'a>(
-        decoder: &'a mut Decoder<F>,
+    fn new(
+        decoder: &mut Decoder<F>,
         value: u32,
-    ) -> Result<NextNode<'a, F>, DecoderError> {
+    ) -> Result<NextNode<'_, F>, DecoderError> {
         // Check if the value is present in the map for this node
         if !decoder.contains_value(&value) {
             // If the value is not present in the decoder,
@@ -157,11 +157,6 @@ impl<F: Copy> Decoder<F> {
         self.value_map.contains_key(value)
     }
 
-    fn is_consistent(&self, mask_with_value: &MaskWithValue) -> bool {
-        let MaskWithValue { mask, value } = mask_with_value;
-        self.mask_matches(mask) && self.contains_value(value)
-    }
-
     pub fn get_exec(&self, instr: u32) -> Result<F, DecoderError> {
         match self.next_step_for_instr(instr)? {
             NextStep::Decode(decoder) => decoder.get_exec(instr),
@@ -187,7 +182,7 @@ impl<F: Copy> Decoder<F> {
         // Check if at least one mask/value is given -- this is
         // required because with no mask or value, there is nothing
         // the decoder can do to check the instruction.
-        if masks_with_values.len() == 0 {
+        if masks_with_values.is_empty() {
             return Err(DecoderError::NoDecodingMaskSpecified);
         }
 
@@ -232,7 +227,7 @@ impl<F: Copy> Decoder<F> {
                     return Err(DecoderError::AmbiguousMask);
                 }
 
-                match NextNode::next_node(decoder, value)? {
+                match NextNode::new(decoder, value)? {
                     NextNode::MissingValue(decoder, value) => return Ok((value, decoder)),
                     NextNode::AnotherDecoder(d) => decoder = d,
                 };

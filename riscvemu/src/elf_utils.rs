@@ -47,7 +47,7 @@ pub fn read_text_instructions(file_path: &String) -> Vec<u32> {
     let data_pair = file
         .section_data(&text_shdr)
         .expect("valid section data in .text");
-    if data_pair.1 != None {
+    if data_pair.1.is_some() {
         panic!("Unexpected compression in .text section")
     }
     let data = data_pair.0;
@@ -92,14 +92,14 @@ pub fn find_function_symbol(file_path: &String, symbol_name: &String) -> Option<
     None
 }
 
-fn section_data<'data, 'a>(
+fn section_data<'a>(
     header: &SectionHeader,
-    file: &'a ElfBytes<'data, AnyEndian>,
+    file: &'a ElfBytes<'_, AnyEndian>,
 ) -> &'a [u8] {
     let data_pair = file
-        .section_data(&header)
+        .section_data(header)
         .expect("valid section data corresponding to the section header");
-    if data_pair.1 != None {
+    if data_pair.1.is_some() {
         panic!("found unexpected compression in .text section")
     }
     data_pair.0

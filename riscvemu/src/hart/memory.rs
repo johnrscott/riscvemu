@@ -83,7 +83,7 @@ fn read_word(byte_map: &HashMap<u64, u8>, addr: u64, num_bytes: u64, xlen: Xlen)
     let mut value = 0;
     for n in 0..num_bytes {
         let byte_n = read_byte(byte_map, addr.wrapping_add(n), xlen);
-        value |= byte_n << 8 * n;
+        value |= byte_n << (8 * n);
     }
     value
 }
@@ -126,7 +126,7 @@ impl Memory {
 
     fn write_word(&mut self, addr: u64, num_bytes: u64, value: u64, xlen: Xlen) {
         for n in 0..num_bytes {
-            let byte_n = 0xff & (value >> 8 * n);
+            let byte_n = 0xff & (value >> (8 * n));
             self.write_byte(addr.wrapping_add(n), byte_n.try_into().unwrap(), xlen);
         }
     }
@@ -147,7 +147,7 @@ impl Memory {
         } else {
             let read_width = word_size.width().try_into().unwrap();
             let result = read_word(&self.data, addr, read_width, self.xlen);
-            Ok(result.try_into().unwrap())
+            Ok(result)
         }
     }
 }

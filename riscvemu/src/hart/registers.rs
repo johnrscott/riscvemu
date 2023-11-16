@@ -36,7 +36,7 @@ impl Registers {
 
     pub fn write(&mut self, which: usize, value: u64) -> Result<(), RegisterWriteError> {
         if value_invalid(value, self.xlen) {
-            return Err(RegisterWriteError::InvalidValue);
+            Err(RegisterWriteError::InvalidValue)
         } else if which > 31 {
             return Err(RegisterWriteError::InvalidRegister);
         } else {

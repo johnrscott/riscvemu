@@ -1,3 +1,7 @@
 [workspace]
-
+resolver = "2"
 members = ["riscvemu", "emulator"]
+
+# This isn't working yet
+[workspace.lints.clippy]
+pedantic = {level = "warn"}

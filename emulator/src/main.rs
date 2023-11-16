@@ -1,7 +1,5 @@
 use riscvemu::hart::memory::Wordsize;
-use riscvemu::instr::rv32i::Rv32i;
 use riscvemu::{hart::Hart, elf_utils::load_elf};
-use std::io::prelude::*;
 use std::io::{self, stdout};
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -10,27 +8,16 @@ use crossterm::{
 };
 use ratatui::{prelude::*, widgets::*};
 
-fn press_enter_to_continue() {
-    let mut stdin = io::stdin();
-    let mut stdout = io::stdout();
-
-    write!(stdout, "Press enter to continue...").unwrap();
-    stdout.flush().unwrap();
-
-    // Read a single byte and discard
-    let _ = stdin.read(&mut [0u8]).unwrap();
-}
-
 fn reg_index_to_abi_name(index: usize) -> String {
     match index {
-	0 => format!("zero"),
-	1 => format!("ra (return address)"),
-	2 => format!("sp (stack pointer)"),
-	3 => format!("gp (global pointer)"),
-	4 => format!("tp (thread_pointer)"),
+	0 => "zero".to_string(),
+	1 => "ra (return address)".to_string(),
+	2 => "sp (stack pointer)".to_string(),
+	3 => "gp (global pointer)".to_string(),
+	4 => "tp (thread_pointer)".to_string(),
 	5..=7 => format!("t{} (temporary)", index-5),
-	8 => format!("s0/fp (saved register/frame pointer)"),
-	9 => format!("s1 (saved register)"),
+	8 => "s0/fp (saved register/frame pointer)".to_string(),
+	9 => "s1 (saved register)".to_string(),
 	10..=11 => format!("a{} (function arg/return value)", index-10),
 	12..=17 => format!("a{} (function arg)", index-10),
 	18..=27 => format!("s{} (saved register)", index-18),
@@ -39,52 +26,14 @@ fn reg_index_to_abi_name(index: usize) -> String {
     }
 }
 
-fn print_nonzero_registers(hart: &Hart) {
-    for n in 0..32 {
-	let value = hart.registers.read(n).unwrap();
-	if value != 0 {
-	    let reg_abi_name = reg_index_to_abi_name(n);
-	    println!("{reg_abi_name}: 0x{value:x}");
-	}
-    }
-}
-
 fn main() -> io::Result<()> {
 
     let mut hart = Hart::default();
-    let elf_name = format!("c/hello.out");
+    let elf_name = "c/hello.out".to_string();
 
     // Load text section at 0 offset
     load_elf(&mut hart, &elf_name);
 
-    let debug = true;
-
-    /*
-    for _ in 0..10000 {
-	let pc = hart.pc;
-	let instr = hart.memory.read(pc.into(), Wordsize::Word).unwrap();
-	let instr = Instr::from(instr.try_into().unwrap());
-
-	if debug {
-	    println!("\nCurrent state of hart:");
-	    //println!("{:x?}\n", hart);
-	    print_nonzero_registers(&hart);
-	    println!("\nCurrent pc = 0x{pc:x}");
-	    println!("Next instruction: {:x?}", instr);
-	    press_enter_to_continue();
-	    print!("Executing instruction now... ");
-
-	}
-	if let Err(e) = hart.step() {
-	    println!("trap: {e} at instruction pc={:x}", hart.pc);
-	    break;
-	} else {
-	    if debug {
-		println!("done (no trap)");
-	    }
-	}
-    }
-    */
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
@@ -179,7 +128,7 @@ fn ui(frame: &mut Frame, hart: &mut Hart, hart_stdout: &mut String) {
 
     let pc = hart.pc;
     let instr = hart.memory.read(pc.into(), Wordsize::Word).unwrap();
-    let instr = Rv32i::from(instr.try_into().unwrap());
+    //let instr = Rv32i::from(instr.try_into().unwrap());
     hart_stdout.push_str(&hart.memory.flush_stdout());
 	
     let lines = vec![
@@ -235,3 +184,16 @@ fn ui(frame: &mut Frame, hart: &mut Hart, hart_stdout: &mut String) {
 	inner_layout[1],
     );
 }
+
+/*
+fn press_enter_to_continue() {
+    let mut stdin = io::stdin();
+    let mut stdout = io::stdout();
+
+    write!(stdout, "Press enter to continue...").unwrap();
+    stdout.flush().unwrap();
+
+    // Read a single byte and discard
+    let _ = stdin.read(&mut [0u8]).unwrap();
+}
+*/

@@ -11,16 +11,15 @@
 //! specification version 20191213
 
 use crate::{
-    hart::{memory::Wordsize, next_instruction_address, sign_extend, ExecutionError, Hart},
+    hart::{memory::Wordsize, next_instruction_address, ExecutionError, Hart},
     instr_type::{decode_rtype, decode_stype, Rtype},
 };
 
-use super::{
-    instr_type::{decode_btype, decode_itype, decode_jtype, decode_utype, Itype, SBtype, UJtype},
-    rv32i::Branch,
+use super::instr_type::{
+    decode_btype, decode_itype, decode_jtype, decode_utype, Itype, SBtype, UJtype,
 };
 
-use super::fields::*;
+use crate::fields::{interpret_i32_as_unsigned, interpret_u32_as_signed, sign_extend};
 
 /// Load upper immediate in 32-bit mode
 ///
@@ -102,26 +101,27 @@ fn get_branch_data(hart: &Hart, instr: u32) -> Result<(u32, u32, u16), Execution
     Ok((src1, src2, offset))
 }
 
-fn do_branch(hart: &mut Hart, branch_taken: bool, offset: u16) {
+fn do_branch(hart: &mut Hart, branch_taken: bool, offset: u16) -> Result<(), ExecutionError> {
     if branch_taken {
         let relative_address = sign_extend(offset, 11);
-        hart.jump_relative_to_pc(relative_address);
+        hart.jump_relative_to_pc(relative_address)
     } else {
         hart.increment_pc();
+	Ok(())
     }
 }
 
 pub fn execute_beq_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src1, src2, offset) = get_branch_data(hart, instr)?;
     let branch_taken = src1 == src2;
-    do_branch(hart, branch_taken, offset);
+    do_branch(hart, branch_taken, offset)?;
     Ok(())
 }
 
 pub fn execute_bne_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src1, src2, offset) = get_branch_data(hart, instr)?;
     let branch_taken = src1 != src2;
-    do_branch(hart, branch_taken, offset);
+    do_branch(hart, branch_taken, offset)?;
     Ok(())
 }
 
@@ -132,7 +132,7 @@ pub fn execute_blt_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
         let src2: i32 = interpret_u32_as_signed!(src2);
         src1 < src2
     };
-    do_branch(hart, branch_taken, offset);
+    do_branch(hart, branch_taken, offset)?;
     Ok(())
 }
 
@@ -143,21 +143,21 @@ pub fn execute_bge_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
         let src2: i32 = interpret_u32_as_signed!(src2);
         src1 >= src2
     };
-    do_branch(hart, branch_taken, offset);
+    do_branch(hart, branch_taken, offset)?;
     Ok(())
 }
 
 pub fn execute_bltu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src1, src2, offset) = get_branch_data(hart, instr)?;
     let branch_taken = src1 < src2;
-    do_branch(hart, branch_taken, offset);
+    do_branch(hart, branch_taken, offset)?;
     Ok(())
 }
 
 pub fn execute_bgeu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src1, src2, offset) = get_branch_data(hart, instr)?;
     let branch_taken = src1 >= src2;
-    do_branch(hart, branch_taken, offset);
+    do_branch(hart, branch_taken, offset)?;
     Ok(())
 }
 
@@ -457,7 +457,7 @@ pub fn execute_sltu_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionEr
 
 pub fn execute_and_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
-    let value = (src1 & src2) as u32;
+    let value = src1 & src2;
     hart.set_x(dest, value)?;
     hart.increment_pc();
     Ok(())
@@ -465,7 +465,7 @@ pub fn execute_and_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
 
 pub fn execute_or_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
-    let value = (src1 | src2) as u32;
+    let value = src1 | src2;
     hart.set_x(dest, value)?;
     hart.increment_pc();
     Ok(())
@@ -473,7 +473,7 @@ pub fn execute_or_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErro
 
 pub fn execute_xor_rv32i(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
-    let value = (src1 ^ src2) as u32;
+    let value = src1 ^ src2;
     hart.set_x(dest, value)?;
     hart.increment_pc();
     Ok(())

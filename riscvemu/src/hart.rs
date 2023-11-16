@@ -7,13 +7,14 @@ use self::{
 
 use crate::{
     decode::{Decoder, DecoderError},
-    fields::*,
     rv32i::make_rv32i,
 };
 use thiserror::Error;
 
 pub mod memory;
 pub mod registers;
+
+use crate::fields::mask;
 
 /// Calculate the address of the next instruction by adding
 /// four to the program counter (wrapping if necessary) and
@@ -56,20 +57,6 @@ pub struct Hart {
     pub memory: Memory,
 }
 
-/// Take an unsigned value (u8, u16 or u32), and a bit position for the
-/// sign bit, and copy the value of the sign bit into all the higher bits
-/// of the u32.
-pub fn sign_extend<T: Into<u32>>(value: T, sign_bit_position: u32) -> u32 {
-    let value: u32 = value.into();
-    let sign_bit = 1 & (value >> sign_bit_position);
-    if sign_bit == 1 {
-        let sign_extension = 0xffff_ffff - mask!(sign_bit_position);
-        value | sign_extension
-    } else {
-        value
-    }
-}
-
 /// Check that an address is aligned to a byte_boundary specified.
 /// Return address-misaligned if not.
 pub fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), ExecutionError> {
@@ -80,222 +67,6 @@ pub fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), Ex
         Ok(())
     }
 }
-
-/// Load upper immediate in 32-bit mode
-///
-/// Load the u_immediate into the upper 12 bits of the register
-/// dest and fill the lower 20 bits with zeros. Set pc = pc + 4.
-///
-// fn execute_lui_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
-//     hart.set_x(dest, u_immediate << 12)?;
-//     hart.increment_pc();
-//     Ok(())
-// }
-
-/// Add upper immediate to program counter in 32-bit mode
-///
-/// Make a 32-bit value by setting its upper 12 bits to
-/// u_immediate and its lower 20 bits to zero, and add
-/// the current value of the program counter. Store the
-/// result in the register dest. Set pc = pc + 4.
-///
-// fn execute_auipc_rv32i(hart: &mut Hart, dest: u8, u_immediate: u32) -> Result<(), ExecutionError> {
-//     let value = hart.pc.wrapping_add(u_immediate << 12);
-//     hart.set_x(dest, value).unwrap();
-//     hart.increment_pc();
-//     Ok(())
-// }
-
-/*
-
-/// Jump and link register in 32-bit mode
-///
-/// Store the address of the next instruction (pc + 4) in
-/// the register dest. Then compute base + offset, set the
-/// least significant bit to zero, and set the pc to the
-/// result.
-fn execute_jalr_rv32i(
-    hart: &mut Hart,
-    dest: u8,
-    base: u8,
-    offset: u16,
-) -> Result<(), ExecutionError> {
-    let return_address = next_instruction_address(hart.pc);
-    hart.set_x(dest, return_address)?;
-    let relative_address = sign_extend(offset, 11);
-    let base_address = hart.x(base)?;
-    let new_pc = 0xffff_fffe & base_address.wrapping_add(relative_address);
-    hart.jump_to_address(new_pc)
-}
-
-/// Execute a load instruction in 32-bit mode
-///
-/// Compute a load address by adding the register base to the
-/// sign-extended offset, and load data at that address into
-/// dest. The width of the loaded data, and whether to sign-
-/// or zero-extend the result is determined by mnemonic.
-fn execute_load_rv32i(
-    hart: &mut Hart,
-    mnemonic: Load,
-    dest: u8,
-    base: u8,
-    offset: u16,
-) -> Result<(), ExecutionError> {
-    let base_address = hart.x(base)?;
-    let offset = sign_extend(offset, 11);
-    let load_address = base_address.wrapping_add(offset);
-    let load_data = match mnemonic {
-        Load::Lb => sign_extend(
-            u32::try_from(
-                hart.memory
-                    .read(load_address.into(), Wordsize::Byte)
-                    .unwrap(),
-            )
-            .unwrap(),
-            7,
-        ),
-        Load::Lh => sign_extend(
-            u32::try_from(
-                hart.memory
-                    .read(load_address.into(), Wordsize::Halfword)
-                    .unwrap(),
-            )
-            .unwrap(),
-            15,
-        ),
-        Load::Lw => hart
-            .memory
-            .read(load_address.into(), Wordsize::Word)
-            .unwrap()
-            .try_into()
-            .unwrap(),
-        Load::Lbu => hart
-            .memory
-            .read(load_address.into(), Wordsize::Byte)
-            .unwrap()
-            .try_into()
-            .unwrap(),
-        Load::Lhu => hart
-            .memory
-            .read(load_address.into(), Wordsize::Halfword)
-            .unwrap()
-            .try_into()
-            .unwrap(),
-    };
-    hart.set_x(dest, load_data)?;
-    hart.increment_pc();
-    Ok(())
-}
-
-/// Execute a store instruction in 32-bit mode
-///
-/// Compute a store address by adding the register base to the
-/// sign-extended offset, and write data to that address from
-/// dest. The width of the data to write is determined by the
-/// mnemonic
-fn execute_store_rv32i(
-    hart: &mut Hart,
-    mnemonic: Store,
-    src: u8,
-    base: u8,
-    offset: u16,
-) -> Result<(), ExecutionError> {
-    let base_address = hart.x(base)?;
-    let offset = sign_extend(offset, 11);
-    let store_address = base_address.wrapping_add(offset);
-    let store_data = hart.x(src)?;
-    match mnemonic {
-        Store::Sb => hart
-            .memory
-            .write(store_address.into(), store_data.into(), Wordsize::Byte)
-            .unwrap(),
-        Store::Sh => hart
-            .memory
-            .write(store_address.into(), store_data.into(), Wordsize::Halfword)
-            .unwrap(),
-        Store::Sw => hart
-            .memory
-            .write(store_address.into(), store_data.into(), Wordsize::Word)
-            .unwrap(),
-    };
-    hart.increment_pc();
-    Ok(())
-}
-
-/// Execute a register-immediate operation in 32-bit mode
-///
-/// Compute an operation determined by the mnemonic between the
-/// register src and the sign-extended value of i_immediate.
-/// Place the result in the register dest.
-fn execute_reg_imm_rv32i(
-    hart: &mut Hart,
-    mnemonic: RegImm,
-    dest: u8,
-    src: u8,
-    i_immediate: u16,
-) -> Result<(), ExecutionError> {
-    let src: u32 = hart.x(src)?;
-    let i_immediate = sign_extend(i_immediate, 11);
-    let value = match mnemonic {
-        RegImm::Addi => src.wrapping_add(i_immediate),
-        RegImm::Slti => {
-            let src: i32 = interpret_u32_as_signed!(src);
-            let i_immediate: i32 = interpret_u32_as_signed!(i_immediate);
-            (src < i_immediate) as u32
-        }
-        RegImm::Sltiu => (src < i_immediate) as u32,
-        RegImm::Andi => src & i_immediate,
-        RegImm::Ori => src | i_immediate,
-        RegImm::Xori => src ^ i_immediate,
-        RegImm::Slli => src << (0x1f & i_immediate),
-        RegImm::Srli => src >> (0x1f & i_immediate),
-        RegImm::Srai => {
-            let src: i32 = interpret_u32_as_signed!(src);
-            interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
-        }
-    };
-    hart.set_x(dest, value)?;
-    hart.increment_pc();
-    Ok(())
-}
-
-/// Execute a register-register operation in 32-bit mode
-///
-/// Compute an operation determined by the mnemonic between the
-/// registers src1 and src2. Place the result in the register dest.
-fn execute_reg_reg_rv32i(
-    hart: &mut Hart,
-    mnemonic: RegReg,
-    dest: u8,
-    src1: u8,
-    src2: u8,
-) -> Result<(), ExecutionError> {
-    let src1: u32 = hart.x(src1)?;
-    let src2: u32 = hart.x(src2)?;
-    let value = match mnemonic {
-        RegReg::Add => src1.wrapping_add(src2),
-        RegReg::Sub => src1.wrapping_sub(src2),
-        RegReg::Slt => {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
-            (src1 < src2) as u32
-        }
-        RegReg::Sltu => (src1 < src2) as u32,
-        RegReg::And => src1 & src2,
-        RegReg::Or => src1 | src2,
-        RegReg::Xor => src1 ^ src2,
-        RegReg::Sll => src1 << (0x1f & src2),
-        RegReg::Srl => src1 >> (0x1f & src2),
-        RegReg::Sra => {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
-        }
-    };
-    hart.set_x(dest, value)?;
-    hart.increment_pc();
-    Ok(())
-}
- */
 
 #[derive(Error, Debug)]
 pub enum RegisterError {
@@ -370,55 +141,6 @@ impl Hart {
         Ok(value)
     }
 
-    /*
-    fn execute(&mut self, instr: Instr32) -> Result<(), ExecutionError> {
-        match instr.clone() {
-            Instr32::Rv32i(rv32i_instr) => {
-                match rv32i_instr {
-                    Rv32i::Lui { dest, u_immediate } => execute_lui_rv32i(self, dest, u_immediate)?,
-                    Rv32i::Auipc { dest, u_immediate } => {
-                        execute_auipc_rv32i(self, dest, u_immediate)?
-                    }
-                    Rv32i::Jal { dest, offset } => execute_jal_rv32i(self, dest, offset)?,
-                    Rv32i::Jalr { dest, base, offset } => {
-                        execute_jalr_rv32i(self, dest, base, offset)?
-                    }
-                    Rv32i::Branch {
-                        mnemonic,
-                        src1,
-                        src2,
-                        offset,
-                    } => execute_branch_rv32i(self, mnemonic, src1, src2, offset)?,
-                    Rv32i::Load {
-                        mnemonic,
-                        dest,
-                        base,
-                        offset,
-                    } => execute_load_rv32i(self, mnemonic, dest, base, offset)?,
-                    Rv32i::Store {
-                        mnemonic,
-                        src,
-                        base,
-                        offset,
-                    } => execute_store_rv32i(self, mnemonic, src, base, offset)?,
-                    Rv32i::RegImm {
-                        mnemonic,
-                        dest,
-                        src,
-                        i_immediate,
-                    } => execute_reg_imm_rv32i(self, mnemonic, dest, src, i_immediate)?,
-                    Rv32i::RegReg {
-                        mnemonic,
-                        dest,
-                        src1,
-                        src2,
-                    } => execute_reg_reg_rv32i(self, mnemonic, dest, src1, src2)?,
-                }
-                Ok(())
-            }
-        }
-    }
-     */
     /// Returns the instruction at the current program counter
     pub fn fetch_current_instruction(&mut self) -> u32 {
         self.read_memory(self.pc, Wordsize::Word)
