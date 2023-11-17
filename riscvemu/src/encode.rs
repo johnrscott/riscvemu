@@ -74,7 +74,7 @@ pub use reg_num;
 #[macro_export]
 macro_rules! imm_as_u32 {
     ($imm:expr) => {{
-        let imm_as_u32: u32 = unsafe { std::mem::transmute($imm) };
+        let imm_as_u32 = u32::from_ne_bytes(i32::from($imm).to_ne_bytes());
         imm_as_u32
     }};
 }

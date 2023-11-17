@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 pub mod decode;
 pub mod elf_utils;
 pub mod encode;
