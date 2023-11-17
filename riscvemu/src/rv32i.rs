@@ -6,7 +6,7 @@
 
 use crate::{
     decode::{Decoder, DecoderError, MaskWithValue},
-    exec::{
+    rv32i::exec::{
         execute_add_rv32i, execute_addi_rv32i, execute_and_rv32i, execute_andi_rv32i,
         execute_auipc_rv32i, execute_beq_rv32i, execute_bge_rv32i, execute_bgeu_rv32i,
         execute_blt_rv32i, execute_bltu_rv32i, execute_bne_rv32i, execute_jal_rv32i,
@@ -31,6 +31,8 @@ use crate::{
         OP_STORE,
     },
 };
+
+mod exec;
 
 pub type Exec32 = fn(&mut Hart, u32) -> Result<(), ExecutionError>;
 
@@ -205,7 +207,7 @@ pub enum Rv32i {
 }
 */
 
-fn opcode_determined(
+pub fn opcode_determined(
     decoder: &mut Decoder<Exec32>,
     opcode: u32,
     exec: Exec32,
@@ -217,7 +219,7 @@ fn opcode_determined(
     decoder.push_instruction(masks_with_values, exec)
 }
 
-fn opcode_funct3_determined(
+pub fn opcode_funct3_determined(
     decoder: &mut Decoder<Exec32>,
     opcode: u32,
     funct3: u32,
@@ -238,7 +240,7 @@ fn opcode_funct3_determined(
 
 /// This also covers the shift instructions which use a special version
 /// if I-type.
-fn opcode_funct3_funct7_determined(
+pub fn opcode_funct3_funct7_determined(
     decoder: &mut Decoder<Exec32>,
     opcode: u32,
     funct3: u32,

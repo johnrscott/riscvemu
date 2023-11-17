@@ -2,7 +2,7 @@ use self::{
     memory::{ReadError, Wordsize},
     registers::Registers,
 };
-use crate::fields::mask;
+use crate::{fields::mask, rv32m::make_rv32m};
 use crate::{
     decode::{Decoder, DecoderError},
     rv32i::{make_rv32i, Exec32},
@@ -59,6 +59,7 @@ impl Default for Hart {
         };
 
         make_rv32i(&mut hart.decoder).expect("adding these instructions should work");
+        make_rv32m(&mut hart.decoder).expect("adding these instructions should work");
         hart
     }
 }
@@ -1018,4 +1019,96 @@ mod tests {
         assert_eq!(hart.pc, 4);
         Ok(())
     }
+
+    #[test]
+    fn check_mul() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, mul!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 5).unwrap();
+        hart.registers.write(3, interpret_i32_as_unsigned!(-4).into()).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, interpret_i32_as_unsigned!(-20).into());
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_mulh_positive() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, mulh!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0x7fff_ffff).unwrap();
+        hart.registers.write(3, 4).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 1);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_mulh_negative() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, mulh!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xffff_ffff).unwrap();
+        hart.registers.write(3, 4).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0xffff_ffff);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    
+    #[test]
+    fn check_mulhu() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, mulhu!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xffff_ffff).unwrap();
+        hart.registers.write(3, 4).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 3);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_mulhsu_1() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, mulhsu!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xffff_ffff).unwrap();
+        hart.registers.write(3, 4).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0xffff_ffff);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_mulhsu_2() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, mulhsu!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 4).unwrap();
+        hart.registers.write(3, 0xffff_ffff).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 3);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+    
 }

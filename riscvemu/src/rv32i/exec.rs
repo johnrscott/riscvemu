@@ -15,7 +15,7 @@ use crate::{
     instr_type::{decode_rtype, decode_stype, Rtype},
 };
 
-use super::instr_type::{
+use crate::instr_type::{
     decode_btype, decode_itype, decode_jtype, decode_utype, Itype, SBtype, UJtype,
 };
 
