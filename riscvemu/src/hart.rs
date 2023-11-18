@@ -1110,5 +1110,81 @@ mod tests {
         assert_eq!(hart.pc, 4);
         Ok(())
     }
+
+    #[test]
+    fn check_div() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, div!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 6).unwrap();
+        hart.registers.write(3, interpret_i32_as_unsigned!(-3).into()).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, interpret_i32_as_unsigned!(-2).into());
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_div_round_towards_zero() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, div!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 10).unwrap();
+        hart.registers.write(3, interpret_i32_as_unsigned!(-3).into()).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, interpret_i32_as_unsigned!(-3).into());
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_divu() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, divu!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xe000_0000).unwrap();
+        hart.registers.write(3, 2).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 0x7000_0000);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_rem() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, rem!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, interpret_i32_as_unsigned!(-10).into()).unwrap();
+        hart.registers.write(3, 3).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, interpret_i32_as_unsigned!(-1).into());
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn check_remu() -> Result<(), &'static str> {
+        let mut hart = Hart::default();
+        hart.memory
+            .write(0, remu!(x1, x2, x3).into(), Wordsize::Word)
+            .unwrap();
+        hart.registers.write(2, 0xe000_0003).unwrap();
+        hart.registers.write(3, 2).unwrap();
+        hart.step().unwrap();
+        let x1 = hart.registers.read(1).unwrap();
+        assert_eq!(x1, 1);
+        assert_eq!(hart.pc, 4);
+        Ok(())
+    }
+    
     
 }

@@ -61,17 +61,41 @@ pub fn execute_mulhu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionE
 }
 
 pub fn execute_div_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
-    unimplemented!("div");
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = {
+	let src1: i32 = interpret_u32_as_signed!(src1);
+        let src2: i32 = interpret_u32_as_signed!(src2);
+        src1.wrapping_div(src2) as u32
+    };
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())    
 }
 
 pub fn execute_divu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
-    unimplemented!("divu");
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = src1.wrapping_div(src2);
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())    
 }
 
 pub fn execute_rem_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
-    unimplemented!("rem");
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = {
+	let src1: i32 = interpret_u32_as_signed!(src1);
+        let src2: i32 = interpret_u32_as_signed!(src2);
+        src1.wrapping_rem(src2) as u32
+    };
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
 }
 
 pub fn execute_remu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
-    unimplemented!("remu");
+    let (src1, src2, dest) = reg_reg_values(hart, instr)?;
+    let value = src1.wrapping_rem(src2);
+    hart.set_x(dest, value)?;
+    hart.increment_pc();
+    Ok(())
 }
