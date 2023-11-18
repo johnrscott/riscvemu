@@ -1,5 +1,5 @@
 use riscvemu::{decode::Decoder, rv32i::make_rv32i, rv32m::make_rv32m, hart::Hart, elf_utils::load_elf};
-    use std::time::{Instant, Duration};
+use std::time::Instant;
 
 fn main() {
     
@@ -27,5 +27,4 @@ fn main() {
     
     let time_per_instruction = elapsed / total;
     println!("Time per instruction: {time_per_instruction:.2?}");
-
 }

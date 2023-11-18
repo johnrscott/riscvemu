@@ -52,7 +52,7 @@ pub enum Xlen {
 pub struct Memory {
     xlen: Xlen,
     data: HashMap<u64, u8>,
-    pub stdout: Queue<char>,
+    stdout: Queue<char>,
 }
 
 #[derive(Error, PartialEq, Eq, Debug)]
