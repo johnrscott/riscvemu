@@ -65,6 +65,8 @@ pub fn execute_div_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
     let value = {
 	let src1: i32 = interpret_u32_as_signed!(src1);
         let src2: i32 = interpret_u32_as_signed!(src2);
+	// Put wrapping_div for consistency, but not sure what
+	// wrapping div means for ints (same comment for rem)
         src1.wrapping_div(src2) as u32
     };
     hart.set_x(dest, value)?;

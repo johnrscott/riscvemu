@@ -121,6 +121,14 @@ pub struct Decoder<F: Copy> {
     value_map: HashMap<u32, NextStep<F>>,
 }
 
+impl<F: Copy> Default for Decoder<F> {
+    /// Implements a default decoder whose root mask is
+    /// the RISC-V opcode field
+    fn default() -> Self {
+	Self::new(0x7f)
+    }
+}
+
 impl<F: Copy> Decoder<F> {
     pub fn new(mask: u32) -> Self {
         Self {

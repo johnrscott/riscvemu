@@ -59,12 +59,18 @@ impl Default for Hart {
         };
 
         make_rv32i(&mut hart.decoder).expect("adding these instructions should work");
-        make_rv32m(&mut hart.decoder).expect("adding these instructions should work");
         hart
     }
 }
 
 impl Hart {
+
+    pub fn new(decoder: Decoder<Exec32>) -> Self {
+	Self {
+	    decoder, ..Self::default()
+	}
+    }
+
     /// Read the value of the register xn
     pub fn x(&self, n: u8) -> Result<u32, RegisterError> {
         if n < 32 {
