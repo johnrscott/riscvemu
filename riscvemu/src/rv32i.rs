@@ -248,13 +248,11 @@ pub fn opcode_funct3_funct7_determined(
     exec: Exec32,
 ) -> Result<(), DecoderError> {
     let masks_with_values = vec![
+	// funct3/funct7 combined into one step -- might be OK,
+	// the decoder will complain if it is ambiguous
         MaskWithValue {
-            mask: (mask!(7)) << 25,
-            value: funct7 << 25,
-        },
-        MaskWithValue {
-            mask: (mask!(3)) << 12,
-            value: funct3 << 12,
+            mask: ((mask!(7)) << 25) | ((mask!(3)) << 12),
+            value: (funct7 << 25) | (funct3 << 12),
         },
         MaskWithValue {
             mask: mask!(7),

@@ -13,18 +13,19 @@ fn main() {
     let elf_name = "c/hello.out".to_string();
     load_elf(&mut hart, &elf_name);
 
-    let now = Instant::now();
-
     let total = 1_000_000;
     println!("Executing {total} instructions");
+
+    let now = Instant::now();
     for _ in 0..total {
 	hart.step().unwrap();
     }
+    let elapsed = now.elapsed();
     
     let hart_stdout = hart.memory.flush_stdout();
     println!("Hart stdout: {hart_stdout}");
     
-    let time_per_instruction = now.elapsed() / total;
+    let time_per_instruction = elapsed / total;
     println!("Time per instruction: {time_per_instruction:.2?}");
 
 }
