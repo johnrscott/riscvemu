@@ -1198,6 +1198,4 @@ mod tests {
         assert_eq!(hart.pc, 4);
         Ok(())
     }
-    
-    
 }
