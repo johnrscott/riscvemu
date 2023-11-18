@@ -2,7 +2,7 @@ use self::{
     memory::{ReadError, Wordsize},
     registers::Registers,
 };
-use crate::{fields::mask, rv32m::make_rv32m};
+use crate::fields::mask;
 use crate::{
     decode::{Decoder, DecoderError},
     rv32i::{make_rv32i, Exec32},
@@ -223,8 +223,8 @@ impl From<ExecutionError> for Trap {
 mod tests {
 
     use super::*;
-    use crate::encode::*;
-
+    use crate::{encode::*, rv32m::make_rv32m};
+    
     #[test]
     fn check_lui() -> Result<(), &'static str> {
         // Check a basic case of lui (result should be placed in
@@ -1026,9 +1026,16 @@ mod tests {
         Ok(())
     }
 
+    fn rv32im_hart() -> Hart {
+	let mut decoder = Decoder::default();
+	make_rv32i(&mut decoder).expect("adding instructions should work");
+	make_rv32m(&mut decoder).expect("adding instructions should work");
+	Hart::new(decoder)
+    }
+    
     #[test]
     fn check_mul() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, mul!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1043,7 +1050,7 @@ mod tests {
 
     #[test]
     fn check_mulh_positive() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, mulh!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1058,7 +1065,7 @@ mod tests {
 
     #[test]
     fn check_mulh_negative() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, mulh!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1074,7 +1081,7 @@ mod tests {
     
     #[test]
     fn check_mulhu() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, mulhu!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1089,7 +1096,7 @@ mod tests {
 
     #[test]
     fn check_mulhsu_1() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, mulhsu!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1104,7 +1111,7 @@ mod tests {
 
     #[test]
     fn check_mulhsu_2() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, mulhsu!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1119,7 +1126,7 @@ mod tests {
 
     #[test]
     fn check_div() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, div!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1134,7 +1141,7 @@ mod tests {
 
     #[test]
     fn check_div_round_towards_zero() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, div!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1149,7 +1156,7 @@ mod tests {
 
     #[test]
     fn check_divu() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, divu!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1164,7 +1171,7 @@ mod tests {
 
     #[test]
     fn check_rem() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, rem!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
@@ -1179,7 +1186,7 @@ mod tests {
 
     #[test]
     fn check_remu() -> Result<(), &'static str> {
-        let mut hart = Hart::default();
+        let mut hart = rv32im_hart();
         hart.memory
             .write(0, remu!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
