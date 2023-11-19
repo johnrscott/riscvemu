@@ -10,6 +10,7 @@ use crate::{
 use memory::Memory;
 use thiserror::Error;
 
+pub mod csr;
 pub mod memory;
 pub mod registers;
 
@@ -64,11 +65,11 @@ impl Default for Hart {
 }
 
 impl Hart {
-
     pub fn new(decoder: Decoder<Exec32>) -> Self {
-	Self {
-	    decoder, ..Self::default()
-	}
+        Self {
+            decoder,
+            ..Self::default()
+        }
     }
 
     /// Read the value of the register xn
@@ -147,7 +148,7 @@ impl Hart {
         let instr = self.fetch_current_instruction();
         let exec_fn = self.decoder.get_exec(instr)?;
         exec_fn(self, instr)?;
-	Ok(())
+        Ok(())
     }
 }
 
@@ -224,7 +225,7 @@ mod tests {
 
     use super::*;
     use crate::{encode::*, rv32m::make_rv32m};
-    
+
     #[test]
     fn check_lui() -> Result<(), &'static str> {
         // Check a basic case of lui (result should be placed in
@@ -1027,12 +1028,12 @@ mod tests {
     }
 
     fn rv32im_hart() -> Hart {
-	let mut decoder = Decoder::default();
-	make_rv32i(&mut decoder).expect("adding instructions should work");
-	make_rv32m(&mut decoder).expect("adding instructions should work");
-	Hart::new(decoder)
+        let mut decoder = Decoder::default();
+        make_rv32i(&mut decoder).expect("adding instructions should work");
+        make_rv32m(&mut decoder).expect("adding instructions should work");
+        Hart::new(decoder)
     }
-    
+
     #[test]
     fn check_mul() -> Result<(), &'static str> {
         let mut hart = rv32im_hart();
@@ -1040,7 +1041,9 @@ mod tests {
             .write(0, mul!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
         hart.registers.write(2, 5).unwrap();
-        hart.registers.write(3, interpret_i32_as_unsigned!(-4).into()).unwrap();
+        hart.registers
+            .write(3, interpret_i32_as_unsigned!(-4).into())
+            .unwrap();
         hart.step().unwrap();
         let x1 = hart.registers.read(1).unwrap();
         assert_eq!(x1, interpret_i32_as_unsigned!(-20).into());
@@ -1078,7 +1081,6 @@ mod tests {
         Ok(())
     }
 
-    
     #[test]
     fn check_mulhu() -> Result<(), &'static str> {
         let mut hart = rv32im_hart();
@@ -1131,7 +1133,9 @@ mod tests {
             .write(0, div!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
         hart.registers.write(2, 6).unwrap();
-        hart.registers.write(3, interpret_i32_as_unsigned!(-3).into()).unwrap();
+        hart.registers
+            .write(3, interpret_i32_as_unsigned!(-3).into())
+            .unwrap();
         hart.step().unwrap();
         let x1 = hart.registers.read(1).unwrap();
         assert_eq!(x1, interpret_i32_as_unsigned!(-2).into());
@@ -1146,7 +1150,9 @@ mod tests {
             .write(0, div!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
         hart.registers.write(2, 10).unwrap();
-        hart.registers.write(3, interpret_i32_as_unsigned!(-3).into()).unwrap();
+        hart.registers
+            .write(3, interpret_i32_as_unsigned!(-3).into())
+            .unwrap();
         hart.step().unwrap();
         let x1 = hart.registers.read(1).unwrap();
         assert_eq!(x1, interpret_i32_as_unsigned!(-3).into());
@@ -1175,7 +1181,9 @@ mod tests {
         hart.memory
             .write(0, rem!(x1, x2, x3).into(), Wordsize::Word)
             .unwrap();
-        hart.registers.write(2, interpret_i32_as_unsigned!(-10).into()).unwrap();
+        hart.registers
+            .write(2, interpret_i32_as_unsigned!(-10).into())
+            .unwrap();
         hart.registers.write(3, 3).unwrap();
         hart.step().unwrap();
         let x1 = hart.registers.read(1).unwrap();

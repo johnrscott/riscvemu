@@ -6,18 +6,6 @@
 
 use crate::{
     decode::{Decoder, DecoderError, MaskWithValue},
-    rv32i::exec::{
-        execute_add_rv32i, execute_addi_rv32i, execute_and_rv32i, execute_andi_rv32i,
-        execute_auipc_rv32i, execute_beq_rv32i, execute_bge_rv32i, execute_bgeu_rv32i,
-        execute_blt_rv32i, execute_bltu_rv32i, execute_bne_rv32i, execute_jal_rv32i,
-        execute_jalr_rv32i, execute_lb_rv32i, execute_lbu_rv32i, execute_lh_rv32i,
-        execute_lhu_rv32i, execute_lui_rv32i, execute_lw_rv32i, execute_or_rv32i,
-        execute_ori_rv32i, execute_sb_rv32i, execute_sh_rv32i, execute_sll_rv32i,
-        execute_slli_rv32i, execute_slt_rv32i, execute_slti_rv32i, execute_sltiu_rv32i,
-        execute_sltu_rv32i, execute_sra_rv32i, execute_srai_rv32i, execute_srl_rv32i,
-        execute_srli_rv32i, execute_sub_rv32i, execute_sw_rv32i, execute_xor_rv32i,
-        execute_xori_rv32i,
-    },
     hart::{ExecutionError, Hart},
     mask,
     opcodes::{
@@ -29,6 +17,18 @@ use crate::{
         FUNCT7_SLLI, FUNCT7_SLT, FUNCT7_SLTU, FUNCT7_SRA, FUNCT7_SRAI, FUNCT7_SRL, FUNCT7_SRLI,
         FUNCT7_SUB, FUNCT7_XOR, OP, OP_AUIPC, OP_BRANCH, OP_IMM, OP_JAL, OP_JALR, OP_LOAD, OP_LUI,
         OP_STORE,
+    },
+    rv32i::exec::{
+        execute_add_rv32i, execute_addi_rv32i, execute_and_rv32i, execute_andi_rv32i,
+        execute_auipc_rv32i, execute_beq_rv32i, execute_bge_rv32i, execute_bgeu_rv32i,
+        execute_blt_rv32i, execute_bltu_rv32i, execute_bne_rv32i, execute_jal_rv32i,
+        execute_jalr_rv32i, execute_lb_rv32i, execute_lbu_rv32i, execute_lh_rv32i,
+        execute_lhu_rv32i, execute_lui_rv32i, execute_lw_rv32i, execute_or_rv32i,
+        execute_ori_rv32i, execute_sb_rv32i, execute_sh_rv32i, execute_sll_rv32i,
+        execute_slli_rv32i, execute_slt_rv32i, execute_slti_rv32i, execute_sltiu_rv32i,
+        execute_sltu_rv32i, execute_sra_rv32i, execute_srai_rv32i, execute_srl_rv32i,
+        execute_srli_rv32i, execute_sub_rv32i, execute_sw_rv32i, execute_xor_rv32i,
+        execute_xori_rv32i,
     },
 };
 

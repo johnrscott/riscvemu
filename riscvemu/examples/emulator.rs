@@ -1,8 +1,9 @@
-use riscvemu::{decode::Decoder, rv32i::make_rv32i, rv32m::make_rv32m, hart::Hart, elf_utils::load_elf};
+use riscvemu::{
+    decode::Decoder, elf_utils::load_elf, hart::Hart, rv32i::make_rv32i, rv32m::make_rv32m,
+};
 use std::time::Instant;
 
 fn main() {
-    
     // Make an RV32IM hart
     let mut decoder = Decoder::default();
     make_rv32i(&mut decoder).expect("adding instructions should work");
@@ -18,13 +19,13 @@ fn main() {
 
     let now = Instant::now();
     for _ in 0..total {
-	hart.step().unwrap();
+        hart.step().unwrap();
     }
     let elapsed = now.elapsed();
-    
+
     let hart_stdout = hart.memory.flush_stdout();
     println!("Hart stdout: {hart_stdout}");
-    
+
     let time_per_instruction = elapsed / total;
     println!("Time per instruction: {time_per_instruction:.2?}");
 }

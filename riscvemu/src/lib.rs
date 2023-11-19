@@ -9,3 +9,5 @@ pub mod instr_type;
 pub mod opcodes;
 pub mod rv32i;
 pub mod rv32m;
+
+pub mod utils;

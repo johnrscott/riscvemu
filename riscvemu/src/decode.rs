@@ -125,7 +125,7 @@ impl<F: Copy> Default for Decoder<F> {
     /// Implements a default decoder whose root mask is
     /// the RISC-V opcode field
     fn default() -> Self {
-	Self::new(0x7f)
+        Self::new(0x7f)
     }
 }
 
