@@ -53,4 +53,94 @@ impl Csr {
 }
 
 
-   
+// Machine-mode CSRs in 32-bit mode
+//
+// (Note: not all the CSRs are the same length in all modes. For example,
+// many registers are MXLEN long (32-bit or 64-bit), but mvendorid is always
+// 32-bit even in 64-bit mode.)
+//
+// misa: 32-bit, top two bits are 0b01 (for machine xlen 32-bit),
+// bottom 26 bits contain extensions (0b1100 for RV32IM; bit 8 is I,
+// bit 12 is M). So Register is 0x4000_1100. Value zero can also be
+// returned to indicate not implemented.
+//
+// mvendorid: 32-bit, contains the vendor ID (JEDEC). Value zero returned to
+// indicate register not implemented (or non-commercial implementation).
+//
+// marchid: 32-bit, specifies base microarchitecture. 
+//
+// mimpid: 32-bit, contains version of proessor implementation. Value zero
+// means not implemented.
+//
+// mhartid: 32-bit, unique id of hart running code. If there is only one
+// hart, this field is zero.
+//
+// mstatus(h): 32-bit machine status registers, mostly single bit
+// fields indicating and controlling the state of the current harts
+// operation.  mstatush is a 32-bit field containing a few extra
+// fields that do not fit into the 32-bit mstatus register. This is a
+// complex register due to the number of different behaviours relating
+// to each bit; see section 3.1.6 in the privileged specification.
+//
+// mtvec: 32-bit register storing the address of trap handlers, and
+// the mode (vectored or direct). May be implemented as read-only.
+//
+// medeleg/mideleg: do not exist if only M-mode is implemented (i.e.
+// there is no S-mode)
+//
+// mip: 32-bit register storing pending interrupts. Bits 15:0 are
+// standard interrupts defined in the specification, and 16 and above
+// are for platform/custom use. A pending interrupt is cleared
+// (i.e. after servicing the interrupt) by writing zero to the correct
+// bit. An interrupt will cause a trap if the MIE in mstatus is set.
+//
+// mie: 32-bit interrupt enable register, not used when only M-mode is
+// implemented (all interrupts are controlled by MIE in mstatus) (to
+// double check).
+//
+// mcycle(h): 64-bit, number of clock cycles executed by the processor on
+// which the hart is running. Power-on-reset value arbitrary, writable
+// with an arbitrary value. Written value takes effect after writing
+// instruction completes. In 32-bit mode, accessible as a low and high
+// 32-bit register.
+//
+// minstret(h): 64-bit, number of instructions retired by the
+// hart. Power-on-reset value arbitrary, writable with an arbitrary
+// value. Written value takes effect after writing instruction
+// completes. In 32-bit mode, accessible as a low and high
+// 32-bit register. 
+//
+// mhpmcounter[3-31](h): 29 additional 64-bit event counter; required, but
+// allowed to be read-only zero. In 32-bit mode, each 64-bit counter is
+// accessible as a low and high 32-bit register.
+//
+// mhpevent[3-31]: 29 32-bit registers specifying what events are
+// being counted by mhpmcounter* registers. Required, but allowed to
+// be read-only zero.
+//
+// mcounteren: 32-bit register, with one bit for each of the 32 performance
+// monitoring counters (including 
+//
+// mcounteren: 32-bit register to enable counters. Does not exist when only
+// M-mode is implemented (i.e. there is no U-mode).
+//
+// mcounterinhibit: 32-bit register used to disable counters. Not required
+// to be implemented.
+// 
+// mscratch: 32-bit read/write register for use by machine mode.
+//
+// mepc: 32-bit exception program counter. When a trap is taken to M-mode
+// (i.e. when any trap is taken), this register stores the address of the
+// instruction that encountered the trap.
+//
+// mcause: 32-bit register indicating the cause of the last event that
+// caused a trap. Contains a bit which is set if the last event was an
+// interrupt.
+//
+// mtval: 32-bit register to provide more information to a trap handler.
+// May be implemented as read-only zero.
+//
+// mconfigptr: 32-bit register pointing to a data structure with
+// information about the hart and the platform. May be implemented as
+// read-only zero to indicate that the structure does not exist.
+// 
