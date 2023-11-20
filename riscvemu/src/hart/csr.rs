@@ -17,9 +17,8 @@
 //! behaviour on read or write (this explanation ignores privilege,
 //! assuming only M-mode is implemented):
 //!
-//! - not-implemented CSR: some CSRs are optional; if they are not
-//!   implemented, an attempt to read or write results in illegal
-//!   instruction.
+//! - not-present CSR: some CSRs are optional; if they are not present,
+//!   an attempt to read or write results in illegal instruction.
 //! - fully read-only CSR: a whole CSR may be defined as read-only. Attempts
 //!   to write any portion of the register result in illegal instruction.
 //! - partial read-only CSR: if some bits (but not all bits) of a CSR are
@@ -28,7 +27,7 @@
 //!   to these fields without raising an exception.
 //! - read/write fields that are reserved (WPRI): implementations should
 //!   treat as read-only zero (a write is allowed, but has no effect).
-//! - read/write fields where only some values are legal: these come in
+//! - read/write fields where only some values are legal come in
 //!   two variants:
 //!   - WLRL means writes must be legal, otherwise non-legal may be
 //!     returned on next read (implementation may also raise illegal
@@ -38,9 +37,40 @@
 //!   - WARL means writes can be illegal values (no illegal instruction),
 //!     but a legal value will always be read. The legal value read after
 //!     an illegal write must depend deterministically on the illegal
-//!     value just written and the state of the hart.3+
+//!     value just written and the state of the hart (in particular,
+//!     it could be the previous legal value of the field?)
+//!
+//! Note that a field marked WPRI, a field marked WARL where the only
+//! legal value is 0, and a read-only zero field all have the same
+//! implementation (all allow writes and always return 0 when read).
+//!
+//! Most read/write instructions contain only one kind of field (WPRI,
+//! WARL, or WLRL).
+//!
+//! If a write to one CSR changes the set of legal values of fields in
+//! another CSR, the second CSR immediately adopts an unspecified
+//! value from its new set of legal values.
+//!
+//! This file implements the CSRs of a simple RISC-V microcontroller
+//! which only uses M-mode, and which uses only a minimal set of
+//! CSRs). These are defined below:
+//!
+//! misa: read/write; single legal value 0 always returned (WARL),
+//! meaning architecture is determined by non-standard means (it
+//! is rv32im_zicsr implementing M-mode only).
+//!
+//! mvendorid: read-only; returns 0 to indicate not implemented.
+//!
+//! marchid: read-only; returns 0 to indicate not implemented.
+//!
+//! mimpid: read-only; returns 0 to indicate not implemented.
+//! 
+//! mhartid: read-only; returns 0 to indicate hart 0.
+//!
+//! mstatus: read/write, containing both WPRI and WARL fields.
+//! 
 
-use crate::{extract_field, utils::extract_field};
+use crate::utils::extract_field;
 
 use super::memory::Memory;
 use thiserror::Error;
