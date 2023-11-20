@@ -5,6 +5,40 @@
 //! registers associated with each hart". These registers are mainly
 //! associated with various privileged mode operations.
 //!
+//! Instructions for reading/writing CSRs are defined in chapter 9
+//! (unprivileged spec v20191213), in the Zicsr extension. The
+//! six instructions defined there allow various combinations of
+//! reading/writing whole registers, or setting/clearing individual
+//! sets of bits.
+//!
+//! The CSR registers themselves are defined in the privileged
+//! specification. They are variable width, mapped at specific
+//! specification-defined addresses, and contain fields with different
+//! behaviour on read or write (this explanation ignores privilege,
+//! assuming only M-mode is implemented):
+//!
+//! - not-implemented CSR: some CSRs are optional; if they are not
+//!   implemented, an attempt to read or write results in illegal
+//!   instruction.
+//! - fully read-only CSR: a whole CSR may be defined as read-only. Attempts
+//!   to write any portion of the register result in illegal instruction.
+//! - partial read-only CSR: if some bits (but not all bits) of a CSR are
+//!   read-only, then writes to the read-only bits are ignored.
+//! - read/write fields that support any value: any value may be written
+//!   to these fields without raising an exception.
+//! - read/write fields that are reserved (WPRI): implementations should
+//!   treat as read-only zero (a write is allowed, but has no effect).
+//! - read/write fields where only some values are legal: these come in
+//!   two variants:
+//!   - WLRL means writes must be legal, otherwise non-legal may be
+//!     returned on next read (implementation may also raise illegal
+//!     instruction on the illegal write). The value returned on next
+//!     read must deterministically depend on last write/previous value
+//!     of CSR (in particular, it could be the illegal value just written?)
+//!   - WARL means writes can be illegal values (no illegal instruction),
+//!     but a legal value will always be read. The legal value read after
+//!     an illegal write must depend deterministically on the illegal
+//!     value just written and the state of the hart.3+
 
 use crate::{extract_field, utils::extract_field};
 
