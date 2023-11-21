@@ -67,7 +67,15 @@
 //! 
 //! mhartid: read-only; returns 0 to indicate hart 0.
 //!
-//! mstatus: read/write, containing both WPRI and WARL fields.
+//! mstatus: read/write, containing both WPRI and WARL fields. The
+//  bit fields which are non-zero are as follows (assumes only M-mode):
+//! - bit 3: MIE (interrupt enable)
+//! - bit 7: MPIE (previous value of interrupt enable)
+//! - bits [12:11]: MPP (previous privilege mode, always 0b11, WARL) (?)
+//!
+//! mstatush: upper 32-bit of status; all fields are read-only zero
+//! (only little-endian memory is supported)
+//!
 //! 
 
 use crate::utils::extract_field;
