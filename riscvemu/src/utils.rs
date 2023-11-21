@@ -4,7 +4,9 @@ use num::Integer;
 
 /// Make an n_bits-long mask (all ones)
 pub fn mask<T>(n_bits: T) -> T
-where T: Integer + Shl<Output = T> {
+where
+    T: Integer + Shl<Output = T>,
+{
     (T::one() << n_bits) - T::one()
 }
 
@@ -15,4 +17,3 @@ where
 {
     mask(end - start + T::one()) & (value >> start)
 }
-

@@ -66,7 +66,7 @@
 //! marchid: read-only; returns 0 to indicate not implemented.
 //!
 //! mimpid: read-only; returns 0 to indicate not implemented.
-//! 
+//!
 //! mhartid: read-only; returns 0 to indicate hart 0.
 //!
 //! mstatus: read/write, containing both WPRI and WARL fields. The
@@ -97,7 +97,7 @@
 //!
 //! mhpmcounter[3-31]/mhpmcounter[3-31]h: both 32-bit read-only zero
 //!
-//! mhpmevent[3-31]/mhpmevent[3-31]h: both 32-bit, read-only zero
+//! mhpmevent[3-31]: 32-bit, read-only zero
 //!
 //! Need to double check whether the following unprivileged CSRs are
 //! required when only M-mode is implemented (i.e. in addition to the
@@ -132,27 +132,30 @@
 //!
 //! mtimecmp: read/write 64-bit register that controls the timer
 //! interrupt.
-//! 
-//! 
+//!
+//!
+
+use std::collections::HashMap;
 
 use crate::utils::extract_field;
 
-use super::memory::Memory;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CsrError {
     #[error("CSR 0x{0:x} does not exist (illegal instruction)")]
-    NonExistentCsr(u16),
+    NotPresentCsr(u16),
     #[error("Attempted write to read-only CSR 0x{0:x} (illegal instruction)")]
     ReadOnlyCsr(u16),
+    #[error("Attempted to write invalid value to WLRL field in CSR 0x{0:x} (illegal instruction)")]
+    WlrlInvalidValue(u16),
     #[error("CSR 0x{0:x} required higher privilege (illegal instruction)")]
     PrivilegedCsr(u16),
 }
 
 /// Is the CSR read-only?
 fn read_only_csr(csr: u16) -> bool {
-    extract_field(csr, 11, 10) == 0b11 
+    extract_field(csr, 11, 10) == 0b11
 }
 
 /// Control and status registers (CSR)
@@ -162,25 +165,100 @@ fn read_only_csr(csr: u16) -> bool {
 ///
 #[derive(Debug, Default)]
 pub struct Csr {
-    memory: Memory,
+    csrs: HashMap<u16, u32>,
 }
 
 impl Csr {
+    /// Create CSRs for basic M-mode implementation
+    pub fn new_mmode() -> Self {
+        let mut csrs = HashMap::new();
+
+	// Unprivileged CSRs
+        csrs.insert(0xc00, 0); // cycle
+	csrs.insert(0xc01, 0); // time
+	csrs.insert(0xc02, 0); // instret
+	for n in 3..32 {
+	    csrs.insert(0xc00 + n, 0); // hpmcountern
+	}
+	csrs.insert(0xc80, 0); // cycleh
+	csrs.insert(0xc81, 0); // timeh
+	csrs.insert(0xc82, 0); // instreth
+	for n in 3..32 {
+	    csrs.insert(0xc80 + n, 0); // hpmcounternh
+	}
+
+	// M-mode CSRs
+	csrs.insert(0xf11, 0); // mvendorid
+	csrs.insert(0xf12, 0); // marchid
+	csrs.insert(0xf13, 0); // mimpid
+	csrs.insert(0xf14, 0); // mhartid
+	csrs.insert(0xf15, 0); // mconfigptr
+	csrs.insert(0x300, 0); // mstatus
+	csrs.insert(0x304, 0); // mie
+	csrs.insert(0x305, 0); // mtvec
+	csrs.insert(0x310, 0); // mstatush
+	csrs.insert(0x340, 0); // mscratch
+	csrs.insert(0x341, 0); // mepc
+	csrs.insert(0x342, 0); // mcause
+	csrs.insert(0x343, 0); // mtval
+	csrs.insert(0x344, 0); // mip
+        csrs.insert(0xb00, 0); // mcycle
+	csrs.insert(0xb02, 0); // minstret
+	for n in 3..32 {
+	    csrs.insert(0xb00 + n, 0); // mhpmcountern
+	}
+	csrs.insert(0xb80, 0); // mcycleh
+	csrs.insert(0xb82, 0); // minstreth
+	for n in 3..32 {
+	    csrs.insert(0xb80 + n, 0); // mhpmcounternh
+	}
+	for n in 3..32 {
+	    csrs.insert(0x320 + n, 0); // mhpmeventn
+	}
+	
+        Self { csrs }
+    }
+
+    fn csr_present(&self, csr: u16) -> bool {
+        self.csrs.contains_key(&csr)
+    }
+
     /// Read a value from a CSR
-    pub fn read(&mut self, csr: u16, value: u32) -> Result<u32, CsrError> {
-	Ok(0)
+    ///
+    /// If the CSR is not present, an error is returned. Otherwise,
+    /// the contents of the CSR is returned. The caller can extract the
+    /// bits or fields required.
+    pub fn read(&mut self, csr: u16) -> Result<u32, CsrError> {
+        if !self.csr_present(csr) {
+            Err(CsrError::NotPresentCsr(csr))
+        } else {
+            Ok(0)
+        }
     }
 
     /// Write a value from a CSR
-    pub fn write(&mut self, csr: u16, value: u32) -> Result<u32, CsrError> {
-	if read_only_csr(csr) {
-	    Err(CsrError::ReadOnlyCsr(csr))
-	} else {
-	    Ok(0)
-	}
-    }   
+    ///
+    /// If the CSR is not present or is read-only, an error is returned.
+    /// Then, value is written to the CSR, according to the following
+    /// rules:
+    /// - read-only fields in the CSR are preserved
+    /// - write-able fields in the CSR follow two behaviours:
+    ///   - if all values are allowed, copy field from value
+    ///   - if field is WLRL, return error on invalid value, state of
+    ///     CSR remains unchanged. If value is valid, write it.
+    ///   - if field is WARL, do not modify CSR on invalid value;
+    ///     if value is valid, write it.
+    ///
+    pub fn write(&mut self, csr: u16, value: u32) -> Result<(), CsrError> {
+        if !self.csr_present(csr) {
+            Err(CsrError::NotPresentCsr(csr))
+        } else if read_only_csr(csr) {
+            Err(CsrError::ReadOnlyCsr(csr))
+        } else {
+            Ok(())
+        }
+    }
 }
-
 
 // Machine-mode CSRs in 32-bit mode
 //
@@ -196,7 +274,7 @@ impl Csr {
 // mvendorid: 32-bit, contains the vendor ID (JEDEC). Value zero returned to
 // indicate register not implemented (or non-commercial implementation).
 //
-// marchid: 32-bit, specifies base microarchitecture. 
+// marchid: 32-bit, specifies base microarchitecture.
 //
 // mimpid: 32-bit, contains version of proessor implementation. Value zero
 // means not implemented.
@@ -237,7 +315,7 @@ impl Csr {
 // hart. Power-on-reset value arbitrary, writable with an arbitrary
 // value. Written value takes effect after writing instruction
 // completes. In 32-bit mode, accessible as a low and high
-// 32-bit register. 
+// 32-bit register.
 //
 // mhpmcounter[3-31](h): 29 additional 64-bit event counter; required, but
 // allowed to be read-only zero. In 32-bit mode, each 64-bit counter is
@@ -248,14 +326,14 @@ impl Csr {
 // be read-only zero.
 //
 // mcounteren: 32-bit register, with one bit for each of the 32 performance
-// monitoring counters (including 
+// monitoring counters (including
 //
 // mcounteren: 32-bit register to enable counters. Does not exist when only
 // M-mode is implemented (i.e. there is no U-mode).
 //
 // mcounterinhibit: 32-bit register used to disable counters. Not required
 // to be implemented.
-// 
+//
 // mscratch: 32-bit read/write register for use by machine mode.
 //
 // mepc: 32-bit exception program counter. When a trap is taken to M-mode
@@ -272,4 +350,4 @@ impl Csr {
 // mconfigptr: 32-bit register pointing to a data structure with
 // information about the hart and the platform. May be implemented as
 // read-only zero to indicate that the structure does not exist.
-// 
+//
