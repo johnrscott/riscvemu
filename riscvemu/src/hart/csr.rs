@@ -53,7 +53,9 @@
 //!
 //! This file implements the CSRs of a simple RISC-V microcontroller
 //! which only uses M-mode, and which uses only a minimal set of
-//! CSRs). These are defined below:
+//! CSRs). These are defined below. Registers not in the list below
+//! are not present in the implementation (read/writes will trigger
+//! illegal instruction).
 //!
 //! misa: read/write; single legal value 0 always returned (WARL),
 //! meaning architecture is determined by non-standard means (it
@@ -76,6 +78,61 @@
 //! mstatush: upper 32-bit of status; all fields are read-only zero
 //! (only little-endian memory is supported)
 //!
+//! mtvec: read-only, trap handler addresses
+//! - bits [1:0]: 1 (vectored mode)
+//! - bits [31:2]: trap vector table base address (4-byte aligned)
+//!
+//! mip: read/write register of pending interrupts. A pending interrupt
+//! can be cleared by writing a 0 to that bit in the register
+//!
+//! mie: read/write interrupt-enable register. To enable an interrupt in
+//! M-mode, both mstatus.MIE and the bit in mie must be set. Bits corresponding
+//! to interrupts that cannot occur must be read-only zero.
+//!
+//! mcycle/mcycleh: read/write, 64-bit register (in two 32-bit blocks),
+//! containing number of clock cycles executed by the processor.
+//!
+//! minstret/minstreth: read/write, 64-bit register (in two 32-bit blocks),
+//! containing number of instructions retired by the processor.
+//!
+//! mhpmcounter[3-31]/mhpmcounter[3-31]h: both 32-bit read-only zero
+//!
+//! mhpmevent[3-31]/mhpmevent[3-31]h: both 32-bit, read-only zero
+//!
+//! Need to double check whether the following unprivileged CSRs are
+//! required when only M-mode is implemented (i.e. in addition to the
+//! m* versions).
+//!
+//! time/timeh: read-only shadows of the lower/upper 32-bit sections
+//! of the mtime register.
+//!
+//! cycle/cycleh: read-only shadow of mcycle/mcycleh
+//!
+//! instret/instreth: read-only shadow of minstret/minstreth
+//!
+//! hpmcounter[3-31]/hpmcounter[3-31]h: read-only shadow of
+//! mhpmcounter[3-31]/mhpmcounter[3-31]h
+//!
+//! mscratch: 32-bit read/write register
+//!
+//! mepc: 32-bit, read/write register (WARL, valid values are allowed
+//! physical addresses).
+//!
+//! mcause: 32-bit, read/write, stores exception code and bit
+//! indicating whether trap is interrupt. exception code is WLRL.
+//!
+//! mtval: read-only zero
+//!
+//! mconfigptr: read-only zero
+//!
+//! In addition to the CSRs listed above, the following two memory-mapped
+//! registers exist:
+//!
+//! mtime: read/write 64-bit register incrementing at a constant rate
+//!
+//! mtimecmp: read/write 64-bit register that controls the timer
+//! interrupt.
+//! 
 //! 
 
 use crate::utils::extract_field;
