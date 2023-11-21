@@ -173,49 +173,49 @@ impl Csr {
     pub fn new_mmode() -> Self {
         let mut csrs = HashMap::new();
 
-	// Unprivileged CSRs
+        // Unprivileged CSRs
         csrs.insert(0xc00, 0); // cycle
-	csrs.insert(0xc01, 0); // time
-	csrs.insert(0xc02, 0); // instret
-	for n in 3..32 {
-	    csrs.insert(0xc00 + n, 0); // hpmcountern
-	}
-	csrs.insert(0xc80, 0); // cycleh
-	csrs.insert(0xc81, 0); // timeh
-	csrs.insert(0xc82, 0); // instreth
-	for n in 3..32 {
-	    csrs.insert(0xc80 + n, 0); // hpmcounternh
-	}
+        csrs.insert(0xc01, 0); // time
+        csrs.insert(0xc02, 0); // instret
+        for n in 3..32 {
+            csrs.insert(0xc00 + n, 0); // hpmcountern
+        }
+        csrs.insert(0xc80, 0); // cycleh
+        csrs.insert(0xc81, 0); // timeh
+        csrs.insert(0xc82, 0); // instreth
+        for n in 3..32 {
+            csrs.insert(0xc80 + n, 0); // hpmcounternh
+        }
 
-	// M-mode CSRs
-	csrs.insert(0xf11, 0); // mvendorid
-	csrs.insert(0xf12, 0); // marchid
-	csrs.insert(0xf13, 0); // mimpid
-	csrs.insert(0xf14, 0); // mhartid
-	csrs.insert(0xf15, 0); // mconfigptr
-	csrs.insert(0x300, 0); // mstatus
-	csrs.insert(0x304, 0); // mie
-	csrs.insert(0x305, 0); // mtvec
-	csrs.insert(0x310, 0); // mstatush
-	csrs.insert(0x340, 0); // mscratch
-	csrs.insert(0x341, 0); // mepc
-	csrs.insert(0x342, 0); // mcause
-	csrs.insert(0x343, 0); // mtval
-	csrs.insert(0x344, 0); // mip
+        // M-mode CSRs
+        csrs.insert(0xf11, 0); // mvendorid
+        csrs.insert(0xf12, 0); // marchid
+        csrs.insert(0xf13, 0); // mimpid
+        csrs.insert(0xf14, 0); // mhartid
+        csrs.insert(0xf15, 0); // mconfigptr
+        csrs.insert(0x300, 0); // mstatus
+        csrs.insert(0x304, 0); // mie
+        csrs.insert(0x305, 0); // mtvec
+        csrs.insert(0x310, 0); // mstatush
+        csrs.insert(0x340, 0); // mscratch
+        csrs.insert(0x341, 0); // mepc
+        csrs.insert(0x342, 0); // mcause
+        csrs.insert(0x343, 0); // mtval
+        csrs.insert(0x344, 0); // mip
         csrs.insert(0xb00, 0); // mcycle
-	csrs.insert(0xb02, 0); // minstret
-	for n in 3..32 {
-	    csrs.insert(0xb00 + n, 0); // mhpmcountern
-	}
-	csrs.insert(0xb80, 0); // mcycleh
-	csrs.insert(0xb82, 0); // minstreth
-	for n in 3..32 {
-	    csrs.insert(0xb80 + n, 0); // mhpmcounternh
-	}
-	for n in 3..32 {
-	    csrs.insert(0x320 + n, 0); // mhpmeventn
-	}
-	
+        csrs.insert(0xb02, 0); // minstret
+        for n in 3..32 {
+            csrs.insert(0xb00 + n, 0); // mhpmcountern
+        }
+        csrs.insert(0xb80, 0); // mcycleh
+        csrs.insert(0xb82, 0); // minstreth
+        for n in 3..32 {
+            csrs.insert(0xb80 + n, 0); // mhpmcounternh
+        }
+        for n in 3..32 {
+            csrs.insert(0x320 + n, 0); // mhpmeventn
+        }
+
         Self { csrs }
     }
 
@@ -228,11 +228,15 @@ impl Csr {
     /// If the CSR is not present, an error is returned. Otherwise,
     /// the contents of the CSR is returned. The caller can extract the
     /// bits or fields required.
-    pub fn read(&mut self, csr: u16) -> Result<u32, CsrError> {
+    pub fn read(&self, csr: u16) -> Result<u32, CsrError> {
         if !self.csr_present(csr) {
             Err(CsrError::NotPresentCsr(csr))
         } else {
-            Ok(0)
+            let value = self
+                .csrs
+                .get(&csr)
+                .expect("should be present, we just checked");
+            Ok(*value)
         }
     }
 
@@ -242,7 +246,7 @@ impl Csr {
     /// Then, value is written to the CSR, according to the following
     /// rules:
     /// - read-only fields in the CSR are preserved
-    /// - write-able fields in the CSR follow two behaviours:
+    /// - write-able fields in the CSR follow these behaviours:
     ///   - if all values are allowed, copy field from value
     ///   - if field is WLRL, return error on invalid value, state of
     ///     CSR remains unchanged. If value is valid, write it.
@@ -255,6 +259,11 @@ impl Csr {
         } else if read_only_csr(csr) {
             Err(CsrError::ReadOnlyCsr(csr))
         } else {
+            let csr_value = self
+                .csrs
+                .get_mut(&csr)
+                .expect("should be present, we just checked");
+	    *csr_value = value;
             Ok(())
         }
     }
