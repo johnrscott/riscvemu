@@ -155,15 +155,15 @@ pub enum CsrError {
 }
 
 #[derive(Debug)]
-enum ReadOnlyCsr<'a> {
+enum ReadOnlyCsr {
     Constant(u32),
     /// For read-only shadows of other CSR registers
-    CsrShadow(&'a Csr<'a>),
+    CsrShadow(Box<Csr>),
     /// For read-only shadows of arbitrary references
-    MemShadow(&'a u32),
+    MemShadow(Box<u32>),
 }
 
-impl ReadOnlyCsr<'_> {
+impl ReadOnlyCsr {
     fn read(&self) -> u32 {
         match self {
             Self::Constant(value) => *value,
@@ -252,7 +252,7 @@ impl WritableCsr {
 }
 
 #[derive(Debug)]
-enum Csr<'a> {
+enum Csr {
     /// If the CSR is read-only, use this variant (which contains
     /// the fixed value of the register).
     ///
@@ -265,12 +265,12 @@ enum Csr<'a> {
     /// other read-only registers.
     ///
     /// Item holds a reference to another CSR
-    ReadOnly(ReadOnlyCsr<'a>),
+    ReadOnly(ReadOnlyCsr),
     /// If the CSR contains writable fields, then use this variant
     Writable(WritableCsr),
 }
 
-impl Csr<'_> {
+impl Csr {
     /// Read the value of the CSR. Does not cause an error, because by
     /// this point, the CSR has been established as
     /// present. (Privilege is not considered in this M-mode
@@ -308,28 +308,28 @@ impl Csr<'_> {
 /// spec (v20211203)
 ///
 #[derive(Debug, Default)]
-pub struct CsrFile<'a> {
-    csrs: HashMap<u16, Csr<'a>>,
+pub struct CsrFile {
+    csrs: HashMap<u16, Box<Csr>>,
 }
 
 /// This is stored as two separate fields to allow passing a reference
 /// to time and timeh to the relevant shadow CSRs
 #[derive(Debug, Default)]
 pub struct Time {
-    lower: u32,
-    upper: u32,
+    lower: Box<u32>,
+    upper: Box<u32>,
 }
 
 impl Time {
     pub fn time(&self) -> u64 {
-        (u64::from(self.upper) << 32) | u64::from(self.lower)
+        (u64::from(*self.upper) << 32) | u64::from(*self.lower)
     }
 
     pub fn set_time(&mut self, value: u64) {
-        self.lower = extract_field(value, 31, 0)
+        *self.lower = extract_field(value, 31, 0)
             .try_into()
             .expect("this will fit");
-        self.upper = extract_field(value, 63, 32)
+        *self.upper = extract_field(value, 63, 32)
             .try_into()
             .expect("this will fit");
     }
@@ -340,20 +340,20 @@ impl Time {
     }
 }
 
-impl<'a> CsrFile<'a> {
+impl CsrFile {
     /// Create CSRs for basic M-mode implementation
     ///
     /// Takes a references to the memory-mapped mtime registers, which
     /// is used as the basis for the unprivileged time CSR
-    pub fn new_mmode(mtime: &'a Time) -> Self {
+    pub fn new_mmode(mtime: &Time) -> Self {
         let mut csrs = HashMap::new();
 
         // Machine counters
-        let mcycle = Csr::Writable(WritableCsr::new_all_values_allowed(0));
-        let mcycleh = Csr::Writable(WritableCsr::new_all_values_allowed(0));
-        let minstret = Csr::Writable(WritableCsr::new_all_values_allowed(0));
-        let minstreth = Csr::Writable(WritableCsr::new_all_values_allowed(0));
-        let minstreth = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+        let mcycle = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
+        let mcycleh = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
+        let minstret = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
+        let minstreth = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
+        let minstreth = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
 
         // // M-mode CSRs
         // csrs.insert(0xf11, 0); // mvendorid
@@ -385,14 +385,14 @@ impl<'a> CsrFile<'a> {
         // }
 
         // Unprivileged read-only shadows
-        let cycle = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(
-            csrs.get(&0xb00).expect("mcycle register is in map"),
-        ));
-        let cycleh = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(&mcycleh));
-        let time = Csr::ReadOnly(ReadOnlyCsr::MemShadow(&mtime.lower));
-        let timeh = Csr::ReadOnly(ReadOnlyCsr::MemShadow(&mtime.upper));
-        let instret = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(&minstret));
-        let instreth = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(&minstreth));
+        let cycle = Box::new(Csr::ReadOnly(ReadOnlyCsr::CsrShadow(
+            *csrs.get(&0xb00).expect("mcycle register is in map"),
+        )));
+        let cycleh = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(mcycleh));
+        let time = Csr::ReadOnly(ReadOnlyCsr::MemShadow(mtime.lower));
+        let timeh = Csr::ReadOnly(ReadOnlyCsr::MemShadow(mtime.upper));
+        let instret = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(minstret));
+        let instreth = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(minstreth));
 
         // // Unprivileged CSRs
         csrs.insert(0xc00, cycle);
