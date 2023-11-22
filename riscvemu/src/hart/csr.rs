@@ -142,6 +142,8 @@
 use std::collections::HashMap;
 use thiserror::Error;
 
+use crate::utils::extract_field;
+
 #[derive(Debug, Error)]
 pub enum CsrError {
     #[error("CSR 0x{0:x} does not exist (illegal instruction)")]
@@ -163,11 +165,11 @@ enum ReadOnlyCsr<'a> {
 
 impl ReadOnlyCsr<'_> {
     fn read(&self) -> u32 {
-	match self {
+        match self {
             Self::Constant(value) => *value,
             Self::CsrShadow(csr) => csr.read(),
-	    Self::MemShadow(value) => *value
-	}
+            Self::MemShadow(value) => **value,
+        }
     }
 }
 
@@ -221,17 +223,16 @@ struct WritableCsr {
 }
 
 impl WritableCsr {
-
     /// Make a CSR where the whole u32 register is writable with any
     /// value
     fn new_all_values_allowed(initial_value: u32) -> Self {
-	Self {
-	    write_mask: 0xffff_ffff,
-	    variable: initial_value,
-	    ..Self::default()
-	}
+        Self {
+            write_mask: 0xffff_ffff,
+            variable: initial_value,
+            ..Self::default()
+        }
     }
-    
+
     /// Get the value of the CSR, by combining the constant and
     /// variable parts
     fn read(&self) -> u32 {
@@ -270,7 +271,6 @@ enum Csr<'a> {
 }
 
 impl Csr<'_> {
-
     /// Read the value of the CSR. Does not cause an error, because by
     /// this point, the CSR has been established as
     /// present. (Privilege is not considered in this M-mode
@@ -312,72 +312,102 @@ pub struct CsrFile<'a> {
     csrs: HashMap<u16, Csr<'a>>,
 }
 
+/// This is stored as two separate fields to allow passing a reference
+/// to time and timeh to the relevant shadow CSRs
+#[derive(Debug, Default)]
+pub struct Time {
+    lower: u32,
+    upper: u32,
+}
+
+impl Time {
+    pub fn time(&self) -> u64 {
+        (u64::from(self.upper) << 32) | u64::from(self.lower)
+    }
+
+    pub fn set_time(&mut self, value: u64) {
+        self.lower = extract_field(value, 31, 0)
+            .try_into()
+            .expect("this will fit");
+        self.upper = extract_field(value, 63, 32)
+            .try_into()
+            .expect("this will fit");
+    }
+
+    pub fn increment_time(&mut self) {
+        // This is inefficient
+        self.set_time(self.time() + 1);
+    }
+}
+
 impl<'a> CsrFile<'a> {
     /// Create CSRs for basic M-mode implementation
     ///
     /// Takes a references to the memory-mapped mtime registers, which
     /// is used as the basis for the unprivileged time CSR
-    pub fn new_mmode(mtime: &'a u64) -> Self {
+    pub fn new_mmode(mtime: &'a Time) -> Self {
         let mut csrs = HashMap::new();
 
-	// Machine counters
-	let mcycle = Csr::Writable(WritableCsr::new_all_values_allowed(0));
-	let mcycleh = Csr::Writable(WritableCsr::new_all_values_allowed(0));
-	let minstret = Csr::Writable(WritableCsr::new_all_values_allowed(0));
-	let minstreth = Csr::Writable(WritableCsr::new_all_values_allowed(0));
-	let minstreth = Csr::Writable(WritableCsr::new_all_values_allowed(0));
-	
-	// Unprivileged read-only shadows
-	let cycle = ReadOnlyCsr::Shadow(&mcycle);
-	let cycleh = ReadOnlyCsr::Shadow(&mcycleh);
-	let instret = ReadOnlyCsr::Shadow(&minstret);
-	let instreth = ReadOnlyCsr::Shadow(&minstreth);
-	let time = ReadOnlyCsr::
-	
-	/*
-        // Unprivileged CSRs
-        csrs.insert(0xc00, 0); // cycle
-        csrs.insert(0xc01, 0); // time
-        csrs.insert(0xc02, 0); // instret
-        for n in 3..32 {
-            csrs.insert(0xc00 + n, 0); // hpmcountern
-        }
-        csrs.insert(0xc80, 0); // cycleh
-        csrs.insert(0xc81, 0); // timeh
-        csrs.insert(0xc82, 0); // instreth
-        for n in 3..32 {
-            csrs.insert(0xc80 + n, 0); // hpmcounternh
-        }
+        // Machine counters
+        let mcycle = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+        let mcycleh = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+        let minstret = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+        let minstreth = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+        let minstreth = Csr::Writable(WritableCsr::new_all_values_allowed(0));
 
-        // M-mode CSRs
-        csrs.insert(0xf11, 0); // mvendorid
-        csrs.insert(0xf12, 0); // marchid
-        csrs.insert(0xf13, 0); // mimpid
-        csrs.insert(0xf14, 0); // mhartid
-        csrs.insert(0xf15, 0); // mconfigptr
-        csrs.insert(0x300, 0); // mstatus
-        csrs.insert(0x304, 0); // mie
-        csrs.insert(0x305, 0); // mtvec
-        csrs.insert(0x310, 0); // mstatush
-        csrs.insert(0x340, 0); // mscratch
-        csrs.insert(0x341, 0); // mepc
-        csrs.insert(0x342, 0); // mcause
-        csrs.insert(0x343, 0); // mtval
-        csrs.insert(0x344, 0); // mip
-        csrs.insert(0xb00, 0); // mcycle
-        csrs.insert(0xb02, 0); // minstret
-        for n in 3..32 {
-            csrs.insert(0xb00 + n, 0); // mhpmcountern
-        }
-        csrs.insert(0xb80, 0); // mcycleh
-        csrs.insert(0xb82, 0); // minstreth
-        for n in 3..32 {
-            csrs.insert(0xb80 + n, 0); // mhpmcounternh
-        }
-        for n in 3..32 {
-            csrs.insert(0x320 + n, 0); // mhpmeventn
-        }
-	 */
+        // // M-mode CSRs
+        // csrs.insert(0xf11, 0); // mvendorid
+        // csrs.insert(0xf12, 0); // marchid
+        // csrs.insert(0xf13, 0); // mimpid
+        // csrs.insert(0xf14, 0); // mhartid
+        // csrs.insert(0xf15, 0); // mconfigptr
+        // csrs.insert(0x300, 0); // mstatus
+        // csrs.insert(0x304, 0); // mie
+        // csrs.insert(0x305, 0); // mtvec
+        // csrs.insert(0x310, 0); // mstatush
+        // csrs.insert(0x340, 0); // mscratch
+        // csrs.insert(0x341, 0); // mepc
+        // csrs.insert(0x342, 0); // mcause
+        // csrs.insert(0x343, 0); // mtval
+        // csrs.insert(0x344, 0); // mip
+        csrs.insert(0xb00, mcycle);
+        // csrs.insert(0xb02, 0); // minstret
+        // for n in 3..32 {
+        //     csrs.insert(0xb00 + n, 0); // mhpmcountern
+        // }
+        // csrs.insert(0xb80, 0); // mcycleh
+        // csrs.insert(0xb82, 0); // minstreth
+        // for n in 3..32 {
+        //     csrs.insert(0xb80 + n, 0); // mhpmcounternh
+        // }
+        // for n in 3..32 {
+        //     csrs.insert(0x320 + n, 0); // mhpmeventn
+        // }
+
+        // Unprivileged read-only shadows
+        let cycle = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(
+            csrs.get(&0xb00).expect("mcycle register is in map"),
+        ));
+        let cycleh = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(&mcycleh));
+        let time = Csr::ReadOnly(ReadOnlyCsr::MemShadow(&mtime.lower));
+        let timeh = Csr::ReadOnly(ReadOnlyCsr::MemShadow(&mtime.upper));
+        let instret = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(&minstret));
+        let instreth = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(&minstreth));
+
+        // // Unprivileged CSRs
+        csrs.insert(0xc00, cycle);
+        // csrs.insert(0xc01, 0); // time
+        // csrs.insert(0xc02, 0); // instret
+        // for n in 3..32 {
+        //     csrs.insert(0xc00 + n, 0); // hpmcountern
+        // }
+        // csrs.insert(0xc80, 0); // cycleh
+        // csrs.insert(0xc81, 0); // timeh
+        // csrs.insert(0xc82, 0); // instreth
+        // for n in 3..32 {
+        //     csrs.insert(0xc80 + n, 0); // hpmcounternh
+        // }
+	
         Self { csrs }
     }
 
@@ -399,8 +429,7 @@ impl<'a> CsrFile<'a> {
                 .get(&csr)
                 .expect("should be present, we just checked")
                 .read();
-	    Ok(value)
-		
+            Ok(value)
         }
     }
 
@@ -421,8 +450,7 @@ impl<'a> CsrFile<'a> {
         if !self.csr_present(csr) {
             Err(CsrError::NotPresentCsr(csr))
         } else {
-            self
-                .csrs
+            self.csrs
                 .get_mut(&csr)
                 .expect("should be present, we just checked")
                 .write(value)
