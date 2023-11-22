@@ -156,14 +156,17 @@ pub enum CsrError {
 enum ReadOnlyCsr<'a> {
     Constant(u32),
     /// For read-only shadows of other CSR registers
-    Shadow(&'a Csr<'a>)
+    CsrShadow(&'a Csr<'a>),
+    /// For read-only shadows of arbitrary references
+    MemShadow(&'a u32),
 }
 
 impl ReadOnlyCsr<'_> {
     fn read(&self) -> u32 {
 	match self {
             Self::Constant(value) => *value,
-            Self::Shadow(csr) => csr.read(),
+            Self::CsrShadow(csr) => csr.read(),
+	    Self::MemShadow(value) => *value
 	}
     }
 }
@@ -329,7 +332,7 @@ impl<'a> CsrFile<'a> {
 	let cycleh = ReadOnlyCsr::Shadow(&mcycleh);
 	let instret = ReadOnlyCsr::Shadow(&minstret);
 	let instreth = ReadOnlyCsr::Shadow(&minstreth);
-	
+	let time = ReadOnlyCsr::
 	
 	/*
         // Unprivileged CSRs
