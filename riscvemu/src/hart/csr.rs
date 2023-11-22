@@ -82,18 +82,22 @@
 //! - bits [1:0]: 1 (vectored mode)
 //! - bits [31:2]: trap vector table base address (4-byte aligned)
 //!
-//! mip: read/write register of pending interrupts. A pending interrupt
-//! can be cleared by writing a 0 to that bit in the register
+//! mip: read/write register of pending interrupts. A pending
+//! interrupt can be cleared by writing a 0 to that bit in the
+//! register
 //!
-//! mie: read/write interrupt-enable register. To enable an interrupt in
-//! M-mode, both mstatus.MIE and the bit in mie must be set. Bits corresponding
-//! to interrupts that cannot occur must be read-only zero.
+//! mie: read/write interrupt-enable register. To enable an interrupt
+//! in M-mode, both mstatus.MIE and the bit in mie must be set. Bits
+//! corresponding to interrupts that cannot occur must be read-only
+//! zero.
 //!
-//! mcycle/mcycleh: read/write, 64-bit register (in two 32-bit blocks),
-//! containing number of clock cycles executed by the processor.
+//! mcycle/mcycleh: read/write, 64-bit register (in two 32-bit
+//! blocks), containing number of clock cycles executed by the
+//! processor.
 //!
-//! minstret/minstreth: read/write, 64-bit register (in two 32-bit blocks),
-//! containing number of instructions retired by the processor.
+//! minstret/minstreth: read/write, 64-bit register (in two 32-bit
+//! blocks), containing number of instructions retired by the
+//! processor.
 //!
 //! mhpmcounter[3-31]/mhpmcounter[3-31]h: both 32-bit read-only zero
 //!
@@ -125,8 +129,8 @@
 //!
 //! mconfigptr: read-only zero
 //!
-//! In addition to the CSRs listed above, the following two memory-mapped
-//! registers exist:
+//! In addition to the CSRs listed above, the following two
+//! memory-mapped registers exist:
 //!
 //! mtime: read/write 64-bit register incrementing at a constant rate
 //!
@@ -136,26 +140,163 @@
 //!
 
 use std::collections::HashMap;
-
-use crate::utils::extract_field;
-
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CsrError {
     #[error("CSR 0x{0:x} does not exist (illegal instruction)")]
     NotPresentCsr(u16),
-    #[error("Attempted write to read-only CSR 0x{0:x} (illegal instruction)")]
-    ReadOnlyCsr(u16),
-    #[error("Attempted to write invalid value to WLRL field in CSR 0x{0:x} (illegal instruction)")]
-    WlrlInvalidValue(u16),
-    #[error("CSR 0x{0:x} required higher privilege (illegal instruction)")]
-    PrivilegedCsr(u16),
+    #[error("Attempted write to read-only CSR (illegal instruction)")]
+    ReadOnlyCsr,
+    #[error("Attempted to write invalid value to WLRL field in CSR (illegal instruction)")]
+    WlrlInvalidValue,
 }
 
-/// Is the CSR read-only?
-fn read_only_csr(csr: u16) -> bool {
-    extract_field(csr, 11, 10) == 0b11
+#[derive(Debug)]
+enum ReadOnlyCsr<'a> {
+    Constant(u32),
+    /// For read-only shadows of other CSR registers
+    Shadow(&'a Csr<'a>)
+}
+
+impl ReadOnlyCsr<'_> {
+    fn read(&self) -> u32 {
+	match self {
+            Self::Constant(value) => *value,
+            Self::Shadow(csr) => csr.read(),
+	}
+    }
+}
+
+/// Check values to be written to writable CSR fields
+///
+/// This function takes a prospective value to be written to
+/// a CSR and checks whether the values of writable fields
+/// are valid. It only applies in cases where there exist fields
+/// in the CSR that specify a limited set of legal values which
+/// is not the full range of values that would fit in the field.
+///
+/// The function takes both the current value of the CSR and the
+/// new value of the CSR. It returns a new value which has been
+/// updated to reflect the current state of the CSR, if the write
+/// would cause a WARL field to become invalid. It returns an error
+/// if a write would cause a WLRL field to become invalid.
+///
+/// The latter takes precedence over the former, so a CSR with both
+/// WARL and WLRL fields will not be written with a valid value to the
+/// WARL field if the write to the WLRL field would cause an
+/// error. This means that the illegal instruction that will
+/// eventually result from the attempted CSR write will leave that CSR
+/// unchanged.
+///
+/// This function is implemented on a per-CSR basis for the CSRs which
+/// contains WARL and/or WRLR fields.
+#[derive(Debug)]
+struct WriteValueCheck(fn(current_value: u32, new_value: u32) -> Result<u32, CsrError>);
+
+/// A writable CSR is one where at least some of the fields can be
+/// written to. This is stored as a component storing the constant
+/// (read-only, or only one legal value) part, and the variable
+/// part.
+///
+#[derive(Debug, Default)]
+struct WritableCsr {
+    /// Stores (as ones) which portions of the CSR are writable
+    /// (which means, in this context, which parts can be written with
+    /// more than one legal value).
+    write_mask: u32,
+    /// Stores the variable (writable) part.
+    variable: u32,
+    /// Some writable fields in CSRs only support some values. If
+    /// this CSR supports all values, this field is None. Otherwise,
+    /// the field is a function that returns false if any of the
+    /// fields written by
+    write_value_check: Option<WriteValueCheck>,
+    /// Stores the fixed part of a writable CSR. If the fixed part
+    /// is always zero, then this is None
+    constant: Option<u32>,
+}
+
+impl WritableCsr {
+
+    /// Make a CSR where the whole u32 register is writable with any
+    /// value
+    fn new_all_values_allowed(initial_value: u32) -> Self {
+	Self {
+	    write_mask: 0xffff_ffff,
+	    variable: initial_value,
+	    ..Self::default()
+	}
+    }
+    
+    /// Get the value of the CSR, by combining the constant and
+    /// variable parts
+    fn read(&self) -> u32 {
+        self.constant.unwrap_or(0) | self.variable
+    }
+
+    /// Write a value to the CSR. The parts of the CSR that overlap
+    /// with writable fields will be written, but the constant
+    /// fields will be left the same.
+    fn write(&mut self, mut value: u32) -> Result<(), CsrError> {
+        if let Some(write_value_check) = &self.write_value_check {
+            value = write_value_check.0(self.variable, value)?;
+        }
+        self.variable = value & self.write_mask;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+enum Csr<'a> {
+    /// If the CSR is read-only, use this variant (which contains
+    /// the fixed value of the register).
+    ///
+    /// Note that some CSR registers are read-only, even if they have
+    /// addresses that imply they are read/write. For example, mtval
+    /// is a read/write register, but may be implemented as read-only
+    /// zero. TODO find where in the privileged spec it is explicitly
+    /// stated that a read/write register implemented as read-only
+    /// zero raises an illegal instruction on an attempted write, like
+    /// other read-only registers.
+    ///
+    /// Item holds a reference to another CSR
+    ReadOnly(ReadOnlyCsr<'a>),
+    /// If the CSR contains writable fields, then use this variant
+    Writable(WritableCsr),
+}
+
+impl Csr<'_> {
+
+    /// Read the value of the CSR. Does not cause an error, because by
+    /// this point, the CSR has been established as
+    /// present. (Privilege is not considered in this M-mode
+    /// implementation.)
+    fn read(&self) -> u32 {
+        match self {
+            Self::ReadOnly(csr) => csr.read(),
+            Self::Writable(csr) => csr.read(),
+        }
+    }
+
+    /// Write a value to a CSR
+    ///
+    /// If the CSR is read-only, then an error will be returned
+    ///
+    /// What is actually written depends on the type of fields in the
+    /// CSR. Read-only fields will retain their values. writable
+    /// WLRL fields will be written provided that the value is legal;
+    /// otherwise an error will be returned. If no error occurs:
+    /// writable WARL fields will be updated if the value in the
+    /// argument is legal, else they will retain their previous
+    /// values; and writable fields that support all values will be
+    /// updated unconditionally.
+    fn write(&mut self, value: u32) -> Result<(), CsrError> {
+        match self {
+            Self::ReadOnly(_) => Err(CsrError::ReadOnlyCsr),
+            Self::Writable(csr) => csr.write(value),
+        }
+    }
 }
 
 /// Control and status registers (CSR)
@@ -164,15 +305,33 @@ fn read_only_csr(csr: u16) -> bool {
 /// spec (v20211203)
 ///
 #[derive(Debug, Default)]
-pub struct Csr {
-    csrs: HashMap<u16, u32>,
+pub struct CsrFile<'a> {
+    csrs: HashMap<u16, Csr<'a>>,
 }
 
-impl Csr {
+impl<'a> CsrFile<'a> {
     /// Create CSRs for basic M-mode implementation
-    pub fn new_mmode() -> Self {
+    ///
+    /// Takes a references to the memory-mapped mtime registers, which
+    /// is used as the basis for the unprivileged time CSR
+    pub fn new_mmode(mtime: &'a u64) -> Self {
         let mut csrs = HashMap::new();
 
+	// Machine counters
+	let mcycle = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+	let mcycleh = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+	let minstret = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+	let minstreth = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+	let minstreth = Csr::Writable(WritableCsr::new_all_values_allowed(0));
+	
+	// Unprivileged read-only shadows
+	let cycle = ReadOnlyCsr::Shadow(&mcycle);
+	let cycleh = ReadOnlyCsr::Shadow(&mcycleh);
+	let instret = ReadOnlyCsr::Shadow(&minstret);
+	let instreth = ReadOnlyCsr::Shadow(&minstreth);
+	
+	
+	/*
         // Unprivileged CSRs
         csrs.insert(0xc00, 0); // cycle
         csrs.insert(0xc01, 0); // time
@@ -215,7 +374,7 @@ impl Csr {
         for n in 3..32 {
             csrs.insert(0x320 + n, 0); // mhpmeventn
         }
-
+	 */
         Self { csrs }
     }
 
@@ -235,8 +394,10 @@ impl Csr {
             let value = self
                 .csrs
                 .get(&csr)
-                .expect("should be present, we just checked");
-            Ok(*value)
+                .expect("should be present, we just checked")
+                .read();
+	    Ok(value)
+		
         }
     }
 
@@ -246,7 +407,7 @@ impl Csr {
     /// Then, value is written to the CSR, according to the following
     /// rules:
     /// - read-only fields in the CSR are preserved
-    /// - write-able fields in the CSR follow these behaviours:
+    /// - writable fields in the CSR follow these behaviours:
     ///   - if all values are allowed, copy field from value
     ///   - if field is WLRL, return error on invalid value, state of
     ///     CSR remains unchanged. If value is valid, write it.
@@ -256,15 +417,12 @@ impl Csr {
     pub fn write(&mut self, csr: u16, value: u32) -> Result<(), CsrError> {
         if !self.csr_present(csr) {
             Err(CsrError::NotPresentCsr(csr))
-        } else if read_only_csr(csr) {
-            Err(CsrError::ReadOnlyCsr(csr))
         } else {
-            let csr_value = self
+            self
                 .csrs
                 .get_mut(&csr)
-                .expect("should be present, we just checked");
-	    *csr_value = value;
-            Ok(())
+                .expect("should be present, we just checked")
+                .write(value)
         }
     }
 }
