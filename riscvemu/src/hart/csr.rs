@@ -380,18 +380,18 @@ pub struct CsrFile {
     /// time. The array is little-endian (mtime[0] is the lower
     /// 32 bits, and mtime[1] is the upper 32 bits). mtime is
     /// a read/write register that supports any value
-    pub mtime: u64,
+    mtime: u64,
 
     /// For consistency, mtimecmp is stored here next to mtime (it
     /// is also a memory-mapped M-mode register). mtimecmp is a
     /// read/write register that supports any value
-    pub mtimecmp: u64,
+    mtimecmp: u64,
 
     /// Number of clock cycles executed by the hart
-    pub mcycle: u64,
+    mcycle: u64,
 
     /// Number of instructions retired by the hart
-    pub minstret: u64,
+    minstret: u64,
 
     /// All CSRs are stored in a flat vector of objects which are all
     /// writable. The position of the CSR in this vector is _not_ its
@@ -478,6 +478,31 @@ fn write_u64_field(value: &mut u64, field: u32, lower_upper: LowerUpper) {
 }
 
 impl CsrFile {
+
+    pub fn increment_cycle(&mut self) {
+	self.mcycle += 1;
+    }
+
+    pub fn mcycle(&self) -> u64 {
+	self.mcycle
+    }
+    
+    pub fn increment_mtime(&mut self) {
+	self.mtime += 1;
+    }
+
+    pub fn mtime(&self) -> u64 {
+	self.mtime
+    }
+    
+    pub fn increment_minstret(&mut self) {
+	self.minstret += 1;
+    }
+
+    pub fn minstret(&self) -> u64 {
+	self.minstret
+    }
+    
     /// Create CSRs for basic M-mode implementation
     ///
     /// Takes a references to the memory-mapped mtime registers, which
@@ -867,4 +892,6 @@ mod tests {
         assert_eq!(instreth, 0xaaaa_bbbb);
     }
 
+
+    
 }

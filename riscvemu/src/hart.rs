@@ -11,8 +11,10 @@ use memory::Memory;
 use thiserror::Error;
 
 pub mod csr;
+pub mod m_mode;
 pub mod memory;
 pub mod registers;
+
 
 /// RISC-V Hardware Thread
 ///
