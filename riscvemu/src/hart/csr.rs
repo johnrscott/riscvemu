@@ -144,7 +144,12 @@ use thiserror::Error;
 
 use crate::utils::extract_field;
 
-#[derive(Debug, Error)]
+// Field masks for registers
+pub const MSTATUS_MIE: u32 = 1 << 3;
+pub const MSTATUS_MPIE: u32 = 1 << 7;
+pub const MSTATUS_MPP: u32 = 0b11 << 11;
+
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum CsrError {
     #[error("CSR 0x{0:x} does not exist (illegal instruction)")]
     NotPresentCsr(u16),
@@ -154,6 +159,7 @@ pub enum CsrError {
     WlrlInvalidValue,
 }
 
+/*
 #[derive(Debug)]
 enum ReadOnlyCsr {
     Constant(u32),
@@ -172,6 +178,7 @@ impl ReadOnlyCsr {
         }
     }
 }
+ */
 
 /// Check values to be written to writable CSR fields
 ///
@@ -205,7 +212,7 @@ struct WriteValueCheck(fn(current_value: u32, new_value: u32) -> Result<u32, Csr
 /// part.
 ///
 #[derive(Debug, Default)]
-struct WritableCsr {
+struct Csr {
     /// Stores (as ones) which portions of the CSR are writable
     /// (which means, in this context, which parts can be written with
     /// more than one legal value).
@@ -222,13 +229,26 @@ struct WritableCsr {
     constant: Option<u32>,
 }
 
-impl WritableCsr {
+impl Csr {
     /// Make a CSR where the whole u32 register is writable with any
     /// value
     fn new_all_values_allowed(initial_value: u32) -> Self {
         Self {
             write_mask: 0xffff_ffff,
             variable: initial_value,
+            ..Self::default()
+        }
+    }
+
+    /// Make a new CSR where the fields that are writable support all possible
+    /// values, but which also contains some read-only fields with specified
+    /// constant values. The value passed to initial_variable determines the
+    /// initial value of the CSR (when combined with the constant part)
+    fn new_masked(initial_variable: u32, constant: u32, write_mask: u32) -> Self {
+        Self {
+            write_mask,
+            variable: initial_variable,
+            constant: Some(constant),
             ..Self::default()
         }
     }
@@ -251,6 +271,7 @@ impl WritableCsr {
     }
 }
 
+/*
 #[derive(Debug)]
 enum Csr {
     /// If the CSR is read-only, use this variant (which contains
@@ -269,7 +290,9 @@ enum Csr {
     /// If the CSR contains writable fields, then use this variant
     Writable(WritableCsr),
 }
+*/
 
+/*
 impl Csr {
     /// Read the value of the CSR. Does not cause an error, because by
     /// this point, the CSR has been established as
@@ -301,6 +324,50 @@ impl Csr {
         }
     }
 }
+*/
+
+#[derive(Debug, Copy, Clone)]
+enum LowerUpper {
+    Lower,
+    Upper,
+}
+
+#[derive(Debug)]
+enum ReadOnlyCsrRef {
+    /// Stores a CSR that only holds a single read-only value.  Most
+    /// often this value is zero.
+    Constant(u32),
+    /// Holds a reference to an entry in a vector of CSR
+    /// objects. Although the underlying object may be writable, the
+    /// register cannot be written through this reference.    
+    Shadow(usize),
+    /// Store a read-only view of mcycle (for cycle)
+    Cycle(LowerUpper),
+    /// Store a read-only view of minstret (for instret)
+    Instret(LowerUpper),
+    /// Indicates that time or timeh is requested. Use the inner enum
+    /// to indicate whether the upper or lower 32 bits are requested
+    Time(LowerUpper),
+}
+
+#[derive(Debug)]
+enum ReadWriteCsrRef {
+    /// Holds a reference to an entry in a vector of CSR objects. The
+    /// CSR may be written through this reference.
+    General(usize),
+    /// Indicates that mcycle or mcycleh is requested. Use the inner enum
+    /// to indicate whether the upper or lower 32 bits are requested
+    MCycle(LowerUpper),
+    /// Indicates that minstret or minstreth is requested. Use the inner enum
+    /// to indicate whether the upper or lower 32 bits are requested
+    MInstret(LowerUpper),
+}
+
+#[derive(Debug)]
+enum CsrRef {
+    ReadOnly(ReadOnlyCsrRef),
+    ReadWrite(ReadWriteCsrRef),
+}
 
 /// Control and status registers (CSR)
 ///
@@ -309,34 +376,104 @@ impl Csr {
 ///
 #[derive(Debug, Default)]
 pub struct CsrFile {
-    csrs: HashMap<u16, Box<Csr>>,
+    /// The memory-mapped mtime register stores the 64-bit real
+    /// time. The array is little-endian (mtime[0] is the lower
+    /// 32 bits, and mtime[1] is the upper 32 bits). mtime is
+    /// a read/write register that supports any value
+    pub mtime: u64,
+
+    /// For consistency, mtimecmp is stored here next to mtime (it
+    /// is also a memory-mapped M-mode register). mtimecmp is a
+    /// read/write register that supports any value
+    pub mtimecmp: u64,
+
+    /// Number of clock cycles executed by the hart
+    pub mcycle: u64,
+
+    /// Number of instructions retired by the hart
+    pub minstret: u64,
+
+    /// All CSRs are stored in a flat vector of objects which are all
+    /// writable. The position of the CSR in this vector is _not_ its
+    /// CSR address. This is stored in the map, which also controls
+    /// whether the register is read-only or not. This allows multiple
+    /// CSR addresses to refer to the same underlying CSR with
+    /// different read/write properties.
+    csr_data: Vec<Csr>,
+
+    /// Map from CSR-address to underlying CSR, through a reference
+    /// which controls read/write properties.
+    addr_to_csr: HashMap<u16, CsrRef>,
 }
 
-/// This is stored as two separate fields to allow passing a reference
-/// to time and timeh to the relevant shadow CSRs
-#[derive(Debug, Default)]
-pub struct Time {
-    lower: Box<u32>,
-    upper: Box<u32>,
+fn add_read_write_csr(
+    addr: u16,
+    csr: Csr,
+    csr_data: &mut Vec<Csr>,
+    addr_to_csr: &mut HashMap<u16, CsrRef>,
+) {
+    let index = csr_data.len();
+    csr_data.push(csr);
+    addr_to_csr.insert(addr, CsrRef::ReadWrite(ReadWriteCsrRef::General(index)));
 }
 
-impl Time {
-    pub fn time(&self) -> u64 {
-        (u64::from(*self.upper) << 32) | u64::from(*self.lower)
-    }
+/// Panics if either the addr_to_shadow does not exist in the map. If
+/// the shadowed register is a read-only constant, then a new
+/// read-only entry is made with the same constant for the CSR at
+/// addr, instead of making a shadow.
+fn add_read_only_shadow(addr: u16, addr_to_shadow: u16, addr_to_csr: &mut HashMap<u16, CsrRef>) {
+    match addr_to_csr
+        .get(&addr_to_shadow)
+        .expect("added csr previously, should be present")
+    {
+        CsrRef::ReadWrite(read_write_csr_ref) => match read_write_csr_ref {
+            ReadWriteCsrRef::General(index) => {
+                addr_to_csr.insert(addr, CsrRef::ReadOnly(ReadOnlyCsrRef::Shadow(*index)))
+            }
+            ReadWriteCsrRef::MCycle(lower_upper) => {
+                addr_to_csr.insert(addr, CsrRef::ReadOnly(ReadOnlyCsrRef::Cycle(*lower_upper)))
+            }
+            ReadWriteCsrRef::MInstret(lower_upper) => addr_to_csr.insert(
+                addr,
+                CsrRef::ReadOnly(ReadOnlyCsrRef::Instret(*lower_upper)),
+            ),
+        },
+        CsrRef::ReadOnly(read_only_csr_ref) => match read_only_csr_ref {
+            ReadOnlyCsrRef::Constant(value) => {
+                addr_to_csr.insert(addr, CsrRef::ReadOnly(ReadOnlyCsrRef::Constant(*value)))
+            }
+            _ => unimplemented!("shadows of other read-only registers are not supported"),
+        },
+    };
+}
 
-    pub fn set_time(&mut self, value: u64) {
-        *self.lower = extract_field(value, 31, 0)
-            .try_into()
-            .expect("this will fit");
-        *self.upper = extract_field(value, 63, 32)
-            .try_into()
-            .expect("this will fit");
-    }
+fn add_constant_csr(addr: u16, const_value: u32, addr_to_csr: &mut HashMap<u16, CsrRef>) {
+    addr_to_csr.insert(
+        addr,
+        CsrRef::ReadOnly(ReadOnlyCsrRef::Constant(const_value)),
+    );
+}
 
-    pub fn increment_time(&mut self) {
-        // This is inefficient
-        self.set_time(self.time() + 1);
+/// Read the upper and lower 32-bit field of a u64 value
+fn read_u64_field(value: &u64, lower_upper: LowerUpper) -> u32 {
+    let field = match lower_upper {
+        LowerUpper::Lower => extract_field(*value, 31, 0),
+        LowerUpper::Upper => extract_field(*value, 63, 32),
+    };
+    field
+        .try_into()
+        .expect("32-bit field of u64 will fit in u32")
+}
+
+/// Write the upper and lower 32-bit field of a u64 value
+fn write_u64_field(value: &mut u64, field: u32, lower_upper: LowerUpper) {
+    match lower_upper {
+        LowerUpper::Lower => {
+            *value = (*value & 0xffff_ffff_0000_0000) | u64::from(field)
+        }
+        LowerUpper::Upper => {
+            *value = (u64::from(field) << 32) | (*value & 0xffff_ffff)
+        }
     }
 }
 
@@ -345,74 +482,117 @@ impl CsrFile {
     ///
     /// Takes a references to the memory-mapped mtime registers, which
     /// is used as the basis for the unprivileged time CSR
-    pub fn new_mmode(mtime: &Time) -> Self {
-        let mut csrs = HashMap::new();
+    ///
+    /// Pass in the read-only value mtvec, which stores the trap handler
+    /// base address and mode.
+    pub fn new_mmode(mtvec: u32) -> Self {
+        let mut csr_data = Vec::new();
+        let mut addr_to_csr = HashMap::new();
 
-        // Machine counters
-        let mcycle = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
-        let mcycleh = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
-        let minstret = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
-        let minstreth = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
-        let minstreth = Box::new(Csr::Writable(WritableCsr::new_all_values_allowed(0)));
+        // Machine information registers
+        add_constant_csr(0xf11, 0, &mut addr_to_csr); // mvendorid
+        add_constant_csr(0xf12, 0, &mut addr_to_csr); // marchid
+        add_constant_csr(0xf13, 0, &mut addr_to_csr); // mimpid
+        add_constant_csr(0xf14, 0, &mut addr_to_csr); // mhartid
+        add_constant_csr(0xf15, 0, &mut addr_to_csr); // mconfigptr
 
-        // // M-mode CSRs
-        // csrs.insert(0xf11, 0); // mvendorid
-        // csrs.insert(0xf12, 0); // marchid
-        // csrs.insert(0xf13, 0); // mimpid
-        // csrs.insert(0xf14, 0); // mhartid
-        // csrs.insert(0xf15, 0); // mconfigptr
-        // csrs.insert(0x300, 0); // mstatus
-        // csrs.insert(0x304, 0); // mie
-        // csrs.insert(0x305, 0); // mtvec
-        // csrs.insert(0x310, 0); // mstatush
-        // csrs.insert(0x340, 0); // mscratch
-        // csrs.insert(0x341, 0); // mepc
-        // csrs.insert(0x342, 0); // mcause
-        // csrs.insert(0x343, 0); // mtval
-        // csrs.insert(0x344, 0); // mip
-        csrs.insert(0xb00, mcycle);
-        // csrs.insert(0xb02, 0); // minstret
-        // for n in 3..32 {
-        //     csrs.insert(0xb00 + n, 0); // mhpmcountern
-        // }
-        // csrs.insert(0xb80, 0); // mcycleh
-        // csrs.insert(0xb82, 0); // minstreth
-        // for n in 3..32 {
-        //     csrs.insert(0xb80 + n, 0); // mhpmcounternh
-        // }
-        // for n in 3..32 {
-        //     csrs.insert(0x320 + n, 0); // mhpmeventn
-        // }
+        // Machine trap setup
+        let write_mask = MSTATUS_MIE | MSTATUS_MPIE;
+        let constant = MSTATUS_MPP; // can use mask as value should always be 0b11
+        let mstatus = Csr::new_masked(0, constant, write_mask);
+        add_read_write_csr(0x300, mstatus, &mut csr_data, &mut addr_to_csr);
+        add_constant_csr(0x310, 0, &mut addr_to_csr); // mstatush
 
-        // Unprivileged read-only shadows
-        let cycle = Box::new(Csr::ReadOnly(ReadOnlyCsr::CsrShadow(
-            *csrs.get(&0xb00).expect("mcycle register is in map"),
-        )));
-        let cycleh = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(mcycleh));
-        let time = Csr::ReadOnly(ReadOnlyCsr::MemShadow(mtime.lower));
-        let timeh = Csr::ReadOnly(ReadOnlyCsr::MemShadow(mtime.upper));
-        let instret = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(minstret));
-        let instreth = Csr::ReadOnly(ReadOnlyCsr::CsrShadow(minstreth));
+        let mie = Csr::new_all_values_allowed(0);
+        add_read_write_csr(0x304, mie, &mut csr_data, &mut addr_to_csr);
 
-        // // Unprivileged CSRs
-        csrs.insert(0xc00, cycle);
-        // csrs.insert(0xc01, 0); // time
-        // csrs.insert(0xc02, 0); // instret
-        // for n in 3..32 {
-        //     csrs.insert(0xc00 + n, 0); // hpmcountern
-        // }
-        // csrs.insert(0xc80, 0); // cycleh
-        // csrs.insert(0xc81, 0); // timeh
-        // csrs.insert(0xc82, 0); // instreth
-        // for n in 3..32 {
-        //     csrs.insert(0xc80 + n, 0); // hpmcounternh
-        // }
-	
-        Self { csrs }
+        add_constant_csr(0x305, mtvec, &mut addr_to_csr); // mtvec
+        add_constant_csr(0x310, 0, &mut addr_to_csr); // mstatush
+
+        // Machine trap handling
+        let mscratch = Csr::new_all_values_allowed(0);
+        add_read_write_csr(0x340, mscratch, &mut csr_data, &mut addr_to_csr);
+
+        let mepc = Csr::new_all_values_allowed(0); // todo: actually WARL, allowed addresses only
+        add_read_write_csr(0x341, mepc, &mut csr_data, &mut addr_to_csr);
+
+        let mcause = Csr::new_all_values_allowed(0); // todo: actually WLRL, allowed exceptions only
+        add_read_write_csr(0x342, mcause, &mut csr_data, &mut addr_to_csr);
+
+        add_constant_csr(0x343, 0, &mut addr_to_csr); // mtval
+
+        let mip = Csr::new_all_values_allowed(0);
+        add_read_write_csr(0x344, mip, &mut csr_data, &mut addr_to_csr);
+
+        // Machine counters/timers
+        addr_to_csr.insert(
+            0xb00,
+            CsrRef::ReadWrite(ReadWriteCsrRef::MCycle(LowerUpper::Lower)),
+        ); // mcycle
+        addr_to_csr.insert(
+            0xb02,
+            CsrRef::ReadWrite(ReadWriteCsrRef::MInstret(LowerUpper::Lower)),
+        ); // minstret
+
+        let minstret = Csr::new_all_values_allowed(0);
+        add_read_write_csr(0xb02, minstret, &mut csr_data, &mut addr_to_csr);
+
+        for n in 3..32 {
+            add_constant_csr(0xb00 + n, 0, &mut addr_to_csr); // mhpmcountern
+        }
+
+        addr_to_csr.insert(
+            0xb80,
+            CsrRef::ReadWrite(ReadWriteCsrRef::MCycle(LowerUpper::Upper)),
+        ); // mcycleh
+        addr_to_csr.insert(
+            0xb82,
+            CsrRef::ReadWrite(ReadWriteCsrRef::MInstret(LowerUpper::Upper)),
+        ); // minstreth
+
+        for n in 3..32 {
+            add_constant_csr(0xb80 + n, 0, &mut addr_to_csr); // mhpmcounternh
+        }
+
+        // Machine counter setup
+        for n in 3..32 {
+            add_constant_csr(0x320 + n, 0, &mut addr_to_csr); // mhpmeventn
+        }
+
+        // Unprivileged counters/timers
+        add_read_only_shadow(0xc00, 0xb00, &mut addr_to_csr); // cycle
+        addr_to_csr.insert(
+            0xc01,
+            CsrRef::ReadOnly(ReadOnlyCsrRef::Time(LowerUpper::Lower)),
+        ); // time
+        add_read_only_shadow(0xc02, 0xb02, &mut addr_to_csr); // instret
+
+        for n in 3..32 {
+            add_read_only_shadow(0xc00 + n, 0xb00 + n, &mut addr_to_csr);
+            // hpmcountern
+        }
+
+        add_read_only_shadow(0xc80, 0xb80, &mut addr_to_csr); // cycleh
+        addr_to_csr.insert(
+            0xc81,
+            CsrRef::ReadOnly(ReadOnlyCsrRef::Time(LowerUpper::Upper)),
+        ); // timeh
+        add_read_only_shadow(0xc82, 0xb82, &mut addr_to_csr); // instreth
+
+        for n in 3..32 {
+            add_read_only_shadow(0xc80 + n, 0xb80 + n, &mut addr_to_csr);
+            // hpmcounternh
+        }
+
+        Self {
+            csr_data,
+            addr_to_csr,
+            ..Self::default()
+        }
     }
 
-    fn csr_present(&self, csr: u16) -> bool {
-        self.csrs.contains_key(&csr)
+    fn csr_present(&self, addr: u16) -> bool {
+        self.addr_to_csr.contains_key(&addr)
     }
 
     /// Read a value from a CSR
@@ -420,15 +600,46 @@ impl CsrFile {
     /// If the CSR is not present, an error is returned. Otherwise,
     /// the contents of the CSR is returned. The caller can extract the
     /// bits or fields required.
-    pub fn read(&self, csr: u16) -> Result<u32, CsrError> {
-        if !self.csr_present(csr) {
-            Err(CsrError::NotPresentCsr(csr))
+    pub fn read(&self, addr: u16) -> Result<u32, CsrError> {
+        if !self.csr_present(addr) {
+            Err(CsrError::NotPresentCsr(addr))
         } else {
-            let value = self
-                .csrs
-                .get(&csr)
+            let value = match self
+                .addr_to_csr
+                .get(&addr)
                 .expect("should be present, we just checked")
-                .read();
+            {
+                CsrRef::ReadOnly(read_only_csr_ref) => match read_only_csr_ref {
+                    ReadOnlyCsrRef::Constant(value) => *value,
+                    ReadOnlyCsrRef::Cycle(lower_upper) => {
+                        read_u64_field(&self.mcycle, *lower_upper)
+                    }
+                    ReadOnlyCsrRef::Time(lower_upper) => read_u64_field(&self.mtime, *lower_upper),
+                    ReadOnlyCsrRef::Instret(lower_upper) => {
+                        read_u64_field(&self.minstret, *lower_upper)
+                    }
+                    ReadOnlyCsrRef::Shadow(index) => {
+                        let csr = &self.csr_data.get(*index).expect(
+                            "index is always in bounds here, else addr_to_csr or csr_data is wrong",
+                        );
+                        csr.read()
+                    }
+                },
+                CsrRef::ReadWrite(read_write_csr_ref) => match read_write_csr_ref {
+                    ReadWriteCsrRef::General(index) => {
+                        let csr = &self.csr_data.get(*index).expect(
+                            "index is always in bounds here, else addr_to_csr or csr_data is wrong",
+                        );
+                        csr.read()
+                    }
+                    ReadWriteCsrRef::MCycle(lower_upper) => {
+                        read_u64_field(&self.mcycle, *lower_upper)
+                    }
+                    ReadWriteCsrRef::MInstret(lower_upper) => {
+                        read_u64_field(&self.minstret, *lower_upper)
+                    }
+                },
+            };
             Ok(value)
         }
     }
@@ -446,106 +657,219 @@ impl CsrFile {
     ///   - if field is WARL, do not modify CSR on invalid value;
     ///     if value is valid, write it.
     ///
-    pub fn write(&mut self, csr: u16, value: u32) -> Result<(), CsrError> {
-        if !self.csr_present(csr) {
-            Err(CsrError::NotPresentCsr(csr))
+    pub fn write(&mut self, addr: u16, value: u32) -> Result<(), CsrError> {
+        if !self.csr_present(addr) {
+            Err(CsrError::NotPresentCsr(addr))
         } else {
-            self.csrs
-                .get_mut(&csr)
+            match self
+                .addr_to_csr
+                .get(&addr)
                 .expect("should be present, we just checked")
-                .write(value)
+            {
+                CsrRef::ReadOnly(_) => Err(CsrError::ReadOnlyCsr),
+                CsrRef::ReadWrite(read_write_csr_ref) => match read_write_csr_ref {
+                    ReadWriteCsrRef::General(index) => {
+                        let csr = self.csr_data.get_mut(*index).expect(
+                            "index is always in bounds here, else addr_to_csr or csr_data is wrong",
+                        );
+                        csr.write(value)
+                    }
+                    ReadWriteCsrRef::MCycle(lower_upper) => {
+                        write_u64_field(&mut self.mcycle, value, *lower_upper);
+                        Ok(())
+                    }
+                    ReadWriteCsrRef::MInstret(lower_upper) => {
+                        write_u64_field(&mut self.minstret, value, *lower_upper);
+                        Ok(())
+                    }
+                }
+            }
         }
     }
 }
 
-// Machine-mode CSRs in 32-bit mode
-//
-// (Note: not all the CSRs are the same length in all modes. For example,
-// many registers are MXLEN long (32-bit or 64-bit), but mvendorid is always
-// 32-bit even in 64-bit mode.)
-//
-// misa: 32-bit, top two bits are 0b01 (for machine xlen 32-bit),
-// bottom 26 bits contain extensions (0b1100 for RV32IM; bit 8 is I,
-// bit 12 is M). So Register is 0x4000_1100. Value zero can also be
-// returned to indicate not implemented.
-//
-// mvendorid: 32-bit, contains the vendor ID (JEDEC). Value zero returned to
-// indicate register not implemented (or non-commercial implementation).
-//
-// marchid: 32-bit, specifies base microarchitecture.
-//
-// mimpid: 32-bit, contains version of proessor implementation. Value zero
-// means not implemented.
-//
-// mhartid: 32-bit, unique id of hart running code. If there is only one
-// hart, this field is zero.
-//
-// mstatus(h): 32-bit machine status registers, mostly single bit
-// fields indicating and controlling the state of the current harts
-// operation.  mstatush is a 32-bit field containing a few extra
-// fields that do not fit into the 32-bit mstatus register. This is a
-// complex register due to the number of different behaviours relating
-// to each bit; see section 3.1.6 in the privileged specification.
-//
-// mtvec: 32-bit register storing the address of trap handlers, and
-// the mode (vectored or direct). May be implemented as read-only.
-//
-// medeleg/mideleg: do not exist if only M-mode is implemented (i.e.
-// there is no S-mode)
-//
-// mip: 32-bit register storing pending interrupts. Bits 15:0 are
-// standard interrupts defined in the specification, and 16 and above
-// are for platform/custom use. A pending interrupt is cleared
-// (i.e. after servicing the interrupt) by writing zero to the correct
-// bit. An interrupt will cause a trap if the MIE in mstatus is set.
-//
-// mie: 32-bit interrupt enable register, not used when only M-mode is
-// implemented (all interrupts are controlled by MIE in mstatus) (to
-// double check).
-//
-// mcycle(h): 64-bit, number of clock cycles executed by the processor on
-// which the hart is running. Power-on-reset value arbitrary, writable
-// with an arbitrary value. Written value takes effect after writing
-// instruction completes. In 32-bit mode, accessible as a low and high
-// 32-bit register.
-//
-// minstret(h): 64-bit, number of instructions retired by the
-// hart. Power-on-reset value arbitrary, writable with an arbitrary
-// value. Written value takes effect after writing instruction
-// completes. In 32-bit mode, accessible as a low and high
-// 32-bit register.
-//
-// mhpmcounter[3-31](h): 29 additional 64-bit event counter; required, but
-// allowed to be read-only zero. In 32-bit mode, each 64-bit counter is
-// accessible as a low and high 32-bit register.
-//
-// mhpevent[3-31]: 29 32-bit registers specifying what events are
-// being counted by mhpmcounter* registers. Required, but allowed to
-// be read-only zero.
-//
-// mcounteren: 32-bit register, with one bit for each of the 32 performance
-// monitoring counters (including
-//
-// mcounteren: 32-bit register to enable counters. Does not exist when only
-// M-mode is implemented (i.e. there is no U-mode).
-//
-// mcounterinhibit: 32-bit register used to disable counters. Not required
-// to be implemented.
-//
-// mscratch: 32-bit read/write register for use by machine mode.
-//
-// mepc: 32-bit exception program counter. When a trap is taken to M-mode
-// (i.e. when any trap is taken), this register stores the address of the
-// instruction that encountered the trap.
-//
-// mcause: 32-bit register indicating the cause of the last event that
-// caused a trap. Contains a bit which is set if the last event was an
-// interrupt.
-//
-// mtval: 32-bit register to provide more information to a trap handler.
-// May be implemented as read-only zero.
-//
-// mconfigptr: 32-bit register pointing to a data structure with
-// information about the hart and the platform. May be implemented as
-// read-only zero to indicate that the structure does not exist.
-//
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    /// Checks the machine information registers
+    #[test]
+    fn check_machine_information() {
+        let csr_file = CsrFile::new_mmode(0);
+        assert_eq!(csr_file.read(0xf11).expect("register present"), 0); // mvendorid
+        assert_eq!(csr_file.read(0xf12).expect("register present"), 0); // marchid
+        assert_eq!(csr_file.read(0xf13).expect("register present"), 0); // mimpid
+        assert_eq!(csr_file.read(0xf14).expect("register present"), 0); // mhartid
+        assert_eq!(csr_file.read(0xf15).expect("register present"), 0); // mconfigptr
+    }
+
+    /// Checks the register exists and returns zero
+    #[test]
+    fn check_other_read_only_zero() {
+        let csr_file = CsrFile::new_mmode(0);
+        assert_eq!(csr_file.read(0x310).expect("register present"), 0); // mstatush
+        assert_eq!(csr_file.read(0x343).expect("register present"), 0); // mtval
+
+        for n in 3..32 {
+            assert_eq!(csr_file.read(0xb00 + n).expect("register present"), 0); // mhpmcountern
+        }
+
+        for n in 3..32 {
+            assert_eq!(csr_file.read(0xb80 + n).expect("register present"), 0); // mhpmcounternh
+        }
+
+        for n in 3..32 {
+            assert_eq!(csr_file.read(0x320 + n).expect("register present"), 0); // mhpmevent
+        }
+
+        for n in 3..32 {
+            assert_eq!(csr_file.read(0xc00 + n).expect("register present"), 0); // hpmcountern
+        }
+
+        for n in 3..32 {
+            assert_eq!(csr_file.read(0xc80 + n).expect("register present"), 0); // hpmcounternh
+        }
+    }
+
+    /// Checks attempted writes to a selection of read-only registers
+    /// returns an error
+    #[test]
+    fn check_error_on_write_to_read_only() {
+        let mut csr_file = CsrFile::new_mmode(0);
+        let result = csr_file.write(0xf11, 0); // mvendorid (read-only zero)
+        assert_eq!(result, Err(CsrError::ReadOnlyCsr));
+
+        let result = csr_file.write(0x310, 0); // mstatush
+        assert_eq!(result, Err(CsrError::ReadOnlyCsr));
+
+        let result = csr_file.write(0xf15, 0); // mconfigptr
+        assert_eq!(result, Err(CsrError::ReadOnlyCsr));
+
+        let result = csr_file.write(0xc00, 0); // cycle
+        assert_eq!(result, Err(CsrError::ReadOnlyCsr));
+
+        let result = csr_file.write(0xc01, 0); // time
+        assert_eq!(result, Err(CsrError::ReadOnlyCsr));
+
+        let result = csr_file.write(0xc02, 0); // instret
+        assert_eq!(result, Err(CsrError::ReadOnlyCsr));
+    }
+
+    /// Checks attempted reads/writes to a non-existent registers
+    /// returns an error
+    #[test]
+    fn check_error_on_access_to_not_present() {
+        let mut csr_file = CsrFile::new_mmode(0);
+        let result = csr_file.write(0x34b, 0); // mtval2 write
+        assert_eq!(result, Err(CsrError::NotPresentCsr(0x34b)));
+        let result = csr_file.read(0x34b); // mtval2 read
+        assert_eq!(result, Err(CsrError::NotPresentCsr(0x34b)));
+
+        let result = csr_file.write(0x3a0, 0); // pmpcfg0
+        assert_eq!(result, Err(CsrError::NotPresentCsr(0x3a0)));
+        let result = csr_file.read(0x3a0); // pmpcfg0
+        assert_eq!(result, Err(CsrError::NotPresentCsr(0x3a0)));
+    }
+
+    #[test]
+    fn check_mtime() {
+        let mut csr_file = CsrFile::new_mmode(0);
+
+        // Check time defaults to zero
+        let time = csr_file.read(0xc01).unwrap();
+        let timeh = csr_file.read(0xc81).unwrap();
+        assert_eq!(time, 0);
+        assert_eq!(timeh, 0);
+
+        // Now set an arbitrary time and check
+        csr_file.mtime = 0x1234_abcd_9876_cdef;
+        let time = csr_file.read(0xc01).unwrap();
+        let timeh = csr_file.read(0xc81).unwrap();
+        assert_eq!(time, 0x9876_cdef);
+        assert_eq!(timeh, 0x1234_abcd);
+    }
+
+    #[test]
+    fn check_mcycle() {
+        let mut csr_file = CsrFile::new_mmode(0);
+
+        // Check cycle defaults to zero
+        let mcycle = csr_file.read(0xb00).unwrap();
+        let mcycleh = csr_file.read(0xb80).unwrap();
+        assert_eq!(mcycle, 0);
+        assert_eq!(mcycleh, 0);
+        let cycle = csr_file.read(0xc00).unwrap();
+        let cycleh = csr_file.read(0xc80).unwrap();
+        assert_eq!(cycle, 0);
+        assert_eq!(cycleh, 0);
+
+        // Now set an arbitrary cycle and check
+        csr_file.mcycle = 0x1234_abcd_9876_cdef;
+        let cycle = csr_file.read(0xc00).unwrap();
+        let cycleh = csr_file.read(0xc80).unwrap();
+        assert_eq!(cycle, 0x9876_cdef);
+        assert_eq!(cycleh, 0x1234_abcd);
+
+	// Make a modification by writing to the mcycle CSR
+	csr_file.write(0xb00, 0xeeee_ffff).unwrap();
+	csr_file.write(0xb80, 0xaaaa_bbbb).unwrap();
+
+	// Check the correct value
+	assert_eq!(csr_file.mcycle, 0xaaaa_bbbb_eeee_ffff);
+	
+	// Check the value is correct after modifying
+        let mcycle = csr_file.read(0xb00).unwrap();
+        let mcycleh = csr_file.read(0xb80).unwrap();
+	println!("{csr_file:x?},{mcycle:x}");
+        assert_eq!(mcycle, 0xeeee_ffff);
+        assert_eq!(mcycleh, 0xaaaa_bbbb);
+        let cycle = csr_file.read(0xc00).unwrap();
+        let cycleh = csr_file.read(0xc80).unwrap();
+        assert_eq!(cycle, 0xeeee_ffff);
+        assert_eq!(cycleh, 0xaaaa_bbbb);
+    }
+
+    #[test]
+    fn check_minstret() {
+        let mut csr_file = CsrFile::new_mmode(0);
+
+        // Check instret defaults to zero
+        let minstret = csr_file.read(0xb02).unwrap();
+        let minstreth = csr_file.read(0xb82).unwrap();
+        assert_eq!(minstret, 0);
+        assert_eq!(minstreth, 0);
+        let instret = csr_file.read(0xc02).unwrap();
+        let instreth = csr_file.read(0xc82).unwrap();
+        assert_eq!(instret, 0);
+        assert_eq!(instreth, 0);
+
+        // Now set an arbitrary instret and check
+        csr_file.minstret = 0x1234_abcd_9876_cdef;
+        let instret = csr_file.read(0xc02).unwrap();
+        let instreth = csr_file.read(0xc82).unwrap();
+	println!("{csr_file:x?},{instret}");
+        assert_eq!(instret, 0x9876_cdef);
+        assert_eq!(instreth, 0x1234_abcd);
+/*
+	// Make a modification by writing to the minstret CSR
+	csr_file.write(0xb00, 0xeeee_ffff).unwrap();
+	csr_file.write(0xb80, 0xaaaa_bbbb).unwrap();
+
+	// Check the correct value
+	assert_eq!(csr_file.minstret, 0xaaaa_bbbb_eeee_ffff);
+	
+	// Check the value is correct after modifying
+        let minstret = csr_file.read(0xb02).unwrap();
+        let minstreth = csr_file.read(0xb82).unwrap();
+	println!("{csr_file:x?},{minstret:x}");
+        assert_eq!(minstret, 0xeeee_ffff);
+        assert_eq!(minstreth, 0xaaaa_bbbb);
+        let instret = csr_file.read(0xc02).unwrap();
+        let instreth = csr_file.read(0xc82).unwrap();
+        assert_eq!(instret, 0xeeee_ffff);
+        assert_eq!(instreth, 0xaaaa_bbbb);
+	*/
+    }
+
+}
