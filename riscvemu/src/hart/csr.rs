@@ -534,9 +534,6 @@ impl CsrFile {
             CsrRef::ReadWrite(ReadWriteCsrRef::MInstret(LowerUpper::Lower)),
         ); // minstret
 
-        let minstret = Csr::new_all_values_allowed(0);
-        add_read_write_csr(0xb02, minstret, &mut csr_data, &mut addr_to_csr);
-
         for n in 3..32 {
             add_constant_csr(0xb00 + n, 0, &mut addr_to_csr); // mhpmcountern
         }
@@ -851,10 +848,9 @@ mod tests {
 	println!("{csr_file:x?},{instret}");
         assert_eq!(instret, 0x9876_cdef);
         assert_eq!(instreth, 0x1234_abcd);
-/*
 	// Make a modification by writing to the minstret CSR
-	csr_file.write(0xb00, 0xeeee_ffff).unwrap();
-	csr_file.write(0xb80, 0xaaaa_bbbb).unwrap();
+	csr_file.write(0xb02, 0xeeee_ffff).unwrap();
+	csr_file.write(0xb82, 0xaaaa_bbbb).unwrap();
 
 	// Check the correct value
 	assert_eq!(csr_file.minstret, 0xaaaa_bbbb_eeee_ffff);
@@ -869,7 +865,6 @@ mod tests {
         let instreth = csr_file.read(0xc82).unwrap();
         assert_eq!(instret, 0xeeee_ffff);
         assert_eq!(instreth, 0xaaaa_bbbb);
-	*/
     }
 
 }
