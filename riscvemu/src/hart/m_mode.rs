@@ -94,6 +94,8 @@ pub enum TrapCtrlError {
 pub struct TrapCtrl {
     /// Global interrupt enable bit in mstatus (MIE)
     mstatus_mie: bool,
+    /// Previous global interrupt enable bit in mstatus (MPIE)
+    mstatus_mpie: bool,
     /// Machine interrupt enable
     mie: u32,
     /// Machine interrupt pending
@@ -159,13 +161,23 @@ impl TrapCtrl {
 	self.mip |= 1 << bit_position;
     }
 
+    fn save_mie_bit(&mut self) {
+	self.mstatus_mpie = self.mstatus_mie
+    }
+
+    fn restore_mie_bit(&mut self) {
+	self.mstatus_mie = self.mstatus_mpie
+    }
+    
     /// Evaluate the conditions for whether an interrupt should trap.
     /// If it should trap, store the current program counter in mepc,
-    /// store the cause of the trap in mcause, and return the address
-    /// of an entry in the trap vector table; otherwise return None
-    /// and do not modify mepc.
+    /// store the cause of the trap in mcause, write the current MIE
+    /// bit (1) to the MPIE bit (p. 21 of the privileged spec), and
+    /// return the address of an entry in the trap vector table;
+    /// otherwise return None and do not modify mepc.
     fn interrupt_should_trap(&mut self, int: Interrupt, pc: u32) -> Option<u32> {
 	if self.interrupt_enabled(int) && self.interrupt_pending(int) {
+	    self.save_mie_bit();
 	    self.mcause = Trap::Interrupt(int).mcause();
 	    self.mepc = pc;
 	    Some(self.trap_vector_address(Trap::Interrupt(int)))
@@ -230,9 +242,14 @@ impl TrapCtrl {
 
     /// Return from an exception or interrupt
     ///
-    /// todo...
-    pub fn mret(&mut self) {
-
+    /// Restore the mstatus.MIE bit and return the value stored in
+    /// mepc (see p. 47 privileged spec).
+    ///
+    /// Write the value returned by this function to the program
+    /// counter and resume execution.
+    pub fn mret(&mut self) -> u32 {
+	self.restore_mie_bit();
+	self.mepc
     }
     
     fn interrupts_globally_enabled(&self) -> bool {
