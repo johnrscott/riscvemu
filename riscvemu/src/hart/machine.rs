@@ -35,6 +35,16 @@ pub enum Trap {
     Exception(Exception),
 }
 
+// mip fields
+pub const MIP_MSIP: u32 = 3;
+pub const MIP_MTIP: u32 = 7;
+pub const MIP_MEIP: u32 = 11;
+
+// mstatus fields
+pub const MSTATUS_MIE: u32 = 3;
+pub const MSTATUS_MPIE: u32 = 7;
+pub const MSTATUS_MPP: u32 = 11;
+
 impl Trap {
 
     /// The value of the mcause CSR for this trap
@@ -57,9 +67,9 @@ impl Trap {
 	match self {
 	    Self::Interrupt(int) => {
 		match int {
-		    Interrupt::Software => 3,
-		    Interrupt::Timer => 7,
-		    Interrupt::External => 11,
+		    Interrupt::Software => MIP_MSIP,
+		    Interrupt::Timer => MIP_MTIP,
+		    Interrupt::External => MIP_MEIP,
 		}
 	    }
 	    Self::Exception(ex) => {
@@ -87,6 +97,29 @@ pub enum TrapCtrlError {
     TrapVectorBaseMisaligned
 }
 
+#[derive(Debug, Default)]
+struct TimerInterrupt {
+    /// Timer interrupt enable
+    mtie: bool,
+    /// Real time
+    mtime: u64,
+    /// Timer compare register, used to control timer
+    /// interrupt
+    mtimecmp: u64,
+}
+
+impl TimerInterrupt {
+    /// Return the MTIP bit. This function also evaluates
+    /// the bit, which is equal to mtime >= mtimecmp (see
+    /// section 3.1.2 privileged spec). Although 3.1.9
+    /// appears to state that writing mtimecmp clears
+    /// MTIP, this is interpreted as meaning mtimecmp
+    /// _can_ clear MTIP.
+    fn mtip(&self) -> bool {
+	self.mtime >= self.mtimecmp
+    }
+}
+
 /// Trap control
 ///
 /// This implementation uses 
@@ -96,10 +129,6 @@ pub struct TrapCtrl {
     mstatus_mie: bool,
     /// Previous global interrupt enable bit in mstatus (MPIE)
     mstatus_mpie: bool,
-    /// Machine interrupt enable
-    mie: u32,
-    /// Machine interrupt pending
-    mip: u32,
     /// The trap cause register
     mcause: u32,
     /// Trap vector table base address. Must be four-byte aligned.
@@ -112,15 +141,90 @@ pub struct TrapCtrl {
     /// address of the instruction that was interrupt or that encountered
     /// the exception (privileged spec, p. 38)
     mepc: u32,
+    /// Timer registers and interrupt
+    timer_interrupt: TimerInterrupt,
+    /// External interrupt pending bit
+    meip: bool,
+    /// External interrupt enable bit
+    meie: bool,
+    /// Machine software interrupt pending
+    msip: bool,
+    /// Machine software interrupt enable
+    msie: bool,
 }
 
 pub const MTVEC_MODE_VECTORED: u32 = 1;
 
 impl TrapCtrl {
 
+    pub fn set_mtimecmp(&mut self, value: u64) {
+	self.timer_interrupt.mtimecmp = value
+    }
+
+    pub fn mtimecmp(&mut self) -> u64 {
+	self.timer_interrupt.mtimecmp
+    }
+
+    pub fn increment_mtime(&mut self) {
+	self.timer_interrupt.mtime += 1;
+    }
+    
+    pub fn raise_external_interrupt(&mut self) {
+	self.meip = true
+    }
+
+    pub fn clear_external_interrupt(&mut self) {
+	self.meip = false
+    }
+
+    pub fn raise_software_interrupt(&mut self) {
+	self.msip = true
+    }
+
+    pub fn clear_software_interrupt(&mut self) {
+	self.msip = false
+    }
+
+    /// Construct the mstatus register for reading
+    pub fn csr_mstatus(&self) -> u32 {
+	(self.mstatus_mie as u32) << MSTATUS_MIE |
+	(self.mstatus_mpie as u32) << MSTATUS_MPIE |
+	0b11 << MSTATUS_MPP
+    }
+
     /// In this implementation, the mtvec CSR is read-only
-    pub fn mtvec(&self) -> u32 {
+    pub fn csr_mtvec(&self) -> u32 {
 	(self.trap_vector_base << 2) | MTVEC_MODE_VECTORED
+    }
+    
+    /// Get the mip (interrupt pending) status register
+    pub fn csr_mip(&self) -> u32 {
+	(self.msip as u32) << MIP_MSIP |
+	(self.timer_interrupt.mtip() as u32) << MIP_MTIP |
+	(self.meip as u32) << MIP_MEIP
+    }
+
+    /// Get the mie (interrupt enable) register
+    pub fn csr_mie(&self) -> u32 {
+	// Note bit positions are the same as in mip 
+	(self.msie as u32) << MIP_MSIP |
+	(self.timer_interrupt.mtie as u32) << MIP_MTIP |
+	(self.meie as u32) << MIP_MEIP
+    }
+
+    /// Write the mie register
+    pub fn csr_write_mie(&mut self, value: u32) {
+	self.msie = value >> MIP_MSIP & 1 != 0;
+	self.timer_interrupt.mtie = value >> MIP_MTIP & 1 != 0;
+	self.meie = value >> MIP_MEIP & 1 != 0;
+    }
+    
+    pub fn mmap_mtime(&mut self) -> u32 {
+	low_word(&self.timer_interrupt.mtime)
+    }    
+
+    pub fn mmap_mtimeh(&mut self) -> u32 {
+	high_word(&self.timer_interrupt.mtime)
     }
 
     /// For an exception, return the trap vector base address. For an
@@ -145,47 +249,21 @@ impl TrapCtrl {
 	    })
 	}
     }
-    
-    /// Set the interrupt pending flag for the interrupt in mip
-    ///
-    /// This is the first step in raising an interrupt. This route
-    /// to raising an interrupt is used by hardware. Software can
-    /// make an interrupt pending by writing to the mip through the
-    /// CSR.
-    ///
-    /// Once an interrupt is pending, it will cause an interrupt
-    /// in a bounded amount of time if other conditions 
-    pub fn set_interrupt_pending(&mut self, int: Interrupt) {
 
-	let bit_position = Trap::Interrupt(int).cause();
-	self.mip |= 1 << bit_position;
-    }
-
+    /// As per section 3.1.6.1 privileged spec, MIE bits is saved
+    /// to MPIE on a trap, and MIE is set to 0
     fn save_mie_bit(&mut self) {
-	self.mstatus_mpie = self.mstatus_mie
+	self.mstatus_mpie = self.mstatus_mie;
+	self.mstatus_mie = false;	    
     }
 
+    /// As per section 3.1.6.1 privileged spec, MPIE bits is restored
+    /// to MIE on an mret, and MPIE is set to 1
     fn restore_mie_bit(&mut self) {
-	self.mstatus_mie = self.mstatus_mpie
+	self.mstatus_mie = self.mstatus_mpie;
+	self.mstatus_mpie = true;
     }
-    
-    /// Evaluate the conditions for whether an interrupt should trap.
-    /// If it should trap, store the current program counter in mepc,
-    /// store the cause of the trap in mcause, write the current MIE
-    /// bit (1) to the MPIE bit (p. 21 of the privileged spec), and
-    /// return the address of an entry in the trap vector table;
-    /// otherwise return None and do not modify mepc.
-    fn interrupt_should_trap(&mut self, int: Interrupt, pc: u32) -> Option<u32> {
-	if self.interrupt_enabled(int) && self.interrupt_pending(int) {
-	    self.save_mie_bit();
-	    self.mcause = Trap::Interrupt(int).mcause();
-	    self.mepc = pc;
-	    Some(self.trap_vector_address(Trap::Interrupt(int)))
-	} else {
-	    None
-	}
-    }
-    
+        
     /// Evaluate the conditions for trapping an interrupt
     ///
     /// The conditions for whether the interrupt for cause i is raised
@@ -255,17 +333,40 @@ impl TrapCtrl {
     fn interrupts_globally_enabled(&self) -> bool {
 	self.mstatus_mie
     }
-    
+
     fn interrupt_enabled(&self, int: Interrupt) -> bool {
-	let bit_position = Trap::Interrupt(int).cause();
-	let interrupt_enabled = self.mie & (1 << bit_position) != 0;
-	self.interrupts_globally_enabled() && interrupt_enabled
+	self.interrupts_globally_enabled() && match int {
+	    Interrupt::External => self.meie,
+	    Interrupt::Software => self.msie,
+	    Interrupt::Timer => self.timer_interrupt.mtie
+	} 
     }
 
     fn interrupt_pending(&self, int: Interrupt) -> bool {
-	let bit_position = Trap::Interrupt(int).cause();
-	self.mip & (1 << bit_position) != 0
+	match int {
+	    Interrupt::External => self.meip,
+	    Interrupt::Software => self.msip,
+	    Interrupt::Timer => self.timer_interrupt.mtip()
+	}
     }
+
+    /// Evaluate the conditions for whether an interrupt should trap.
+    /// If it should trap, store the current program counter in mepc,
+    /// store the cause of the trap in mcause, write the current MIE
+    /// bit (1) to the MPIE bit (p. 21 of the privileged spec), and
+    /// return the address of an entry in the trap vector table;
+    /// otherwise return None and do not modify mepc.
+    fn interrupt_should_trap(&mut self, int: Interrupt, pc: u32) -> Option<u32> {
+	if self.interrupt_enabled(int) && self.interrupt_pending(int) {
+	    self.save_mie_bit();
+	    self.mcause = Trap::Interrupt(int).mcause();
+	    self.mepc = pc;
+	    Some(self.trap_vector_address(Trap::Interrupt(int)))
+	} else {
+	    None
+	}
+    }
+
 }
 
 
@@ -283,8 +384,32 @@ pub struct Machine {
     mcycle: u64,
     /// Number of instructions executed since reset.
     minstret: u64,
-    /// Real time
-    mtime: u64,
     /// Trap (interrupt and exception) control
-    trap_ctrl: TrapCtrl,
+    pub trap_ctrl: TrapCtrl,
+}
+
+impl Machine {
+    pub fn csr_mcycle(&self) -> u32 {
+	low_word(&self.mcycle)
+    }
+
+    pub fn csr_mcycleh(&self) -> u32 {
+	high_word(&self.mcycle)
+    }
+
+    pub fn csr_minstret(&self) -> u32 {
+	low_word(&self.minstret)
+    }
+
+    pub fn csr_minstreth(&self) -> u32 {
+	high_word(&self.minstret)
+    }
+}
+
+fn low_word(value: &u64) -> u32 {
+    (0xffff_ffff & value).try_into().unwrap()
+}
+
+fn high_word(value: &u64) -> u32 {
+    (0xffff_ffff & value >> 32).try_into().unwrap()
 }

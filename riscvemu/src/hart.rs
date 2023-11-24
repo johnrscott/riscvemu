@@ -11,7 +11,7 @@ use memory::Memory;
 use thiserror::Error;
 
 pub mod csr;
-pub mod m_mode;
+pub mod machine;
 pub mod memory;
 pub mod registers;
 
