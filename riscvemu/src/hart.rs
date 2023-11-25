@@ -15,7 +15,6 @@ pub mod machine;
 pub mod memory;
 pub mod registers;
 
-
 /// RISC-V Hardware Thread
 ///
 /// This is the simplest possible RISC-V hardware thread, which is an
