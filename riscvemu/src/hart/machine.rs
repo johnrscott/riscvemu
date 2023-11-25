@@ -8,6 +8,12 @@
 
 use thiserror::Error;
 
+use crate::utils::mask;
+
+/// Mask for valid bits in mcause. The mcause register is WARL,
+/// so writes will be masked before writing to mcause.
+pub const MCAUSE_MASK: u32 = 0x8000_08ff;
+
 #[derive(Copy, Clone)]
 pub enum Exception {
     InstructionAddressMisaligned,
@@ -88,6 +94,8 @@ impl Trap {
 pub enum TrapCtrlError {
     #[error("Trap vector base address must be four byte aligned")]
     TrapVectorBaseMisaligned,
+    #[error("Physical memory address width must be no more than 32 bits")]
+    PhysicalMemoryTooLarge,
 }
 
 #[derive(Debug, Default)]
@@ -134,6 +142,10 @@ pub struct TrapCtrl {
     /// address of the instruction that was interrupt or that encountered
     /// the exception (privileged spec, p. 38)
     mepc: u32,
+    /// Valid mepc values are 4-byte aligned, and do not exceed valid
+    /// address range for physical addresses (see the
+    /// physical_address_bits argument).
+    mepc_mask: u32,
     /// Timer registers and interrupt
     timer_interrupt: TimerInterrupt,
     /// External interrupt pending bit
@@ -211,12 +223,63 @@ impl TrapCtrl {
         self.meie = value >> MIP_MEIP & 1 != 0;
     }
 
-    pub fn mmap_mtime(&mut self) -> u32 {
+    /// Get the mepc (return address after trap) register
+    pub fn csr_mepc(&self) -> u32 {
+        self.mepc
+    }
+
+    /// Set the mepc (return address after trap) register
+    ///
+    /// Only valid addresses for mepc are legal values.  valid
+    /// addresses are four-byte aligned, and are valid physical memory
+    /// addresses. The value is masked so that it becomes valid,
+    /// and then written to mepc. The field is WARL, so a write
+    /// of an invalid value does not raise an error.
+    pub fn csr_write_mepc(&mut self, value: u32) {
+        self.mepc = self.mepc_mask & value;
+    }
+
+    /// Get the mcause (cause of trap) register
+    pub fn csr_mcause(&self) -> u32 {
+        self.mcause
+    }
+
+    pub fn csr_write_mcycle(&mut self) -> u32 {
         low_word(&self.timer_interrupt.mtime)
     }
 
-    pub fn mmap_mtimeh(&mut self) -> u32 {
+    pub fn mmap_mtime(&self) -> u32 {
+        low_word(&self.timer_interrupt.mtime)
+    }
+    
+    pub fn mmap_mtimeh(&self) -> u32 {
         high_word(&self.timer_interrupt.mtime)
+    }
+
+    /// Set the mcause (cause of trap) register
+    ///
+    /// The register has all-WARL fields, so an invalid
+    /// value will be converted to a valid value by a mask
+    /// before the write. The resulting value of the register
+    /// will agree with the written value for the valid bits,
+    /// and invalid bits will continue to be zero.
+    ///
+    /// Valid bits are as follows:
+    /// - bit 0: instruction address misaligned
+    /// - bit 1: instruction access fault
+    /// - bit 2: illegal instruction
+    /// - bit 3: machine software interrupt/breakpoint
+    /// - bit 4: load address misaligned
+    /// - bit 5: load access fault
+    /// - bit 6: store address misaligned
+    /// - bit 7: store access fault/machine timer interrupt
+    /// - bit 11: ecall from M-mode/machine external interrupt
+    /// - bit 31: interrupt flag
+    ///
+    /// The resulting mask is 0b8000_08ff.
+    ///
+    pub fn csr_write_mcause(&mut self, value: u32) {
+        self.mcause = MCAUSE_MASK & value;
     }
 
     /// For an exception, return the trap vector base address. For an
@@ -232,12 +295,15 @@ impl TrapCtrl {
     ///
     /// Returns an error if the trap_vector_base address is not
     /// four-byte aligned
-    fn new(trap_vector_base: u32) -> Result<Self, TrapCtrlError> {
+    fn new(trap_vector_base: u32, physical_address_bits: u32) -> Result<Self, TrapCtrlError> {
         if trap_vector_base % 4 != 0 {
             Err(TrapCtrlError::TrapVectorBaseMisaligned)
+        } else if physical_address_bits >= 32 {
+            Err(TrapCtrlError::PhysicalMemoryTooLarge)
         } else {
             Ok(Self {
                 trap_vector_base,
+                mepc_mask: mask(physical_address_bits) & 0xffff_fffc,
                 ..Self::default()
             })
         }
@@ -383,16 +449,32 @@ pub struct Machine {
 }
 
 impl Machine {
+    pub fn csr_write_mcycle(&mut self, value: u32) {
+        write_low_word(&mut self.mcycle, value);
+    }
+
     pub fn csr_mcycle(&self) -> u32 {
         low_word(&self.mcycle)
+    }
+
+    pub fn csr_write_mcycleh(&mut self, value: u32) {
+        write_high_word(&mut self.mcycle, value);
     }
 
     pub fn csr_mcycleh(&self) -> u32 {
         high_word(&self.mcycle)
     }
 
+    pub fn csr_write_minstret(&mut self, value: u32) {
+        write_low_word(&mut self.minstret, value);
+    }
+
     pub fn csr_minstret(&self) -> u32 {
         low_word(&self.minstret)
+    }
+
+    pub fn csr_write_minstreth(&mut self, value: u32) {
+        write_high_word(&mut self.mcycle, value);
     }
 
     pub fn csr_minstreth(&self) -> u32 {
@@ -404,6 +486,16 @@ fn low_word(value: &u64) -> u32 {
     (0xffff_ffff & value).try_into().unwrap()
 }
 
+fn write_low_word(target: &mut u64, value: u32) {
+    let upper = *target & 0xffff_ffff_0000_0000;
+    *target = upper | u64::from(value);
+}
+
 fn high_word(value: &u64) -> u32 {
     (0xffff_ffff & value >> 32).try_into().unwrap()
+}
+
+fn write_high_word(target: &mut u64, value: u32) {
+    let lower = *target & 0xffff_ffff;
+    *target = u64::from(value) << 32 | lower;
 }

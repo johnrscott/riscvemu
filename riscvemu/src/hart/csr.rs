@@ -52,12 +52,13 @@ pub const CSR_MSTATUSH: u16 = 0x310;
 /// 32-bit read/write register for use by trap handlers
 pub const CSR_MSCRATCH: u16 = 0x340;
 
-/// 32-bit, read/write register (WARL, valid values are allowed
-/// physical addresses). Stores the return-address from trap handler
+/// 32-bit, read/write register, stores the return-address from trap
+/// handler. WARL, valid values are allowed physical addresses (4-byte
+/// aligned and fit within physical memory address width).
 pub const CSR_MEPC: u16 = 0x341;
 
 /// 32-bit, read/write, stores exception code and bit indicating
-/// whether trap is interrupt. exception code is WLRL.
+/// whether trap is interrupt. Exception code is WLRL.
 pub const CSR_MCAUSE: u16 = 0x342;
 
 /// read-only zero
@@ -178,8 +179,23 @@ impl MachineInterface {
             CSR_MSTATUS,
             Csr::new_read_write(read_mstatus, write_mstatus),
         );
-        addr_to_csr.insert(CSR_MISA, Csr::new_constant(0)); // this is wrong, should be read/write (WARL 0)
-        // mie
+        addr_to_csr.insert(
+            CSR_MISA,
+            Csr::new_read_write(
+                |_machine: &Machine| 0,
+                |_machine: &mut Machine, _value: u32| Ok(()),
+            ),
+        );
+        addr_to_csr.insert(
+            CSR_MIE,
+            Csr::new_read_write(
+                |machine: &Machine| machine.trap_ctrl.csr_mie(),
+                |machine: &mut Machine, value: u32| {
+                    machine.trap_ctrl.csr_write_mie(value);
+                    Ok(())
+                },
+            ),
+        );
         addr_to_csr.insert(
             CSR_MTVEC,
             Csr::new_read_only(|machine: &Machine| machine.trap_ctrl.csr_mtvec()),
@@ -187,7 +203,7 @@ impl MachineInterface {
         addr_to_csr.insert(CSR_MSTATUSH, Csr::new_constant(0));
         addr_to_csr.insert(
             CSR_MSCRATCH,
-            Csr::ReadWrite(
+            Csr::new_read_write(
                 |machine: &Machine| machine.mscratch,
                 |machine: &mut Machine, value: u32| {
                     machine.mscratch = value;
@@ -195,20 +211,92 @@ impl MachineInterface {
                 },
             ),
         );
-        // mepc
-        // mcause
+        addr_to_csr.insert(
+            CSR_MEPC,
+            Csr::new_read_write(
+                |machine: &Machine| machine.trap_ctrl.csr_mepc(),
+                |machine: &mut Machine, value: u32| {
+                    machine.trap_ctrl.csr_write_mepc(value);
+                    Ok(())
+                },
+            ),
+        );
+        addr_to_csr.insert(
+            CSR_MCAUSE,
+            Csr::new_read_write(
+                |machine: &Machine| machine.trap_ctrl.csr_mcause(),
+                |machine: &mut Machine, value: u32| {
+                    machine.trap_ctrl.csr_write_mcause(value);
+                    Ok(())
+                },
+            ),
+        );
         addr_to_csr.insert(CSR_MTVAL, Csr::new_constant(0));
-        // mcycle
-        // minstret
-        // mcycleh
-        // minstreth
-        // cycle
-        // time
-        // instret
-        // cycleh
-        // timeh
-        // instreth
-
+        addr_to_csr.insert(
+            CSR_MCYCLE,
+            Csr::new_read_write(
+                |machine: &Machine| machine.csr_mcycle(),
+                |machine: &mut Machine, value: u32| {
+                    machine.csr_write_mcycle(value);
+                    Ok(())
+                },
+            ),
+        );
+        addr_to_csr.insert(
+            CSR_MINSTRET,
+            Csr::new_read_write(
+                |machine: &Machine| machine.csr_minstret(),
+                |machine: &mut Machine, value: u32| {
+                    machine.csr_write_minstret(value);
+                    Ok(())
+                },
+            ),
+        );
+        addr_to_csr.insert(
+            CSR_MCYCLEH,
+            Csr::new_read_write(
+                |machine: &Machine| machine.csr_mcycleh(),
+                |machine: &mut Machine, value: u32| {
+                    machine.csr_write_mcycleh(value);
+                    Ok(())
+                },
+            ),
+        );
+        addr_to_csr.insert(
+            CSR_MINSTRETH,
+            Csr::new_read_write(
+                |machine: &Machine| machine.csr_minstreth(),
+                |machine: &mut Machine, value: u32| {
+                    machine.csr_write_minstreth(value);
+                    Ok(())
+                },
+            ),
+        );
+        addr_to_csr.insert(
+            CSR_CYCLE,
+            Csr::new_read_only(|machine: &Machine| machine.csr_mcycle()),
+        );
+        addr_to_csr.insert(
+            CSR_TIME,
+            Csr::new_read_only(|machine: &Machine| machine.trap_ctrl.mmap_mtime()),
+        );
+        addr_to_csr.insert(
+            CSR_INSTRET,
+            Csr::new_read_only(|machine: &Machine| machine.csr_minstret()),
+        );
+        addr_to_csr.insert(
+            CSR_CYCLEH,
+            Csr::new_read_only(|machine: &Machine| machine.csr_mcycleh()),
+        );
+        addr_to_csr.insert(
+            CSR_TIMEH,
+            Csr::new_read_only(|machine: &Machine| machine.trap_ctrl.mmap_mtimeh()),
+        );
+        addr_to_csr.insert(
+            CSR_INSTRETH,
+            Csr::new_read_only(|machine: &Machine| machine.csr_minstreth()),
+        );
+	
         for n in 3..32 {
             addr_to_csr.insert(CSR_MHPMCOUNTER_BASE + n, Csr::new_constant(0));
             addr_to_csr.insert(CSR_MHPMCOUNTERH_BASE + n, Csr::new_constant(0));
