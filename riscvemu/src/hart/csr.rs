@@ -118,10 +118,10 @@ enum CsrError {
 }
 
 /// Read a CSR (already established to exist)
-struct ReadCsr(fn(&Machine) -> u32);
+type ReadCsr = fn(&Machine) -> u32;
 
 /// Write a CSR (can return an error if a WRLR write would be invalid)
-struct WriteCsr(fn(&mut Machine, value: u32) -> Result<(), CsrError>);
+type WriteCsr = fn(&mut Machine, value: u32) -> Result<(), CsrError>;
 
 /// Control and status registers
 ///
@@ -147,17 +147,16 @@ enum Csr {
 
 impl Csr {
     fn new_constant(value: u32) -> Self {
-	Self::Constant(value)
+        Self::Constant(value)
     }
 
     fn new_read_only(read_csr: ReadCsr) -> Self {
-	Self::ReadOnly(read_csr)
+        Self::ReadOnly(read_csr)
     }
 
     fn new_read_write(read_csr: ReadCsr, write_csr: WriteCsr) -> Self {
-	Self::ReadWrite(read_csr, write_csr)
+        Self::ReadWrite(read_csr, write_csr)
     }
-
 }
 
 #[derive(Default)]
@@ -177,23 +176,23 @@ impl MachineInterface {
         addr_to_csr.insert(CSR_MCONFIGPTR, Csr::new_constant(0));
         addr_to_csr.insert(
             CSR_MSTATUS,
-            Csr::new_read_write(ReadCsr(read_mstatus), WriteCsr(write_mstatus)),
+            Csr::new_read_write(read_mstatus, write_mstatus),
         );
-        addr_to_csr.insert(CSR_MISA, Csr::new_constant(0));
+        addr_to_csr.insert(CSR_MISA, Csr::new_constant(0)); // this is wrong, should be read/write (WARL 0)
         // mie
         addr_to_csr.insert(
-            CSR_MISA,
-            Csr::new_read_only(ReadCsr(|machine: &Machine| machine.trap_ctrl.csr_mtvec())),
+            CSR_MTVEC,
+            Csr::new_read_only(|machine: &Machine| machine.trap_ctrl.csr_mtvec()),
         );
         addr_to_csr.insert(CSR_MSTATUSH, Csr::new_constant(0));
         addr_to_csr.insert(
             CSR_MSCRATCH,
             Csr::ReadWrite(
-                ReadCsr(|machine: &Machine| machine.mscratch),
-                WriteCsr(|machine: &mut Machine, value: u32| {
+                |machine: &Machine| machine.mscratch,
+                |machine: &mut Machine, value: u32| {
                     machine.mscratch = value;
                     Ok(())
-                }),
+                },
             ),
         );
         // mepc
