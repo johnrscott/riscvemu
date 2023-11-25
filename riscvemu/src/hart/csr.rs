@@ -126,6 +126,8 @@ pub const CSR_HPMCOUNTERH_BASE: u16 = 0xc80; // add 3..32 to get address
 enum CsrError {
     #[error("CSR 0x{0:x} is not present")]
     NotPresent(u16),
+    #[error("Attempted write to CSR 0x{0:x} which is read-only")]
+    WriteToReadOnly(u16),
 }
 
 /// Read a CSR (already established to exist)
@@ -197,6 +199,45 @@ pub struct MachineInterface {
 }
 
 impl MachineInterface {
+
+    /// Read a CSR (for use by Zicsr instructions)
+    pub fn read_csr(&self, addr: u16) -> Result<u32, CsrError> {
+        if !self.csr_present(addr) {
+            Err(CsrError::NotPresent(addr))
+        } else {
+            let value = match self
+                .addr_to_csr
+                .get(&addr)
+                .expect("should be present, we just checked")
+            {
+                Csr::Constant(value) => *value,
+                Csr::ReadOnly(read) => read(&self.machine),
+                Csr::ReadWrite(read, _) => read(&self.machine),
+            };
+            Ok(value)
+        }
+    }
+
+    /// Write a CSR (for use by Zicsr instructions)
+    pub fn write_csr(&mut self, addr: u16, value: u32) -> Result<(), CsrError> {
+        if !self.csr_present(addr) {
+            Err(CsrError::NotPresent(addr))
+        } else {
+            match self
+                .addr_to_csr
+                .get(&addr)
+                .expect("should be present, we just checked")
+            {
+                Csr::Constant(_) | Csr::ReadOnly(_) => Err(CsrError::WriteToReadOnly(addr)),
+                Csr::ReadWrite(_, write) => write(&mut self.machine, value),
+            }
+        }
+    }
+
+    fn csr_present(&self, addr: u16) -> bool {
+        self.addr_to_csr.contains_key(&addr)
+    }
+
     pub fn new() -> Self {
         let mut addr_to_csr = HashMap::new();
 
