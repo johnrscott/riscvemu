@@ -189,6 +189,17 @@ impl TrapCtrl {
         self.msip = false
     }
 
+    /// Write the mstatus register
+    ///
+    /// The only writable bits are bit 3 (MIE) and bit 7 (MPIE).
+    /// Other bits are read-only zero, apart from MTIP which remains
+    /// 0b11. Writing an invalid value will not cause an error (WARL),
+    /// but will only update bit 3 and bit 7
+    pub fn csr_write_mstatus(&mut self, value: u32) {
+        self.mstatus_mie = value >> MSTATUS_MIE & 1 != 0;
+        self.mstatus_mpie = value >> MSTATUS_MPIE & 1 != 0;
+    }
+
     /// Construct the mstatus register for reading
     pub fn csr_mstatus(&self) -> u32 {
         (self.mstatus_mie as u32) << MSTATUS_MIE
@@ -251,7 +262,7 @@ impl TrapCtrl {
     pub fn mmap_mtime(&self) -> u32 {
         low_word(&self.timer_interrupt.mtime)
     }
-    
+
     pub fn mmap_mtimeh(&self) -> u32 {
         high_word(&self.timer_interrupt.mtime)
     }

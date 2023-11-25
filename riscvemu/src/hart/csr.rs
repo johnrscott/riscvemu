@@ -22,11 +22,12 @@ pub const CSR_MHARTID: u16 = 0xf14;
 /// read-only zero, configuration platform-specification defined
 pub const CSR_MCONFIGPTR: u16 = 0xf15;
 
-/// mstatus: read/write, containing both WPRI and WARL fields. The
-///  bit fields which are non-zero are as follows (assumes only M-mode):
-/// - bit 3: MIE (interrupt enable)
-/// - bit 7: MPIE (previous value of interrupt enable)
-/// - bits [12:11]: MPP (previous privilege mode, always 0b11, WARL) (?)
+/// mstatus: read/write, containing both WPRI and WARL fields. The bit
+/// fields which are non-zero are as follows (assumes only M-mode):
+///
+/// - bit 3: MIE (interrupt enable), read/write
+/// - bit 7: MPIE (previous value of interrupt enable), read/write (?)
+/// - bits [12:11]: MPP (previous privilege mode), WARL always 0b11 (?)
 pub const CSR_MSTATUS: u16 = 0x300;
 
 /// read/write; single legal value 0 always returned (WARL), meaning
@@ -63,6 +64,15 @@ pub const CSR_MCAUSE: u16 = 0x342;
 
 /// read-only zero
 pub const CSR_MTVAL: u16 = 0x343;
+
+/// 32-bit read/write interrupt-pending register. The following bits
+/// are defined:
+/// - bit 3: machine software interrupt pending (read-only)
+/// - bit 7: machine timer interrupt pending (read-only)
+/// - bit 11: machine-level external interrupt pending (read-only)
+///
+/// Since all fields are read-only, writes to this CSR are no-op.
+pub const CSR_MIP: u16 = 0x344;
 
 /// low 32 bits of read/write 64-bit register incrementing at a constant rate
 pub const CSR_MCYCLE: u16 = 0xb00;
@@ -160,9 +170,29 @@ impl Csr {
     }
 }
 
+/// Machine CSR and internals interface
+///
+/// This struct holds the machine privileged-mode state and exposes
+/// the CSRs for use by the CSR instruction implementation.
+///
+/// The main purpose of this struct is to avoid the need to store
+/// additional architecturally-required CSR registers in the Machine
+/// struct, when most of them are read-only zero. In addition, it
+/// manages access to the data underlying the CSR registers that do
+/// hold non-trivial state, which are stored in the Machine struct.
+/// This CSR interface has three main responsibilities: throwing an
+/// error (which will become an illegal instruction) on writes to
+/// read-only registers, or invalid writes to WRLR fields; exposing
+/// the same underlying register (e.g. mcycle) as multiple CSRs with
+/// different read/write properties; and handling the mapping from CSR
+/// addresses to CSRs.
+///
+/// The Machine struct is accessible directly for the purpose of
+/// emulating the hart (e.g. incrementing cycle, or raising an
+/// exception trap).
 #[derive(Default)]
 pub struct MachineInterface {
-    machine: Machine,
+    pub machine: Machine,
     addr_to_csr: HashMap<u16, Csr>,
 }
 
@@ -177,7 +207,13 @@ impl MachineInterface {
         addr_to_csr.insert(CSR_MCONFIGPTR, Csr::new_constant(0));
         addr_to_csr.insert(
             CSR_MSTATUS,
-            Csr::new_read_write(read_mstatus, write_mstatus),
+            Csr::new_read_write(
+                |machine: &Machine| machine.trap_ctrl.csr_mstatus(),
+                |machine: &mut Machine, value: u32| {
+                    machine.trap_ctrl.csr_write_mstatus(value);
+                    Ok(())
+                },
+            ),
         );
         addr_to_csr.insert(
             CSR_MISA,
@@ -232,6 +268,14 @@ impl MachineInterface {
             ),
         );
         addr_to_csr.insert(CSR_MTVAL, Csr::new_constant(0));
+        addr_to_csr.insert(
+            CSR_MIP,
+            Csr::new_read_write(
+                |machine: &Machine| machine.trap_ctrl.csr_mip(),
+                |_machine: &mut Machine, _value: u32| Ok(()),
+            ),
+        );
+
         addr_to_csr.insert(
             CSR_MCYCLE,
             Csr::new_read_write(
@@ -296,7 +340,7 @@ impl MachineInterface {
             CSR_INSTRETH,
             Csr::new_read_only(|machine: &Machine| machine.csr_minstreth()),
         );
-	
+
         for n in 3..32 {
             addr_to_csr.insert(CSR_MHPMCOUNTER_BASE + n, Csr::new_constant(0));
             addr_to_csr.insert(CSR_MHPMCOUNTERH_BASE + n, Csr::new_constant(0));
@@ -310,12 +354,4 @@ impl MachineInterface {
             ..Self::default()
         }
     }
-}
-
-fn read_mstatus(machine: &Machine) -> u32 {
-    0
-}
-
-fn write_mstatus(machine: &mut Machine, value: u32) -> Result<(), CsrError> {
-    Ok(())
 }
