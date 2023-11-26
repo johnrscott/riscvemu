@@ -153,7 +153,6 @@ impl Default for PmaChecker {
 }
 
 impl PmaChecker {
-    
     /// Pass the ROM device and RAM device size in bytes.
     pub fn new(eeprom_size: u32, ram_size: u32) -> Self {
         Self {
@@ -165,95 +164,92 @@ impl PmaChecker {
     /// You can only fetch instructions from the EEPROM region, and
     /// they must be four-byte aligned
     pub fn check_instruction_fetch(&self, addr: u32) -> Result<(), PmaError> {
-	if !self.in_eeprom(addr, 4) {
-	    // The only instruction-fetch region is the EEPROM region 
-	    Err(PmaError::InstructionAccessFault)
-	} else if !address_aligned(addr, 4) {
-	    // Instruction fetches must be four-byte aligned
-	    Err(PmaError::InstructionAddressMisaligned)
-	} else {
-	    // Fetch will be valid
-	    Ok(())
-	}
+        if !self.in_eeprom(addr, 4) {
+            // The only instruction-fetch region is the EEPROM region
+            Err(PmaError::InstructionAccessFault)
+        } else if !address_aligned(addr, 4) {
+            // Instruction fetches must be four-byte aligned
+            Err(PmaError::InstructionAddressMisaligned)
+        } else {
+            // Fetch will be valid
+            Ok(())
+        }
     }
 
     /// You can read from the I/O region or main memory. I/O region
     /// reads must be four-byte aligned, but main memory reads can have
     /// any alignment.
     pub fn check_load(&self, addr: u32, width: u32) -> Result<(), PmaError> {
-	if !self.in_io(addr, width) {
-	    // Load is from I/O region
-	    if width != 4 {
-		// I/O load must have width 4
-		Err(PmaError::LoadAccessFault)
-	    } else if !address_aligned(addr, 4) {
-		// I/O load must be four byte aligned
-	    	Err(PmaError::LoadAddressMisaligned)		
-	    } else {
-		Ok(())
-	    }
-	} else if !self.in_main_memory(addr, width) {
-	    // Load is from main memory
-	    if !main_memory_valid_width(width) {
-		// Only byte, halfword or word loads are allowed
-		Err(PmaError::LoadAccessFault)
-	    } else {
-		// Any alignment is allowed
-		Ok(())
-	    }
-	} else {
-	    // Loads are only allowed from I/O or main memory
-	    Err(PmaError::LoadAccessFault)
-	}
+        if !self.in_io(addr, width) {
+            // Load is from I/O region
+            if width != 4 {
+                // I/O load must have width 4
+                Err(PmaError::LoadAccessFault)
+            } else if !address_aligned(addr, 4) {
+                // I/O load must be four byte aligned
+                Err(PmaError::LoadAddressMisaligned)
+            } else {
+                Ok(())
+            }
+        } else if !self.in_main_memory(addr, width) {
+            // Load is from main memory
+            if !main_memory_valid_width(width) {
+                // Only byte, halfword or word loads are allowed
+                Err(PmaError::LoadAccessFault)
+            } else {
+                // Any alignment is allowed
+                Ok(())
+            }
+        } else {
+            // Loads are only allowed from I/O or main memory
+            Err(PmaError::LoadAccessFault)
+        }
     }
 
     /// You can write to the I/O region or main memory. I/O region
     /// writes must be four-byte aligned, but main memory writes can have
     /// any alignment.
     pub fn check_store(&self, addr: u32, width: u32) -> Result<(), PmaError> {
-	if !self.in_io(addr, width) {
-	    // Store is to I/O region
-	    if width != 4 {
-		// I/O store must have width 4
-		Err(PmaError::StoreAccessFault)
-	    } else if !address_aligned(addr, 4) {
-		// I/O store must be four byte aligned
-	    	Err(PmaError::StoreAddressMisaligned)		
-	    } else {
-		Ok(())
-	    }
-	} else if !self.in_main_memory(addr, width) {
-	    // Store is to main memory
-	    if !main_memory_valid_width(width) {
-		// Only byte, halfword or word stores are allowed
-		Err(PmaError::StoreAccessFault)
-	    } else {
-		// Any alignment is allowed
-		Ok(())
-	    }
-	} else {
-	    // Stores are only allowed to I/O or main memory
-	    Err(PmaError::StoreAccessFault)
-	}
+        if !self.in_io(addr, width) {
+            // Store is to I/O region
+            if width != 4 {
+                // I/O store must have width 4
+                Err(PmaError::StoreAccessFault)
+            } else if !address_aligned(addr, 4) {
+                // I/O store must be four byte aligned
+                Err(PmaError::StoreAddressMisaligned)
+            } else {
+                Ok(())
+            }
+        } else if !self.in_main_memory(addr, width) {
+            // Store is to main memory
+            if !main_memory_valid_width(width) {
+                // Only byte, halfword or word stores are allowed
+                Err(PmaError::StoreAccessFault)
+            } else {
+                // Any alignment is allowed
+                Ok(())
+            }
+        } else {
+            // Stores are only allowed to I/O or main memory
+            Err(PmaError::StoreAccessFault)
+        }
     }
 
-    
     /// True if address (and width) is fully in EEPROM region
     fn in_eeprom(&self, addr: u32, width: u32) -> bool {
-	address_in_region(addr, width, 0x0000_0000, self.eeprom_size)
+        address_in_region(addr, width, 0x0000_0000, self.eeprom_size)
     }
-    
+
     /// True if address (and width) is fully in I/O region
     fn in_io(&self, addr: u32, width: u32) -> bool {
-	address_in_region(addr, width, 0x0001_0000, 0x0001_0080)
+        address_in_region(addr, width, 0x0001_0000, 0x0001_0080)
     }
 
     /// True if address (and width) is fully in main memory
     fn in_main_memory(&self, addr: u32, width: u32) -> bool {
-	address_in_region(addr, width, 0x0002_0000, 0x0002_0000 + self.ram_size)
+        address_in_region(addr, width, 0x0002_0000, 0x0002_0000 + self.ram_size)
     }
-
-    
 }
 
 /// Check width is byte, halfword or word

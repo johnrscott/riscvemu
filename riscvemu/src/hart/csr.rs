@@ -152,6 +152,7 @@ type WriteCsr = fn(&mut Machine, value: u32) -> Result<(), CsrError>;
 ///   an error is returned and the CSR is not modified (even
 ///   if other fields would be written with legal values).
 ///
+#[derive(Debug)]
 enum Csr {
     Constant(u32),
     ReadOnly(ReadCsr),
@@ -192,7 +193,7 @@ impl Csr {
 /// The Machine struct is accessible directly for the purpose of
 /// emulating the hart (e.g. incrementing cycle, or raising an
 /// exception trap).
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct MachineInterface {
     pub machine: Machine,
     addr_to_csr: HashMap<u16, Csr>,

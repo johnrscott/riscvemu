@@ -13,9 +13,9 @@ use thiserror::Error;
 pub mod csr;
 pub mod machine;
 pub mod memory;
+pub mod platform;
 pub mod pma;
 pub mod registers;
-pub mod platform;
 
 /// RISC-V Hardware Thread
 ///
