@@ -220,9 +220,9 @@ impl Eei for Platform {
             MTIMECMPH_ADDR => {
                 self.machine_interface.machine.trap_ctrl.mmap_mtimecmph()
             }
-            SOFTINTCTRL_ADDR => 0,
-            EXTINTCTRL_ADDR => 0,
-            UARTTX_ADDR => 0,
+            SOFTINTCTRL_ADDR => todo!("implement load softintctrl"),
+            EXTINTCTRL_ADDR => todo!("implement load extintctrl"),
+            UARTTX_ADDR => todo!("implement load uarttx"),
             _ => self
                 .memory
                 .read(addr.into(), width)
@@ -234,34 +234,42 @@ impl Eei for Platform {
     }
 
     fn store(
-        &self,
+        &mut self,
         addr: u32,
         data: u32,
         width: Wordsize,
     ) -> Result<(), Exception> {
         self.pma_checker.check_store(addr, width.width().into())?;
         // Match memory mapped registers first, then perform general load
-        let result = match addr {
-            MTIME_ADDR => self.machine_interface.machine.trap_ctrl.mmap_mtime(),
-            MTIMEH_ADDR => {
-                self.machine_interface.machine.trap_ctrl.mmap_mtimeh()
-            }
-            MTIMECMP_ADDR => {
-                self.machine_interface.machine.trap_ctrl.mmap_mtimecmp()
-            }
-            MTIMECMPH_ADDR => {
-                self.machine_interface.machine.trap_ctrl.mmap_mtimecmph()
-            }
-            SOFTINTCTRL_ADDR => 0,
-            EXTINTCTRL_ADDR => 0,
-            UARTTX_ADDR => 0,
+        match addr {
+            MTIME_ADDR => self
+                .machine_interface
+                .machine
+                .trap_ctrl
+                .mmap_write_mtime(data),
+            MTIMEH_ADDR => self
+                .machine_interface
+                .machine
+                .trap_ctrl
+                .mmap_write_mtimeh(data),
+            MTIMECMP_ADDR => self
+                .machine_interface
+                .machine
+                .trap_ctrl
+                .mmap_write_mtimecmp(data),
+            MTIMECMPH_ADDR => self
+                .machine_interface
+                .machine
+                .trap_ctrl
+                .mmap_write_mtimecmph(data),
+            SOFTINTCTRL_ADDR => todo!("implement store softintctrl"),
+            EXTINTCTRL_ADDR => todo!("implement store extintctrl"),
+            UARTTX_ADDR => todo!("implement store uarttx"),
             _ => self
                 .memory
-                .read(addr.into(), width)
-                .expect("memory read should work")
-                .try_into()
-                .expect("value should fit into 32 bits"),
+                .write(addr.into(), data.into(), width)
+                .expect("memory write should work"),
         };
-        Ok(result)
+        Ok(())
     }
 }

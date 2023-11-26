@@ -4,7 +4,6 @@ use elf::section::SectionHeader;
 use elf::string_table::StringTable;
 use elf::ElfBytes;
 
-use crate::hart::memory::Wordsize;
 use thiserror::Error;
 
 /// Get the section header name for this section

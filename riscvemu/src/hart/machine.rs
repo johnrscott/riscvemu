@@ -263,16 +263,32 @@ impl TrapCtrl {
         low_word(&self.timer_interrupt.mtime)
     }
 
+    pub fn mmap_write_mtime(&mut self, value: u32) {
+        write_low_word(&mut self.timer_interrupt.mtime, value)
+    }
+
     pub fn mmap_mtimeh(&self) -> u32 {
         high_word(&self.timer_interrupt.mtime)
+    }
+
+    pub fn mmap_write_mtimeh(&mut self, value: u32) {
+        write_high_word(&mut self.timer_interrupt.mtime, value)
     }
 
     pub fn mmap_mtimecmp(&self) -> u32 {
         low_word(&self.timer_interrupt.mtimecmp)
     }
 
+    pub fn mmap_write_mtimecmp(&mut self, value: u32) {
+        write_low_word(&mut self.timer_interrupt.mtimecmp, value)
+    }
+
     pub fn mmap_mtimecmph(&self) -> u32 {
         high_word(&self.timer_interrupt.mtimecmp)
+    }
+
+    pub fn mmap_write_mtimecmph(&mut self, value: u32) {
+        write_high_word(&mut self.timer_interrupt.mtimecmp, value)
     }
 
     /// Set the mcause (cause of trap) register

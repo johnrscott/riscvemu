@@ -63,7 +63,7 @@ pub trait Eei {
     /// attributes (PMA) checker, which can return an
     /// exception. Otherwise, the data is stored to memory.
     fn store(
-        &self,
+        &mut self,
         addr: u32,
         data: u32,
         width: Wordsize,
