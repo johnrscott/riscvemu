@@ -154,8 +154,6 @@ impl Default for PmaChecker {
 impl PmaChecker {
     
     /// Pass the ROM device and RAM device size in bytes.
-    ///
-    /// 
     pub fn new(eeprom_size: u32, ram_size: u32) -> Self {
         Self {
             eeprom_size,
@@ -261,7 +259,6 @@ impl PmaChecker {
 fn main_memory_valid_width(width: u32) -> bool {
     width == 1 || width == 2 || width == 4
 }
-
 
 /// Checks whether the area targeted by the address
 /// and width fits in the region start-end
