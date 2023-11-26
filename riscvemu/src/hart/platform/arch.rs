@@ -1,31 +1,36 @@
 use super::{
     eei::Eei,
     rv32i::{
-        execute_add, execute_addi, execute_and, execute_andi, execute_auipc, execute_beq,
-        execute_bge, execute_bgeu, execute_blt, execute_bltu, execute_bne, execute_jal,
-        execute_jalr, execute_lb, execute_lbu, execute_lh, execute_lhu, execute_lui, execute_lw,
-        execute_or, execute_ori, execute_sb, execute_sh, execute_sll, execute_slli, execute_slt,
-        execute_slti, execute_sltiu, execute_sltu, execute_sra, execute_srai, execute_srl,
-        execute_srli, execute_sub, execute_sw, execute_xor, execute_xori,
+        execute_add, execute_addi, execute_and, execute_andi, execute_auipc,
+        execute_beq, execute_bge, execute_bgeu, execute_blt, execute_bltu,
+        execute_bne, execute_jal, execute_jalr, execute_lb, execute_lbu,
+        execute_lh, execute_lhu, execute_lui, execute_lw, execute_or,
+        execute_ori, execute_sb, execute_sh, execute_sll, execute_slli,
+        execute_slt, execute_slti, execute_sltiu, execute_sltu, execute_sra,
+        execute_srai, execute_srl, execute_srli, execute_sub, execute_sw,
+        execute_xor, execute_xori,
     },
     rv32m::{
-        execute_div, execute_divu, execute_mul, execute_mulh, execute_mulhsu, execute_mulhu,
-        execute_rem, execute_remu,
+        execute_div, execute_divu, execute_mul, execute_mulh, execute_mulhsu,
+        execute_mulhu, execute_rem, execute_remu,
     },
     ExecuteInstr,
 };
 use crate::{
     decode::{Decoder, DecoderError, MaskWithValue},
     opcodes::{
-        FUNCT3_ADD, FUNCT3_ADDI, FUNCT3_AND, FUNCT3_ANDI, FUNCT3_B, FUNCT3_BEQ, FUNCT3_BGE,
-        FUNCT3_BGEU, FUNCT3_BLT, FUNCT3_BLTU, FUNCT3_BNE, FUNCT3_BU, FUNCT3_DIV, FUNCT3_DIVU,
-        FUNCT3_H, FUNCT3_HU, FUNCT3_JALR, FUNCT3_MUL, FUNCT3_MULH, FUNCT3_MULHSU, FUNCT3_MULHU,
-        FUNCT3_OR, FUNCT3_ORI, FUNCT3_REM, FUNCT3_REMU, FUNCT3_SLL, FUNCT3_SLLI, FUNCT3_SLT,
-        FUNCT3_SLTI, FUNCT3_SLTIU, FUNCT3_SLTU, FUNCT3_SRA, FUNCT3_SRAI, FUNCT3_SRL, FUNCT3_SRLI,
-        FUNCT3_SUB, FUNCT3_W, FUNCT3_XOR, FUNCT3_XORI, FUNCT7_ADD, FUNCT7_AND, FUNCT7_MULDIV,
-        FUNCT7_OR, FUNCT7_SLL, FUNCT7_SLLI, FUNCT7_SLT, FUNCT7_SLTU, FUNCT7_SRA, FUNCT7_SRAI,
-        FUNCT7_SRL, FUNCT7_SRLI, FUNCT7_SUB, FUNCT7_XOR, OP, OP_AUIPC, OP_BRANCH, OP_IMM, OP_JAL,
-        OP_JALR, OP_LOAD, OP_LUI, OP_STORE,
+        FUNCT3_ADD, FUNCT3_ADDI, FUNCT3_AND, FUNCT3_ANDI, FUNCT3_B, FUNCT3_BEQ,
+        FUNCT3_BGE, FUNCT3_BGEU, FUNCT3_BLT, FUNCT3_BLTU, FUNCT3_BNE,
+        FUNCT3_BU, FUNCT3_DIV, FUNCT3_DIVU, FUNCT3_H, FUNCT3_HU, FUNCT3_JALR,
+        FUNCT3_MUL, FUNCT3_MULH, FUNCT3_MULHSU, FUNCT3_MULHU, FUNCT3_OR,
+        FUNCT3_ORI, FUNCT3_REM, FUNCT3_REMU, FUNCT3_SLL, FUNCT3_SLLI,
+        FUNCT3_SLT, FUNCT3_SLTI, FUNCT3_SLTIU, FUNCT3_SLTU, FUNCT3_SRA,
+        FUNCT3_SRAI, FUNCT3_SRL, FUNCT3_SRLI, FUNCT3_SUB, FUNCT3_W, FUNCT3_XOR,
+        FUNCT3_XORI, FUNCT7_ADD, FUNCT7_AND, FUNCT7_MULDIV, FUNCT7_OR,
+        FUNCT7_SLL, FUNCT7_SLLI, FUNCT7_SLT, FUNCT7_SLTU, FUNCT7_SRA,
+        FUNCT7_SRAI, FUNCT7_SRL, FUNCT7_SRLI, FUNCT7_SUB, FUNCT7_XOR, OP,
+        OP_AUIPC, OP_BRANCH, OP_IMM, OP_JAL, OP_JALR, OP_LOAD, OP_LUI,
+        OP_STORE,
     },
     utils::mask,
 };
@@ -91,7 +96,9 @@ pub fn opcode_funct3_funct7_determined<E: Eei>(
     decoder.push_instruction(masks_with_values, exec)
 }
 
-pub fn make_rv32i<E: Eei>(decoder: &mut Decoder<ExecuteInstr<E>>) -> Result<(), DecoderError> {
+pub fn make_rv32i<E: Eei>(
+    decoder: &mut Decoder<ExecuteInstr<E>>,
+) -> Result<(), DecoderError> {
     // Opcode determines instruction
     opcode_determined(decoder, OP_LUI, execute_lui)?;
     opcode_determined(decoder, OP_AUIPC, execute_auipc)?;
@@ -121,29 +128,153 @@ pub fn make_rv32i<E: Eei>(decoder: &mut Decoder<ExecuteInstr<E>>) -> Result<(), 
     opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ANDI, execute_andi)?;
 
     // Shift instructions (opcode, funct3, and part of immediate determined)
-    opcode_funct3_funct7_determined(decoder, OP_IMM, FUNCT3_SLLI, FUNCT7_SLLI, execute_slli)?;
-    opcode_funct3_funct7_determined(decoder, OP_IMM, FUNCT3_SRLI, FUNCT7_SRLI, execute_srli)?;
-    opcode_funct3_funct7_determined(decoder, OP_IMM, FUNCT3_SRAI, FUNCT7_SRAI, execute_srai)?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP_IMM,
+        FUNCT3_SLLI,
+        FUNCT7_SLLI,
+        execute_slli,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP_IMM,
+        FUNCT3_SRLI,
+        FUNCT7_SRLI,
+        execute_srli,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP_IMM,
+        FUNCT3_SRAI,
+        FUNCT7_SRAI,
+        execute_srai,
+    )?;
 
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_ADD, FUNCT7_ADD, execute_add)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SUB, FUNCT7_SUB, execute_sub)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SLL, FUNCT7_SLL, execute_sll)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SLT, FUNCT7_SLT, execute_slt)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SLTU, FUNCT7_SLTU, execute_sltu)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_XOR, FUNCT7_XOR, execute_xor)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SRL, FUNCT7_SRL, execute_srl)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_SRA, FUNCT7_SRA, execute_sra)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_OR, FUNCT7_OR, execute_or)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_AND, FUNCT7_AND, execute_and)
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_ADD,
+        FUNCT7_ADD,
+        execute_add,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_SUB,
+        FUNCT7_SUB,
+        execute_sub,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_SLL,
+        FUNCT7_SLL,
+        execute_sll,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_SLT,
+        FUNCT7_SLT,
+        execute_slt,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_SLTU,
+        FUNCT7_SLTU,
+        execute_sltu,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_XOR,
+        FUNCT7_XOR,
+        execute_xor,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_SRL,
+        FUNCT7_SRL,
+        execute_srl,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_SRA,
+        FUNCT7_SRA,
+        execute_sra,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder, OP, FUNCT3_OR, FUNCT7_OR, execute_or,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_AND,
+        FUNCT7_AND,
+        execute_and,
+    )
 }
 
-pub fn make_rv32m<E: Eei>(decoder: &mut Decoder<ExecuteInstr<E>>) -> Result<(), DecoderError> {
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_MUL, FUNCT7_MULDIV, execute_mul)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_MULH, FUNCT7_MULDIV, execute_mulh)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_MULHSU, FUNCT7_MULDIV, execute_mulhsu)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_MULHU, FUNCT7_MULDIV, execute_mulhu)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_DIV, FUNCT7_MULDIV, execute_div)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_DIVU, FUNCT7_MULDIV, execute_divu)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_REM, FUNCT7_MULDIV, execute_rem)?;
-    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_REMU, FUNCT7_MULDIV, execute_remu)
+pub fn make_rv32m<E: Eei>(
+    decoder: &mut Decoder<ExecuteInstr<E>>,
+) -> Result<(), DecoderError> {
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_MUL,
+        FUNCT7_MULDIV,
+        execute_mul,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_MULH,
+        FUNCT7_MULDIV,
+        execute_mulh,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_MULHSU,
+        FUNCT7_MULDIV,
+        execute_mulhsu,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_MULHU,
+        FUNCT7_MULDIV,
+        execute_mulhu,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_DIV,
+        FUNCT7_MULDIV,
+        execute_div,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_DIVU,
+        FUNCT7_MULDIV,
+        execute_divu,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_REM,
+        FUNCT7_MULDIV,
+        execute_rem,
+    )?;
+    opcode_funct3_funct7_determined(
+        decoder,
+        OP,
+        FUNCT3_REMU,
+        FUNCT7_MULDIV,
+        execute_remu,
+    )
 }

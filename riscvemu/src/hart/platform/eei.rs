@@ -25,7 +25,7 @@
 //! architecture. Unprivileged architecture is implemented in terms of
 //! the behaviour exposed by the EEI trait.
 
-use crate::hart::{machine::Exception, memory::Wordsize, pma::PmaError};
+use crate::hart::{machine::Exception, memory::Wordsize};
 
 /// Execution environment interface
 pub trait Eei {
@@ -62,5 +62,10 @@ pub trait Eei {
     /// The address and width are checked using the physical memory
     /// attributes (PMA) checker, which can return an
     /// exception. Otherwise, the data is stored to memory.
-    fn store(&self, addr: u32, data: u32, width: Wordsize) -> Result<(), Exception>;
+    fn store(
+        &self,
+        addr: u32,
+        data: u32,
+        width: Wordsize,
+    ) -> Result<(), Exception>;
 }

@@ -65,7 +65,8 @@ impl Default for Hart {
             memory: Memory::default(),
         };
 
-        make_rv32i(&mut hart.decoder).expect("adding these instructions should work");
+        make_rv32i(&mut hart.decoder)
+            .expect("adding these instructions should work");
         hart
     }
 }
@@ -122,7 +123,10 @@ impl Hart {
     /// Add an offset to the program counter, wrapping if necessary.
     /// If the resulting address is not aligned on a 4-byte boundary,
     /// return an address-misaligned exception (pc remains modified).
-    pub fn jump_relative_to_pc(&mut self, offset: u32) -> Result<(), ExecutionError> {
+    pub fn jump_relative_to_pc(
+        &mut self,
+        offset: u32,
+    ) -> Result<(), ExecutionError> {
         self.pc = self.pc.wrapping_add(offset);
         check_address_aligned(self.pc, 4)
     }
@@ -130,7 +134,10 @@ impl Hart {
     /// Jump to a new instruction address (set pc = new_pc). Return
     /// an address-misaligned exception if the new_pc is not 4-byte
     /// aligned (pc remains modified).
-    pub fn jump_to_address(&mut self, new_pc: u32) -> Result<(), ExecutionError> {
+    pub fn jump_to_address(
+        &mut self,
+        new_pc: u32,
+    ) -> Result<(), ExecutionError> {
         self.pc = new_pc;
         check_address_aligned(self.pc, 4)
     }
@@ -176,7 +183,10 @@ pub fn next_instruction_address(pc: u32) -> u32 {
 
 /// Check that an address is aligned to a byte_boundary specified.
 /// Return address-misaligned if not.
-pub fn check_address_aligned(address: u32, byte_alignment: u32) -> Result<(), ExecutionError> {
+pub fn check_address_aligned(
+    address: u32,
+    byte_alignment: u32,
+) -> Result<(), ExecutionError> {
     if address % byte_alignment != 0 {
         // Section 2.2 intro of RISC-V unprivileged specification
         Err(ExecutionError::InstructionAddressMisaligned)

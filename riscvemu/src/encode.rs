@@ -20,7 +20,9 @@ pub use itype;
 #[macro_export]
 macro_rules! ujtype {
     ($imm:expr, $rd:expr, $opcode:expr) => {
-        mask_and_shift!($imm, 20, 12) | mask_and_shift!($rd, 5, 7) | mask_and_shift!($opcode, 7, 0)
+        mask_and_shift!($imm, 20, 12)
+            | mask_and_shift!($rd, 5, 7)
+            | mask_and_shift!($opcode, 7, 0)
     };
 }
 pub use ujtype;

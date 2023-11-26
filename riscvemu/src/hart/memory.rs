@@ -11,7 +11,7 @@ pub enum Wordsize {
 }
 
 impl Wordsize {
-    fn width(&self) -> u8 {
+    pub fn width(&self) -> u8 {
         match self {
             Wordsize::Byte => 1,
             Wordsize::Halfword => 2,
@@ -79,7 +79,12 @@ fn read_byte(byte_map: &HashMap<u64, u8>, addr: u64, xlen: Xlen) -> u64 {
     u64::from(*byte_map.get(&addr).unwrap_or(&0))
 }
 
-fn read_word(byte_map: &HashMap<u64, u8>, addr: u64, num_bytes: u64, xlen: Xlen) -> u64 {
+fn read_word(
+    byte_map: &HashMap<u64, u8>,
+    addr: u64,
+    num_bytes: u64,
+    xlen: Xlen,
+) -> u64 {
     let mut value = 0;
     for n in 0..num_bytes {
         let byte_n = read_byte(byte_map, addr.wrapping_add(n), xlen);
@@ -124,14 +129,29 @@ impl Memory {
         }
     }
 
-    fn write_word(&mut self, addr: u64, num_bytes: u64, value: u64, xlen: Xlen) {
+    fn write_word(
+        &mut self,
+        addr: u64,
+        num_bytes: u64,
+        value: u64,
+        xlen: Xlen,
+    ) {
         for n in 0..num_bytes {
             let byte_n = 0xff & (value >> (8 * n));
-            self.write_byte(addr.wrapping_add(n), byte_n.try_into().unwrap(), xlen);
+            self.write_byte(
+                addr.wrapping_add(n),
+                byte_n.try_into().unwrap(),
+                xlen,
+            );
         }
     }
 
-    pub fn write(&mut self, addr: u64, value: u64, word_size: Wordsize) -> Result<(), WriteError> {
+    pub fn write(
+        &mut self,
+        addr: u64,
+        value: u64,
+        word_size: Wordsize,
+    ) -> Result<(), WriteError> {
         if address_invalid(addr, self.xlen) {
             Err(WriteError::InvalidAddress)
         } else {
@@ -141,7 +161,11 @@ impl Memory {
         }
     }
 
-    pub fn read(&self, addr: u64, word_size: Wordsize) -> Result<u64, ReadError> {
+    pub fn read(
+        &self,
+        addr: u64,
+        word_size: Wordsize,
+    ) -> Result<u64, ReadError> {
         if address_invalid(addr, self.xlen) {
             Err(ReadError::InvalidAddress)
         } else {
@@ -187,7 +211,10 @@ mod tests {
         for addr in (0..100).step_by(11) {
             let value = 17 * addr + 0x4ff0;
             mem.write(addr, value, Wordsize::Halfword).unwrap();
-            assert_eq!(mem.read(addr, Wordsize::Halfword).unwrap(), 0xffff & value);
+            assert_eq!(
+                mem.read(addr, Wordsize::Halfword).unwrap(),
+                0xffff & value
+            );
             // Check write did not spill into next byte
             assert_eq!(mem.read(addr + 2, Wordsize::Halfword).unwrap(), 0);
         }
@@ -199,7 +226,10 @@ mod tests {
         for addr in (0..100).step_by(11) {
             let value = 17 * addr + 0x9e4f_3ff0;
             mem.write(addr, value, Wordsize::Word).unwrap();
-            assert_eq!(mem.read(addr, Wordsize::Word).unwrap(), 0xffffffff & value);
+            assert_eq!(
+                mem.read(addr, Wordsize::Word).unwrap(),
+                0xffffffff & value
+            );
             // Check write did not spill into next byte
             assert_eq!(mem.read(addr + 4, Wordsize::Word).unwrap(), 0);
         }

@@ -4,7 +4,10 @@ use crate::{
     interpret_u32_as_signed,
 };
 
-fn reg_reg_values(hart: &Hart, instr: u32) -> Result<(u32, u32, u8), ExecutionError> {
+fn reg_reg_values(
+    hart: &Hart,
+    instr: u32,
+) -> Result<(u32, u32, u8), ExecutionError> {
     let Rtype {
         rs1: src1,
         rs2: src2,
@@ -15,7 +18,10 @@ fn reg_reg_values(hart: &Hart, instr: u32) -> Result<(u32, u32, u8), ExecutionEr
     Ok((src1, src2, dest))
 }
 
-pub fn execute_mul_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+pub fn execute_mul_rv32m(
+    hart: &mut Hart,
+    instr: u32,
+) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
     let value = {
         let src1: i32 = interpret_u32_as_signed!(src1);
@@ -27,7 +33,10 @@ pub fn execute_mul_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
     Ok(())
 }
 
-pub fn execute_mulh_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+pub fn execute_mulh_rv32m(
+    hart: &mut Hart,
+    instr: u32,
+) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
     let value = {
         let src1: i64 = interpret_u32_as_signed!(src1).into();
@@ -41,7 +50,10 @@ pub fn execute_mulh_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionEr
     Ok(())
 }
 
-pub fn execute_mulhsu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+pub fn execute_mulhsu_rv32m(
+    hart: &mut Hart,
+    instr: u32,
+) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
     let value = {
         let src1: i64 = interpret_u32_as_signed!(src1).into();
@@ -55,7 +67,10 @@ pub fn execute_mulhsu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), Execution
     Ok(())
 }
 
-pub fn execute_mulhu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+pub fn execute_mulhu_rv32m(
+    hart: &mut Hart,
+    instr: u32,
+) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
     let value = {
         let src1: u64 = src1.into();
@@ -69,7 +84,10 @@ pub fn execute_mulhu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionE
     Ok(())
 }
 
-pub fn execute_div_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+pub fn execute_div_rv32m(
+    hart: &mut Hart,
+    instr: u32,
+) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
     let value = {
         let src1: i32 = interpret_u32_as_signed!(src1);
@@ -83,7 +101,10 @@ pub fn execute_div_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
     Ok(())
 }
 
-pub fn execute_divu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+pub fn execute_divu_rv32m(
+    hart: &mut Hart,
+    instr: u32,
+) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
     let value = src1.wrapping_div(src2);
     hart.set_x(dest, value)?;
@@ -91,7 +112,10 @@ pub fn execute_divu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionEr
     Ok(())
 }
 
-pub fn execute_rem_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+pub fn execute_rem_rv32m(
+    hart: &mut Hart,
+    instr: u32,
+) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
     let value = {
         let src1: i32 = interpret_u32_as_signed!(src1);
@@ -103,7 +127,10 @@ pub fn execute_rem_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionErr
     Ok(())
 }
 
-pub fn execute_remu_rv32m(hart: &mut Hart, instr: u32) -> Result<(), ExecutionError> {
+pub fn execute_remu_rv32m(
+    hart: &mut Hart,
+    instr: u32,
+) -> Result<(), ExecutionError> {
     let (src1, src2, dest) = reg_reg_values(hart, instr)?;
     let value = src1.wrapping_rem(src2);
     hart.set_x(dest, value)?;

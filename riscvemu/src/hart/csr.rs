@@ -228,7 +228,9 @@ impl MachineInterface {
                 .get(&addr)
                 .expect("should be present, we just checked")
             {
-                Csr::Constant(_) | Csr::ReadOnly(_) => Err(CsrError::WriteToReadOnly(addr)),
+                Csr::Constant(_) | Csr::ReadOnly(_) => {
+                    Err(CsrError::WriteToReadOnly(addr))
+                }
                 Csr::ReadWrite(_, write) => write(&mut self.machine, value),
             }
         }
@@ -277,7 +279,9 @@ impl Default for MachineInterface {
         );
         addr_to_csr.insert(
             CSR_MTVEC,
-            Csr::new_read_only(|machine: &Machine| machine.trap_ctrl.csr_mtvec()),
+            Csr::new_read_only(|machine: &Machine| {
+                machine.trap_ctrl.csr_mtvec()
+            }),
         );
         addr_to_csr.insert(CSR_MSTATUSH, Csr::new_constant(0));
         addr_to_csr.insert(
@@ -365,7 +369,9 @@ impl Default for MachineInterface {
         );
         addr_to_csr.insert(
             CSR_TIME,
-            Csr::new_read_only(|machine: &Machine| machine.trap_ctrl.mmap_mtime()),
+            Csr::new_read_only(|machine: &Machine| {
+                machine.trap_ctrl.mmap_mtime()
+            }),
         );
         addr_to_csr.insert(
             CSR_INSTRET,
@@ -377,7 +383,9 @@ impl Default for MachineInterface {
         );
         addr_to_csr.insert(
             CSR_TIMEH,
-            Csr::new_read_only(|machine: &Machine| machine.trap_ctrl.mmap_mtimeh()),
+            Csr::new_read_only(|machine: &Machine| {
+                machine.trap_ctrl.mmap_mtimeh()
+            }),
         );
         addr_to_csr.insert(
             CSR_INSTRETH,
@@ -393,8 +401,8 @@ impl Default for MachineInterface {
         }
 
         Self {
+            machine: Machine::default(),
             addr_to_csr,
-            ..Self::default()
         }
     }
 }

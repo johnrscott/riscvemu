@@ -2,8 +2,8 @@ use crate::{
     fields::sign_extend,
     hart::{machine::Exception, memory::Wordsize},
     instr_type::{
-        decode_btype, decode_itype, decode_jtype, decode_rtype, decode_stype, decode_utype, Itype,
-        Rtype, SBtype, UJtype,
+        decode_btype, decode_itype, decode_jtype, decode_rtype, decode_stype,
+        decode_utype, Itype, Rtype, SBtype, UJtype,
     },
     interpret_i32_as_unsigned, interpret_u32_as_signed,
 };
@@ -18,7 +18,10 @@ fn check_instruction_address_aligned(pc: u32) -> Result<(), Exception> {
     }
 }
 
-fn jump_to_address<E: Eei>(eei: &mut E, target_pc: u32) -> Result<(), Exception> {
+fn jump_to_address<E: Eei>(
+    eei: &mut E,
+    target_pc: u32,
+) -> Result<(), Exception> {
     check_instruction_address_aligned(target_pc)?;
     eei.set_pc(target_pc);
     Ok(())
@@ -29,7 +32,10 @@ fn jump_to_address<E: Eei>(eei: &mut E, target_pc: u32) -> Result<(), Exception>
 /// program counter would be invalid, then the program counter is
 /// not modified, and an instruction address misaligned exception
 /// is returned, as per section 2.5 of the unprivileged spec.
-fn jump_relative_to_pc<E: Eei>(eei: &mut E, pc_relative_address: u32) -> Result<(), Exception> {
+fn jump_relative_to_pc<E: Eei>(
+    eei: &mut E,
+    pc_relative_address: u32,
+) -> Result<(), Exception> {
     let target_pc = eei.pc().wrapping_add(pc_relative_address);
     check_instruction_address_aligned(target_pc)?;
     eei.set_pc(target_pc);
@@ -128,7 +134,11 @@ fn get_branch_data<E: Eei>(eei: &E, instr: u32) -> (u32, u32, u16) {
     (src1, src2, offset)
 }
 
-fn do_branch<E: Eei>(eei: &mut E, branch_taken: bool, offset: u16) -> Result<(), Exception> {
+fn do_branch<E: Eei>(
+    eei: &mut E,
+    branch_taken: bool,
+    offset: u16,
+) -> Result<(), Exception> {
     if branch_taken {
         let pc_relative_address = sign_extend(offset, 11);
         jump_relative_to_pc(eei, pc_relative_address)?;
@@ -197,7 +207,8 @@ pub fn execute_lb<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
     let base_address = eei.x(base);
     let offset = sign_extend(offset, 11);
     let load_address = base_address.wrapping_add(offset);
-    let load_data = sign_extend(eei.load(load_address.into(), Wordsize::Byte)?, 7);
+    let load_data =
+        sign_extend(eei.load(load_address.into(), Wordsize::Byte)?, 7);
     eei.set_x(dest, load_data);
     eei.increment_pc();
     Ok(())
@@ -212,7 +223,8 @@ pub fn execute_lh<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
     let base_address = eei.x(base);
     let offset = sign_extend(offset, 11);
     let load_address = base_address.wrapping_add(offset);
-    let load_data = sign_extend(eei.load(load_address.into(), Wordsize::Halfword)?, 15);
+    let load_data =
+        sign_extend(eei.load(load_address.into(), Wordsize::Halfword)?, 15);
     eei.set_x(dest, load_data);
     eei.increment_pc();
     Ok(())

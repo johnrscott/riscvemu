@@ -267,6 +267,14 @@ impl TrapCtrl {
         high_word(&self.timer_interrupt.mtime)
     }
 
+    pub fn mmap_mtimecmp(&self) -> u32 {
+        low_word(&self.timer_interrupt.mtimecmp)
+    }
+
+    pub fn mmap_mtimecmph(&self) -> u32 {
+        high_word(&self.timer_interrupt.mtimecmp)
+    }
+
     /// Set the mcause (cause of trap) register
     ///
     /// The register has all-WARL fields, so an invalid
@@ -306,7 +314,10 @@ impl TrapCtrl {
     ///
     /// Returns an error if the trap_vector_base address is not
     /// four-byte aligned
-    pub fn new(trap_vector_base: u32, physical_address_bits: u32) -> Result<Self, TrapCtrlError> {
+    pub fn new(
+        trap_vector_base: u32,
+        physical_address_bits: u32,
+    ) -> Result<Self, TrapCtrlError> {
         if trap_vector_base % 4 != 0 {
             Err(TrapCtrlError::TrapVectorBaseMisaligned)
         } else if physical_address_bits >= 32 {
@@ -427,7 +438,11 @@ impl TrapCtrl {
     /// bit (1) to the MPIE bit (p. 21 of the privileged spec), and
     /// return the address of an entry in the trap vector table;
     /// otherwise return None and do not modify mepc.
-    fn interrupt_should_trap(&mut self, int: Interrupt, pc: u32) -> Option<u32> {
+    fn interrupt_should_trap(
+        &mut self,
+        int: Interrupt,
+        pc: u32,
+    ) -> Option<u32> {
         if self.interrupt_enabled(int) && self.interrupt_pending(int) {
             self.save_mie_bit();
             self.mcause = Trap::Interrupt(int).mcause();

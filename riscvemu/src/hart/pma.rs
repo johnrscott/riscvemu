@@ -31,7 +31,7 @@
 //! (0x0000_0088-0x0000_2000). The interrupt vector table reserves
 //! space for the full set of 32 interrupts.
 //!
-//! | Address | Width | Descrption |
+//! | Address | Width | Description |
 //! |---------|-------|------------|
 //! | 0x0000_0000 | 4 | Reset vector (pc points here on reset) |
 //! | 0x0000_0004 | 4 | Non-maskable interrupt vector |
@@ -78,7 +78,7 @@
 //! | 0x0001_0008 | 8 | mtimecmp (64-bit timer compare register) |
 //! | 0x0001_0010 | 4 | softintctrl (32-bit software interrupt control register) |
 //! | 0x0001_0014 | 4 | extintctrl (32-bit external interrupt control register) |
-//! | 0x0001_0018 | 4 | utx (write causes low byte sent to UART; read as 0) |
+//! | 0x0001_0018 | 4 | uarttx (write causes low byte sent to UART; read as 0) |
 //!
 //! The region is read/write (but no instruction fetch); reads/writes
 //! must be 4-byte width and be 4-byte aligned.
@@ -110,23 +110,33 @@
 //! vacant regions above.
 //!
 
-use thiserror::Error;
+//use thiserror::Error;
 
-#[derive(Debug, Error)]
-pub enum PmaError {
-    #[error("Attempted to fetch instruction from non-execute region")]
-    InstructionAccessFault,
-    #[error("Attempted to fetch instruction from non-four-byte-aligned address")]
-    InstructionAddressMisaligned,
-    #[error("Attempted to load data from region not supporting read access")]
-    LoadAccessFault,
-    #[error("Attempted to load data using an unaligned address")]
-    LoadAddressMisaligned,
-    #[error("Attempted to store data to region not supporting write access")]
-    StoreAccessFault,
-    #[error("Attempted to store data using an unaligned address")]
-    StoreAddressMisaligned,
-}
+// #[derive(Debug, Error)]
+// pub enum Exception {
+//     #[error("Attempted to fetch instruction from non-execute region")]
+//     InstructionAccessFault,
+//     #[error("Attempted to fetch instruction from non-four-byte-aligned address")]
+//     InstructionAddressMisaligned,
+//     #[error("Attempted to load data from region not supporting read access")]
+//     LoadAccessFault,
+//     #[error("Attempted to load data using an unaligned address")]
+//     LoadAddressMisaligned,
+//     #[error("Attempted to store data to region not supporting write access")]
+//     StoreAccessFault,
+//     #[error("Attempted to store data using an unaligned address")]
+//     StoreAddressMisaligned,
+// }
+
+use super::machine::Exception;
+
+pub const MTIME_ADDR: u32 = 0x0001_0000;
+pub const MTIMEH_ADDR: u32 = 0x0001_0004;
+pub const MTIMECMP_ADDR: u32 = 0x0001_0008;
+pub const MTIMECMPH_ADDR: u32 = 0x0001_000c;
+pub const SOFTINTCTRL_ADDR: u32 = 0x0001_0010;
+pub const EXTINTCTRL_ADDR: u32 = 0x0001_0014;
+pub const UARTTX_ADDR: u32 = 0x0001_0018;
 
 /// Models the PMA checker (section 3.6 privileged spec)
 ///
@@ -163,13 +173,13 @@ impl PmaChecker {
 
     /// You can only fetch instructions from the EEPROM region, and
     /// they must be four-byte aligned
-    pub fn check_instruction_fetch(&self, addr: u32) -> Result<(), PmaError> {
+    pub fn check_instruction_fetch(&self, addr: u32) -> Result<(), Exception> {
         if !self.in_eeprom(addr, 4) {
             // The only instruction-fetch region is the EEPROM region
-            Err(PmaError::InstructionAccessFault)
+            Err(Exception::InstructionAccessFault)
         } else if !address_aligned(addr, 4) {
             // Instruction fetches must be four-byte aligned
-            Err(PmaError::InstructionAddressMisaligned)
+            Err(Exception::InstructionAddressMisaligned)
         } else {
             // Fetch will be valid
             Ok(())
@@ -179,15 +189,15 @@ impl PmaChecker {
     /// You can read from the I/O region or main memory. I/O region
     /// reads must be four-byte aligned, but main memory reads can have
     /// any alignment.
-    pub fn check_load(&self, addr: u32, width: u32) -> Result<(), PmaError> {
+    pub fn check_load(&self, addr: u32, width: u32) -> Result<(), Exception> {
         if !self.in_io(addr, width) {
             // Load is from I/O region
             if width != 4 {
                 // I/O load must have width 4
-                Err(PmaError::LoadAccessFault)
+                Err(Exception::LoadAccessFault)
             } else if !address_aligned(addr, 4) {
                 // I/O load must be four byte aligned
-                Err(PmaError::LoadAddressMisaligned)
+                Err(Exception::LoadAddressMisaligned)
             } else {
                 Ok(())
             }
@@ -195,29 +205,29 @@ impl PmaChecker {
             // Load is from main memory
             if !main_memory_valid_width(width) {
                 // Only byte, halfword or word loads are allowed
-                Err(PmaError::LoadAccessFault)
+                Err(Exception::LoadAccessFault)
             } else {
                 // Any alignment is allowed
                 Ok(())
             }
         } else {
             // Loads are only allowed from I/O or main memory
-            Err(PmaError::LoadAccessFault)
+            Err(Exception::LoadAccessFault)
         }
     }
 
     /// You can write to the I/O region or main memory. I/O region
     /// writes must be four-byte aligned, but main memory writes can have
     /// any alignment.
-    pub fn check_store(&self, addr: u32, width: u32) -> Result<(), PmaError> {
+    pub fn check_store(&self, addr: u32, width: u32) -> Result<(), Exception> {
         if !self.in_io(addr, width) {
             // Store is to I/O region
             if width != 4 {
                 // I/O store must have width 4
-                Err(PmaError::StoreAccessFault)
+                Err(Exception::StoreAccessFault)
             } else if !address_aligned(addr, 4) {
                 // I/O store must be four byte aligned
-                Err(PmaError::StoreAddressMisaligned)
+                Err(Exception::StoreAddressMisaligned)
             } else {
                 Ok(())
             }
@@ -225,14 +235,14 @@ impl PmaChecker {
             // Store is to main memory
             if !main_memory_valid_width(width) {
                 // Only byte, halfword or word stores are allowed
-                Err(PmaError::StoreAccessFault)
+                Err(Exception::StoreAccessFault)
             } else {
                 // Any alignment is allowed
                 Ok(())
             }
         } else {
             // Stores are only allowed to I/O or main memory
-            Err(PmaError::StoreAccessFault)
+            Err(Exception::StoreAccessFault)
         }
     }
 

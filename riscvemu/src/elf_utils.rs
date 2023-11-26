@@ -8,7 +8,10 @@ use crate::hart::memory::Wordsize;
 use thiserror::Error;
 
 /// Get the section header name for this section
-fn section_name<'a>(header: &SectionHeader, strtab: &'a StringTable) -> &'a str {
+fn section_name<'a>(
+    header: &SectionHeader,
+    strtab: &'a StringTable,
+) -> &'a str {
     let index = header.sh_name;
     strtab
         .get(index.try_into().unwrap())
@@ -56,7 +59,8 @@ pub fn read_text_instructions(file_path: &String) -> Vec<u32> {
     // as a stream of 32-bit words
     let mut instructions = Vec::new();
     for n in (0..data.len()).step_by(4) {
-        instructions.push(u32::from_le_bytes(data[n..(n + 4)].try_into().unwrap()));
+        instructions
+            .push(u32::from_le_bytes(data[n..(n + 4)].try_into().unwrap()));
     }
 
     instructions
@@ -64,7 +68,10 @@ pub fn read_text_instructions(file_path: &String) -> Vec<u32> {
 
 /// Returns offset, assumed .text section currently. Returns the symbol start address
 /// and the length of the symbol (the number of bytes of .text it occupies)
-pub fn find_function_symbol(file_path: &String, symbol_name: &String) -> Option<(usize, usize)> {
+pub fn find_function_symbol(
+    file_path: &String,
+    symbol_name: &String,
+) -> Option<(usize, usize)> {
     let path = std::path::PathBuf::from(file_path);
     let file_data = std::fs::read(path).expect("Could not read file.");
     let slice = file_data.as_slice();
@@ -92,7 +99,10 @@ pub fn find_function_symbol(file_path: &String, symbol_name: &String) -> Option<
     None
 }
 
-fn section_data<'a>(header: &SectionHeader, file: &'a ElfBytes<'_, AnyEndian>) -> &'a [u8] {
+fn section_data<'a>(
+    header: &SectionHeader,
+    file: &'a ElfBytes<'_, AnyEndian>,
+) -> &'a [u8] {
     let data_pair = file
         .section_data(header)
         .expect("valid section data corresponding to the section header");
@@ -138,7 +148,8 @@ pub fn load_elf<L: ElfLoadable>(loadable: &mut L, elf_file_path: &String) {
             let section_load_address = header.sh_addr;
 
             for (offset, byte) in data.iter().enumerate() {
-                let addr = section_load_address + u64::try_from(offset).unwrap();
+                let addr =
+                    section_load_address + u64::try_from(offset).unwrap();
                 loadable
                     .write_byte(addr.try_into().unwrap(), (*byte).into())
                     .unwrap()

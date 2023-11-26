@@ -7,9 +7,13 @@ pub enum DecoderError {
     MissingNextStep { mask: u32, value: u32 },
     #[error("resulting decoder would have an ambiguous mask")]
     AmbiguousMask,
-    #[error("resulting decoder would have an ambiguous next step following value")]
+    #[error(
+        "resulting decoder would have an ambiguous next step following value"
+    )]
     AmbiguousNextStep,
-    #[error("at least one decoder and value is compulsory in push_instruction")]
+    #[error(
+        "at least one decoder and value is compulsory in push_instruction"
+    )]
     NoDecodingMaskSpecified,
 }
 
@@ -28,7 +32,10 @@ impl<F: Copy> NextStep<F> {
     /// masks_with_values is in reverse order; values at the end of the
     /// vector will get inserted into decoder first. This is because it
     /// is easier to remove items from the end of a vector (for the recursion)
-    fn from_masks_with_values(mut masks_with_values: Vec<MaskWithValue>, exec: F) -> Self {
+    fn from_masks_with_values(
+        mut masks_with_values: Vec<MaskWithValue>,
+        exec: F,
+    ) -> Self {
         let length = masks_with_values.len();
         if length == 0 {
             Self::Exec(exec)
@@ -40,7 +47,8 @@ impl<F: Copy> NextStep<F> {
                 .expect("the vector has at least one element, this will work");
             // Get the next step, which recursively constructs all the next steps
             // all the way down to the end
-            let next_step = Self::from_masks_with_values(masks_with_values, exec);
+            let next_step =
+                Self::from_masks_with_values(masks_with_values, exec);
             value_map.insert(value, next_step);
             let decoder = Decoder { mask, value_map };
             Self::Decode(decoder)
@@ -68,7 +76,10 @@ impl<F: Copy> NextNode<'_, F> {
     /// the value specified. Return variant depending on whether
     /// another decoder is found or whether the value is missing
     /// from the current node.
-    fn new(decoder: &mut Decoder<F>, value: u32) -> Result<NextNode<'_, F>, DecoderError> {
+    fn new(
+        decoder: &mut Decoder<F>,
+        value: u32,
+    ) -> Result<NextNode<'_, F>, DecoderError> {
         // Check if the value is present in the map for this node
         if !decoder.contains_value(&value) {
             // If the value is not present in the decoder,
@@ -137,7 +148,10 @@ impl<F: Copy> Decoder<F> {
         }
     }
 
-    fn next_step_for_value(&self, value: &u32) -> Result<&NextStep<F>, DecoderError> {
+    fn next_step_for_value(
+        &self,
+        value: &u32,
+    ) -> Result<&NextStep<F>, DecoderError> {
         if let Some(next_step) = self.value_map.get(value) {
             Ok(next_step)
         } else {
@@ -149,7 +163,10 @@ impl<F: Copy> Decoder<F> {
     }
 
     /// Get the next step by applying mask to instruction and checking value
-    fn next_step_for_instr(&self, instr: u32) -> Result<&NextStep<F>, DecoderError> {
+    fn next_step_for_instr(
+        &self,
+        instr: u32,
+    ) -> Result<&NextStep<F>, DecoderError> {
         let value = self.mask & instr;
         self.next_step_for_value(&value)
     }
@@ -233,7 +250,9 @@ impl<F: Copy> Decoder<F> {
                 }
 
                 match NextNode::new(decoder, value)? {
-                    NextNode::MissingValue(decoder, value) => return Ok((value, decoder)),
+                    NextNode::MissingValue(decoder, value) => {
+                        return Ok((value, decoder))
+                    }
                     NextNode::AnotherDecoder(d) => decoder = d,
                 };
             }
@@ -291,14 +310,16 @@ impl<F: Copy> Decoder<F> {
         // new_value where the branch tail should be attached. Note
         // masks_with_values is modified in place (items are repeatedly
         // popped from the end).
-        let (new_value, decoder) = self.match_branch_head(&mut masks_with_values)?;
+        let (new_value, decoder) =
+            self.match_branch_head(&mut masks_with_values)?;
 
         // The state at this point is that decoder points to some node in
         // the decode tree, and it is an iterator which contains the remaining
         // items that will form the tail of the branch starting at this node,
         // and exec is the function which should be placed at the leaf.
         //let tail_masks_with_values = it.collect();
-        let next_step = NextStep::from_masks_with_values(masks_with_values, exec);
+        let next_step =
+            NextStep::from_masks_with_values(masks_with_values, exec);
         decoder.value_map.insert(new_value, next_step);
         Ok(())
     }

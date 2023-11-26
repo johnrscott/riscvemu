@@ -43,7 +43,10 @@ pub fn execute_mulh<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
     Ok(())
 }
 
-pub fn execute_mulhsu<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+pub fn execute_mulhsu<E: Eei>(
+    eei: &mut E,
+    instr: u32,
+) -> Result<(), Exception> {
     let (src1, src2, dest) = reg_reg_values(eei, instr);
     let value = {
         let src1: i64 = interpret_u32_as_signed!(src1).into();

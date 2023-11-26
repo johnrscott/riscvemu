@@ -41,7 +41,10 @@ use super::{
     csr::MachineInterface,
     machine::Exception,
     memory::{Memory, Wordsize},
-    pma::PmaChecker,
+    pma::{
+        PmaChecker, EXTINTCTRL_ADDR, MTIMECMPH_ADDR, MTIMECMP_ADDR,
+        MTIMEH_ADDR, MTIME_ADDR, SOFTINTCTRL_ADDR, UARTTX_ADDR,
+    },
     registers::Registers,
 };
 
@@ -50,7 +53,8 @@ pub mod eei;
 pub mod rv32i;
 pub mod rv32m;
 
-pub type ExecuteInstr<Eei> = fn(eei: &mut Eei, instr: u32) -> Result<(), Exception>;
+pub type ExecuteInstr<Eei> =
+    fn(eei: &mut Eei, instr: u32) -> Result<(), Exception>;
 
 #[derive(Debug, Default)]
 pub struct Platform {
@@ -185,11 +189,17 @@ impl Eei for Platform {
     }
 
     fn set_x(&mut self, x: u8, value: u32) {
-        unimplemented!("todo")
+        self.registers
+            .write(x.into(), value.into())
+            .expect("register index should be < 32, and value should be 32-bit")
     }
 
     fn x(&self, x: u8) -> u32 {
-        unimplemented!("todo")
+        self.registers
+            .read(x.into())
+            .expect("register index should be < 32")
+            .try_into()
+            .expect("register value should fit into u32")
     }
 
     fn increment_pc(&mut self) {
@@ -197,10 +207,61 @@ impl Eei for Platform {
     }
 
     fn load(&self, addr: u32, width: Wordsize) -> Result<u32, Exception> {
-        unimplemented!("todo")
+        self.pma_checker.check_load(addr, width.width().into())?;
+        // Match memory mapped registers first, then perform general load
+        let result = match addr {
+            MTIME_ADDR => self.machine_interface.machine.trap_ctrl.mmap_mtime(),
+            MTIMEH_ADDR => {
+                self.machine_interface.machine.trap_ctrl.mmap_mtimeh()
+            }
+            MTIMECMP_ADDR => {
+                self.machine_interface.machine.trap_ctrl.mmap_mtimecmp()
+            }
+            MTIMECMPH_ADDR => {
+                self.machine_interface.machine.trap_ctrl.mmap_mtimecmph()
+            }
+            SOFTINTCTRL_ADDR => 0,
+            EXTINTCTRL_ADDR => 0,
+            UARTTX_ADDR => 0,
+            _ => self
+                .memory
+                .read(addr.into(), width)
+                .expect("memory read should work")
+                .try_into()
+                .expect("value should fit into 32 bits"),
+        };
+        Ok(result)
     }
 
-    fn store(&self, addr: u32, data: u32, width: Wordsize) -> Result<(), Exception> {
-        unimplemented!("todo")
+    fn store(
+        &self,
+        addr: u32,
+        data: u32,
+        width: Wordsize,
+    ) -> Result<(), Exception> {
+        self.pma_checker.check_store(addr, width.width().into())?;
+        // Match memory mapped registers first, then perform general load
+        let result = match addr {
+            MTIME_ADDR => self.machine_interface.machine.trap_ctrl.mmap_mtime(),
+            MTIMEH_ADDR => {
+                self.machine_interface.machine.trap_ctrl.mmap_mtimeh()
+            }
+            MTIMECMP_ADDR => {
+                self.machine_interface.machine.trap_ctrl.mmap_mtimecmp()
+            }
+            MTIMECMPH_ADDR => {
+                self.machine_interface.machine.trap_ctrl.mmap_mtimecmph()
+            }
+            SOFTINTCTRL_ADDR => 0,
+            EXTINTCTRL_ADDR => 0,
+            UARTTX_ADDR => 0,
+            _ => self
+                .memory
+                .read(addr.into(), width)
+                .expect("memory read should work")
+                .try_into()
+                .expect("value should fit into 32 bits"),
+        };
+        Ok(result)
     }
 }

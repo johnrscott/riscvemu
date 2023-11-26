@@ -1,5 +1,6 @@
 use riscvemu::{
-    decode::Decoder, elf_utils::load_elf, hart::Hart, rv32i::make_rv32i, rv32m::make_rv32m,
+    decode::Decoder, elf_utils::load_elf, hart::Hart, rv32i::make_rv32i,
+    rv32m::make_rv32m,
 };
 use std::time::Instant;
 
