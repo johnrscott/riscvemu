@@ -193,7 +193,7 @@ impl Csr {
 /// The Machine struct is accessible directly for the purpose of
 /// emulating the hart (e.g. incrementing cycle, or raising an
 /// exception trap).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MachineInterface {
     pub machine: Machine,
     addr_to_csr: HashMap<u16, Csr>,
@@ -237,8 +237,10 @@ impl MachineInterface {
     fn csr_present(&self, addr: u16) -> bool {
         self.addr_to_csr.contains_key(&addr)
     }
+}
 
-    pub fn new() -> Self {
+impl Default for MachineInterface {
+    fn default() -> Self {
         let mut addr_to_csr = HashMap::new();
 
         addr_to_csr.insert(CSR_MVENDORID, Csr::new_constant(0));
