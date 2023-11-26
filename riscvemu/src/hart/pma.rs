@@ -76,8 +76,9 @@
 //! |---------|-------|-------------|
 //! | 0x0001_0000 | 8 | mtime (64-bit real time) |
 //! | 0x0001_0008 | 8 | mtimecmp (64-bit timer compare register) |
-//! | 0x0001_0010 | 8 | softintctrl (32-bit software interrupt control register) |
-//! | 0x0001_0018 | 8 | extintctrl (32-bit external interrupt control register) |
+//! | 0x0001_0010 | 4 | softintctrl (32-bit software interrupt control register) |
+//! | 0x0001_0014 | 4 | extintctrl (32-bit external interrupt control register) |
+//! | 0x0001_0018 | 4 | utx (write causes low byte sent to UART; read as 0) |
 //!
 //! The region is read/write (but no instruction fetch); reads/writes
 //! must be 4-byte width and be 4-byte aligned.
