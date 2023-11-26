@@ -278,7 +278,7 @@ impl Eei for Platform {
 mod test {
 
     use super::*;
-    use crate::hart::machine::MSTATUS_MIE;
+    use crate::hart::machine::{MSTATUS_MIE, Trap};
 
     /// Simple wrapper to load 4 consecutive bytes
     fn write_instr(platform: &mut Platform, mut addr: u32, instr: u32) {
@@ -303,6 +303,8 @@ mod test {
         );
     }
 
+    /// Load 0 at reset vector, execute, and expect jump to
+    /// illegal instruction trap with mcause
     #[test]
     fn check_illegal_instruction_exception() {
         let mut platform = Platform::new();
@@ -314,5 +316,8 @@ mod test {
 
         // Expect illegal instruction exception
         assert_eq!(platform.pc(), 0x0000_0008); // exception vector
+	let mcause = platform.machine_interface.machine.trap_ctrl.csr_mcause();
+	assert_eq!(mcause, Trap::Exception(Exception::IllegalInstruction).mcause())
     }
+    
 }
