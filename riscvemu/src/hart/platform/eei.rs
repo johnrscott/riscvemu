@@ -29,7 +29,6 @@ use crate::hart::{machine::Exception, memory::Wordsize, pma::PmaError};
 
 /// Execution environment interface
 pub trait Eei {
-
     /// Set the program counter
     fn set_pc(&mut self, pc: u32);
 
@@ -52,5 +51,16 @@ pub trait Eei {
     fn increment_pc(&mut self);
 
     /// Load a value from memory
+    ///
+    /// The address and width are checked using the physical memory
+    /// attributes (PMA) checker, which can return an
+    /// exception. Otherwise, the result of the load is returned.
     fn load(&self, addr: u32, width: Wordsize) -> Result<u32, Exception>;
+
+    /// Store a value to memory
+    ///
+    /// The address and width are checked using the physical memory
+    /// attributes (PMA) checker, which can return an
+    /// exception. Otherwise, the data is stored to memory.
+    fn store(&self, addr: u32, data: u32, width: Wordsize) -> Result<(), Exception>;
 }

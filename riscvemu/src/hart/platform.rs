@@ -42,7 +42,7 @@ pub mod arch;
 pub mod eei;
 pub mod rv32i;
 
-pub type ExecuteInstr<Eei> = fn(eei: &mut Eei, instr: u32)->Result<(), Exception>;
+pub type ExecuteInstr<Eei> = fn(eei: &mut Eei, instr: u32) -> Result<(), Exception>;
 
 #[derive(Debug, Default)]
 pub struct Platform {
@@ -123,8 +123,8 @@ impl Platform {
         let executer = match self.decoder.get_exec(instr) {
             Ok(executer) => executer,
             Err(_) => {
-		// If instruction is not decoded successfully, return
-		// illegal instruction
+                // If instruction is not decoded successfully, return
+                // illegal instruction
                 self.machine_interface
                     .machine
                     .trap_ctrl
@@ -133,25 +133,24 @@ impl Platform {
             }
         };
 
-	// Execute the instruction
-	if let Err(ex) = executer(self, instr) {
-	    // If an exception occurred, raise it and return
+        // Execute the instruction
+        if let Err(ex) = executer(self, instr) {
+            // If an exception occurred, raise it and return
             self.machine_interface
                 .machine
                 .trap_ctrl
                 .raise_exception(self.pc, ex);
-	    return;
-	}
+            return;
+        }
 
-	// If instruction completed successfully, increment count
-	// of retired instructions
-	self.machine_interface.machine.increment_minstret();
+        // If instruction completed successfully, increment count
+        // of retired instructions
+        self.machine_interface.machine.increment_minstret();
     }
 }
 
 /// Implementation of the unprivileged execution environment interface
 impl Eei for Platform {
-
     fn set_pc(&mut self, pc: u32) {
         self.pc = pc;
     }
@@ -173,6 +172,10 @@ impl Eei for Platform {
     }
 
     fn load(&self, addr: u32, width: Wordsize) -> Result<u32, Exception> {
+        unimplemented!("todo")
+    }
+
+    fn store(&self, addr: u32, data: u32, width: Wordsize) -> Result<(), Exception> {
         unimplemented!("todo")
     }
 }
