@@ -123,7 +123,7 @@ pub const CSR_INSTRETH: u16 = 0xc82;
 pub const CSR_HPMCOUNTERH_BASE: u16 = 0xc80; // add 3..32 to get address
 
 #[derive(Debug, Error)]
-enum CsrError {
+pub enum CsrError {
     #[error("CSR 0x{0:x} is not present")]
     NotPresent(u16),
     #[error("Attempted write to CSR 0x{0:x} which is read-only")]

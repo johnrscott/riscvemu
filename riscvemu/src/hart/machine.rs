@@ -298,7 +298,7 @@ impl TrapCtrl {
     pub fn trap_vector_address(&self, trap: Trap) -> u32 {
         match &trap {
             Trap::Exception(_) => self.trap_vector_base,
-            Trap::Interrupt(int) => self.trap_vector_base + 4 * trap.cause(),
+            Trap::Interrupt(_) => self.trap_vector_base + 4 * trap.cause(),
         }
     }
 
@@ -306,7 +306,7 @@ impl TrapCtrl {
     ///
     /// Returns an error if the trap_vector_base address is not
     /// four-byte aligned
-    fn new(trap_vector_base: u32, physical_address_bits: u32) -> Result<Self, TrapCtrlError> {
+    pub fn new(trap_vector_base: u32, physical_address_bits: u32) -> Result<Self, TrapCtrlError> {
         if trap_vector_base % 4 != 0 {
             Err(TrapCtrlError::TrapVectorBaseMisaligned)
         } else if physical_address_bits >= 32 {

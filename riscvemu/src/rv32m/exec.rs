@@ -1,5 +1,4 @@
 use crate::{
-    fields::sign_extend,
     hart::{ExecutionError, Hart},
     instr_type::{decode_rtype, Rtype},
     interpret_u32_as_signed,
