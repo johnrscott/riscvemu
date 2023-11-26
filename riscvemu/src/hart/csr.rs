@@ -199,7 +199,6 @@ pub struct MachineInterface {
 }
 
 impl MachineInterface {
-
     /// Read a CSR (for use by Zicsr instructions)
     pub fn read_csr(&self, addr: u16) -> Result<u32, CsrError> {
         if !self.csr_present(addr) {
