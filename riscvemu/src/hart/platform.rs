@@ -26,9 +26,16 @@
 //! for this platform must write values to the trap vector table (part
 //! of the EEPROM memory map.
 
-use crate::{decode::Decoder, utils::mask};
+use crate::{
+    decode::Decoder,
+    elf_utils::{ElfLoadError, ElfLoadable},
+    utils::mask,
+};
 
-use self::{arch::make_rv32i, eei::Eei};
+use self::{
+    arch::{make_rv32i, make_rv32m},
+    eei::Eei,
+};
 
 use super::{
     csr::MachineInterface,
@@ -41,6 +48,7 @@ use super::{
 pub mod arch;
 pub mod eei;
 pub mod rv32i;
+pub mod rv32m;
 
 pub type ExecuteInstr<Eei> = fn(eei: &mut Eei, instr: u32) -> Result<(), Exception>;
 
@@ -54,12 +62,29 @@ pub struct Platform {
     pc: u32,
 }
 
+impl ElfLoadable for Platform {
+    /// Write a byte to the EEPROM region of the platform. Returns an
+    /// error on an attempt to write anything other than the eeprom region
+    fn write_byte(&mut self, addr: u32, data: u8) -> Result<(), ElfLoadError> {
+        if !self.pma_checker.in_eeprom(addr, 1) {
+            Err(ElfLoadError::NonWritable(addr))
+        } else {
+            self.memory
+                .write(addr.into(), data.into(), Wordsize::Byte)
+                .expect("should work, address is 32-bit");
+            Ok(())
+        }
+    }
+}
+
 impl Platform {
     /// Create the platform. Do not use Self::default(), which does
     /// not set up the decoder.
     pub fn new() -> Self {
         let mut decoder = Decoder::new(mask(7));
         make_rv32i(&mut decoder).expect("adding instructions should work");
+        make_rv32m(&mut decoder).expect("adding instructions should work");
+
         Self {
             decoder,
             ..Self::default()

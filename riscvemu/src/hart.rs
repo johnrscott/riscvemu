@@ -2,10 +2,13 @@ use self::{
     memory::{ReadError, Wordsize},
     registers::Registers,
 };
-use crate::fields::mask;
 use crate::{
     decode::{Decoder, DecoderError},
     rv32i::{make_rv32i, Exec32},
+};
+use crate::{
+    elf_utils::{ElfLoadError, ElfLoadable},
+    fields::mask,
 };
 use memory::Memory;
 use thiserror::Error;
@@ -64,6 +67,15 @@ impl Default for Hart {
 
         make_rv32i(&mut hart.decoder).expect("adding these instructions should work");
         hart
+    }
+}
+
+impl ElfLoadable for Hart {
+    fn write_byte(&mut self, addr: u32, data: u8) -> Result<(), ElfLoadError> {
+        self.memory
+            .write(addr.into(), data.into(), Wordsize::Byte)
+            .unwrap();
+        Ok(())
     }
 }
 

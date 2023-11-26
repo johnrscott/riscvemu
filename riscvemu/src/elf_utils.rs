@@ -5,7 +5,7 @@ use elf::string_table::StringTable;
 use elf::ElfBytes;
 
 use crate::hart::memory::Wordsize;
-use crate::hart::Hart;
+use thiserror::Error;
 
 /// Get the section header name for this section
 fn section_name<'a>(header: &SectionHeader, strtab: &'a StringTable) -> &'a str {
@@ -102,10 +102,20 @@ fn section_data<'a>(header: &SectionHeader, file: &'a ElfBytes<'_, AnyEndian>) -
     data_pair.0
 }
 
+#[derive(Debug, Error)]
+pub enum ElfLoadError {
+    #[error("Attempted to write byte to non-writable memory address 0x{0:x}")]
+    NonWritable(u32),
+}
+
+pub trait ElfLoadable {
+    fn write_byte(&mut self, addr: u32, data: u8) -> Result<(), ElfLoadError>;
+}
+
 /// Read an ELF file from disk and load the alloc section (the ones
 /// meant to be present during program execution) into memory. Prints
 /// what it is doing.
-pub fn load_elf(hart: &mut Hart, elf_file_path: &String) {
+pub fn load_elf<L: ElfLoadable>(loadable: &mut L, elf_file_path: &String) {
     let path = std::path::PathBuf::from(elf_file_path);
     let file_data = std::fs::read(path).expect("Could not read file.");
     let slice = file_data.as_slice();
@@ -129,9 +139,9 @@ pub fn load_elf(hart: &mut Hart, elf_file_path: &String) {
 
             for (offset, byte) in data.iter().enumerate() {
                 let addr = section_load_address + u64::try_from(offset).unwrap();
-                hart.memory
-                    .write(addr, (*byte).into(), Wordsize::Byte)
-                    .unwrap();
+                loadable
+                    .write_byte(addr.try_into().unwrap(), (*byte).into())
+                    .unwrap()
             }
         }
     }

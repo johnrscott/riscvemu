@@ -237,7 +237,7 @@ impl PmaChecker {
     }
 
     /// True if address (and width) is fully in EEPROM region
-    fn in_eeprom(&self, addr: u32, width: u32) -> bool {
+    pub fn in_eeprom(&self, addr: u32, width: u32) -> bool {
         address_in_region(addr, width, 0x0000_0000, self.eeprom_size)
     }
 
