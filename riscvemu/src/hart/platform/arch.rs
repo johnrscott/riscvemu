@@ -4,7 +4,7 @@ use crate::{
     utils::mask,
 };
 
-use super::{eei::Eei, exec::execute_lui_rv32i, ExecuteInstr};
+use super::{eei::Eei, rv32i::execute_lui, ExecuteInstr};
 
 /// The intention of this kind of function (generic on EEI) is to provide
 /// a way to separate the decoding of the instruction from the actual
@@ -23,5 +23,5 @@ pub fn opcode_determined<E: Eei>(
 
 pub fn make_rv32i<E: Eei>(decoder: &mut Decoder<ExecuteInstr<E>>) -> Result<(), DecoderError> {
     // Opcode determines instruction
-    opcode_determined(decoder, OP_LUI, execute_lui_rv32i)
+    opcode_determined(decoder, OP_LUI, execute_lui)
 }

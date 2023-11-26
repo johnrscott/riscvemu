@@ -25,17 +25,16 @@
 //! architecture. Unprivileged architecture is implemented in terms of
 //! the behaviour exposed by the EEI trait.
 
-use crate::hart::machine::Exception;
+use crate::hart::{machine::Exception, memory::Wordsize, pma::PmaError};
 
 /// Execution environment interface
 pub trait Eei {
-    /// Raise an exception
-    ///
-    /// This will cause a transfer of control to the exception trap
-    /// handler in the execution environment. After the exception has
-    /// been handled, control will return to the instruction that
-    /// triggered the exception.
-    fn raise_exception(&mut self, ex: Exception);
+
+    /// Set the program counter
+    fn set_pc(&mut self, pc: u32);
+
+    /// Get the current program counter
+    fn pc(&self) -> u32;
 
     /// Set the register x to value.
     ///
@@ -43,6 +42,15 @@ pub trait Eei {
     /// 32). Writing to register 0 has no effect.
     fn set_x(&mut self, x: u8, value: u32);
 
+    /// Get the value of register with index x
+    ///
+    /// Panic if the register x is out of range (x > 32). Reading
+    /// register 0 always returns 0.
+    fn x(&self, x: u8) -> u32;
+
     /// Set pc = pc + 4
     fn increment_pc(&mut self);
+
+    /// Load a value from memory
+    fn load(&self, addr: u32, width: Wordsize) -> Result<u32, Exception>;
 }

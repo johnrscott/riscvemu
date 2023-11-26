@@ -100,7 +100,6 @@ fn get_branch_data(hart: &Hart, instr: u32) -> Result<(u32, u32, u16), Execution
     let src2 = hart.x(src2)?;
     Ok((src1, src2, offset))
 }
-
 fn do_branch(hart: &mut Hart, branch_taken: bool, offset: u16) -> Result<(), ExecutionError> {
     if branch_taken {
         let relative_address = sign_extend(offset, 11);

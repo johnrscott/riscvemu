@@ -460,6 +460,14 @@ pub struct Machine {
 }
 
 impl Machine {
+    pub fn increment_mcycle(&mut self) {
+        self.mcycle += 1;
+    }
+
+    pub fn increment_minstret(&mut self) {
+        self.minstret += 1;
+    }
+
     pub fn csr_write_mcycle(&mut self, value: u32) {
         write_low_word(&mut self.mcycle, value);
     }

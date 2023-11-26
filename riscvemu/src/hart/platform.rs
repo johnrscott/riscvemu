@@ -28,18 +28,21 @@
 
 use crate::{decode::Decoder, utils::mask};
 
-use self::{eei::Eei, arch::make_rv32i};
+use self::{arch::make_rv32i, eei::Eei};
 
 use super::{
-    csr::MachineInterface, machine::Exception, memory::Memory, pma::PmaChecker,
+    csr::MachineInterface,
+    machine::Exception,
+    memory::{Memory, Wordsize},
+    pma::PmaChecker,
     registers::Registers,
 };
 
 pub mod arch;
 pub mod eei;
-pub mod exec;
+pub mod rv32i;
 
-pub type ExecuteInstr<Eei> = fn(eei: &mut Eei, instr: u32);
+pub type ExecuteInstr<Eei> = fn(eei: &mut Eei, instr: u32)->Result<(), Exception>;
 
 #[derive(Debug, Default)]
 pub struct Platform {
@@ -56,7 +59,7 @@ impl Platform {
     /// not set up the decoder.
     pub fn new() -> Self {
         let mut decoder = Decoder::new(mask(7));
-	make_rv32i(&mut decoder).expect("adding instructions should work");
+        make_rv32i(&mut decoder).expect("adding instructions should work");
         Self {
             decoder,
             ..Self::default()
@@ -75,30 +78,101 @@ impl Platform {
     /// Single clock cycle step
     ///
     /// On the rising edge of the clock, perform the sequence of
-    /// actions specified below. If a exception is raised during a
-    /// step, then return without performing subsequent steps (todo:
-    /// check whether this is valid with respect to instructions that
-    /// can trigger multiple exceptions).
+    /// actions specified below. If a trap (interrupt or exception) is
+    /// encountered during a step, then return without performing
+    /// subsequent steps (todo: check whether this is valid with
+    /// respect to instructions that can trigger multiple exceptions).
     ///
     /// * increment mcycle and mtime
+    /// * check for pending interrupts. If pending, return early
     /// * fetch the instruction located at pc (can raise exception)
     /// * execute the instruction that was fetched (can raise exception)
     /// * increment minstret (i.e. only if instruction was completed)
     ///
-    pub fn step_clock() {}
+    pub fn step_clock(&mut self) {
+        // Increment machine counters
+        self.machine_interface.machine.increment_mcycle();
+        self.machine_interface.machine.trap_ctrl.increment_mtime();
+
+        // Check for pending interrupts. If an interrupt is pending,
+        // set the pc to the interrupt handler vector and return.
+        if let Some(interrupt_pc) = self
+            .machine_interface
+            .machine
+            .trap_ctrl
+            .trap_interrupt(self.pc)
+        {
+            self.pc = interrupt_pc;
+            return;
+        }
+
+        // Fetch the instruction at the current pc.
+        let instr = match self.load(self.pc, Wordsize::Word) {
+            Ok(instr) => instr,
+            Err(ex) => {
+                // On exception during exception fetch, raise it and return
+                self.machine_interface
+                    .machine
+                    .trap_ctrl
+                    .raise_exception(self.pc, ex);
+                return;
+            }
+        };
+
+        // Decode the instruction
+        let executer = match self.decoder.get_exec(instr) {
+            Ok(executer) => executer,
+            Err(_) => {
+		// If instruction is not decoded successfully, return
+		// illegal instruction
+                self.machine_interface
+                    .machine
+                    .trap_ctrl
+                    .raise_exception(self.pc, Exception::IllegalInstruction);
+                return;
+            }
+        };
+
+	// Execute the instruction
+	if let Err(ex) = executer(self, instr) {
+	    // If an exception occurred, raise it and return
+            self.machine_interface
+                .machine
+                .trap_ctrl
+                .raise_exception(self.pc, ex);
+	    return;
+	}
+
+	// If instruction completed successfully, increment count
+	// of retired instructions
+	self.machine_interface.machine.increment_minstret();
+    }
 }
 
 /// Implementation of the unprivileged execution environment interface
 impl Eei for Platform {
-    fn raise_exception(&mut self, ex: Exception) {
-        unimplemented!("todo")
+
+    fn set_pc(&mut self, pc: u32) {
+        self.pc = pc;
+    }
+
+    fn pc(&self) -> u32 {
+        self.pc
     }
 
     fn set_x(&mut self, x: u8, value: u32) {
-	unimplemented!("todo")
+        unimplemented!("todo")
+    }
+
+    fn x(&self, x: u8) -> u32 {
+        unimplemented!("todo")
     }
 
     fn increment_pc(&mut self) {
-	self.pc = self.pc + 4
+        self.pc = self.pc + 4
+    }
+
+    fn load(&self, addr: u32, width: Wordsize) -> Result<u32, Exception> {
+        unimplemented!("todo")
     }
 }
