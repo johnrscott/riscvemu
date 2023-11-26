@@ -140,7 +140,7 @@ impl Platform {
             Ok(instr) => instr,
             Err(ex) => {
                 // On exception during exception fetch, raise it and return
-                self.machine_interface
+                self.pc = self.machine_interface
                     .machine
                     .trap_ctrl
                     .raise_exception(self.pc, ex);
@@ -154,7 +154,7 @@ impl Platform {
             Err(_) => {
                 // If instruction is not decoded successfully, return
                 // illegal instruction
-                self.machine_interface
+                self.pc = self.machine_interface
                     .machine
                     .trap_ctrl
                     .raise_exception(self.pc, Exception::IllegalInstruction);
@@ -165,7 +165,7 @@ impl Platform {
         // Execute the instruction
         if let Err(ex) = executer(self, instr) {
             // If an exception occurred, raise it and return
-            self.machine_interface
+            self.pc = self.machine_interface
                 .machine
                 .trap_ctrl
                 .raise_exception(self.pc, ex);
@@ -271,5 +271,48 @@ impl Eei for Platform {
                 .expect("memory write should work"),
         };
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+    use crate::hart::machine::MSTATUS_MIE;
+
+    /// Simple wrapper to load 4 consecutive bytes
+    fn write_instr(platform: &mut Platform, mut addr: u32, instr: u32) {
+        for byte in instr.to_le_bytes().iter() {
+            platform.write_byte(addr, *byte);
+            addr += 1;
+        }
+    }
+
+    #[test]
+    fn check_state_on_reset() {
+        let platform = Platform::new();
+        let mstatus =
+            platform.machine_interface.machine.trap_ctrl.csr_mstatus();
+        let mie = mstatus >> MSTATUS_MIE & 1;
+
+        assert_eq!(platform.pc, 0);
+        assert_eq!(mie, 0);
+        assert_eq!(
+            platform.machine_interface.machine.trap_ctrl.csr_mcause(),
+            0
+        );
+    }
+
+    #[test]
+    fn check_illegal_instruction_exception() {
+        let mut platform = Platform::new();
+        // Load an illegal instruction to reset vector
+        write_instr(&mut platform, 0, 0);
+        //println!("{platform:?}");
+        // Attempt execution
+        platform.step_clock();
+
+        // Expect illegal instruction exception
+        assert_eq!(platform.pc(), 0x0000_0008); // exception vector
     }
 }

@@ -336,7 +336,7 @@ impl TrapCtrl {
     ) -> Result<Self, TrapCtrlError> {
         if trap_vector_base % 4 != 0 {
             Err(TrapCtrlError::TrapVectorBaseMisaligned)
-        } else if physical_address_bits >= 32 {
+        } else if physical_address_bits > 32 {
             Err(TrapCtrlError::PhysicalMemoryTooLarge)
         } else {
             Ok(Self {
@@ -478,7 +478,7 @@ impl TrapCtrl {
 /// This struct contains the core architectural state
 /// of privileged mode, including the state of the
 /// performance counters, interrupts, real time, etc.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Machine {
     /// Number of clock cycles since reset.
     mcycle: u64,
@@ -488,6 +488,18 @@ pub struct Machine {
     pub mscratch: u32,
     /// Trap (interrupt and exception) control
     pub trap_ctrl: TrapCtrl,
+}
+
+impl Default for Machine {
+    fn default() -> Self {
+        Self {
+            mcycle: 0,
+            minstret: 0,
+            mscratch: 0,
+            trap_ctrl: TrapCtrl::new(0x0000_0008, 18)
+                .expect("trap vector base is four byte aligned"),
+        }
+    }
 }
 
 impl Machine {
