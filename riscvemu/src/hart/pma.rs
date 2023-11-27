@@ -190,7 +190,7 @@ impl PmaChecker {
     /// reads must be four-byte aligned, but main memory reads can have
     /// any alignment.
     pub fn check_load(&self, addr: u32, width: u32) -> Result<(), Exception> {
-        if !self.in_io(addr, width) {
+        if self.in_io(addr, width) {
             // Load is from I/O region
             if width != 4 {
                 // I/O load must have width 4
@@ -201,7 +201,7 @@ impl PmaChecker {
             } else {
                 Ok(())
             }
-        } else if !self.in_main_memory(addr, width) {
+        } else if self.in_main_memory(addr, width) {
             // Load is from main memory
             if !main_memory_valid_width(width) {
                 // Only byte, halfword or word loads are allowed
@@ -220,7 +220,7 @@ impl PmaChecker {
     /// writes must be four-byte aligned, but main memory writes can have
     /// any alignment.
     pub fn check_store(&self, addr: u32, width: u32) -> Result<(), Exception> {
-        if !self.in_io(addr, width) {
+        if self.in_io(addr, width) {
             // Store is to I/O region
             if width != 4 {
                 // I/O store must have width 4
@@ -231,7 +231,7 @@ impl PmaChecker {
             } else {
                 Ok(())
             }
-        } else if !self.in_main_memory(addr, width) {
+        } else if self.in_main_memory(addr, width) {
             // Store is to main memory
             if !main_memory_valid_width(width) {
                 // Only byte, halfword or word stores are allowed
