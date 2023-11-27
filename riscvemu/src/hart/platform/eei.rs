@@ -68,4 +68,19 @@ pub trait Eei {
         data: u32,
         width: Wordsize,
     ) -> Result<(), Exception>;
+
+    /// Read from a control/status register (CSR)
+    ///
+    /// If a register is not present, illegal instruction is returned.
+    fn read_csr(&self, addr: u16) -> Result<u32, Exception>;
+
+
+    /// Write to a control/status register (CSR)
+    ///
+    /// If a register is not present or is read-only (i.e. the full
+    /// register is defined as read-only, rather than it containing
+    /// some read-only fields), illegal instruction is returned. An
+    /// illegal instruction is also returned if an invalid write is
+    /// attempted to a WRLR (write-legal read-legal) field.
+    fn write_csr(&mut self, addr: u16, value: u32) -> Result<(), Exception>;
 }

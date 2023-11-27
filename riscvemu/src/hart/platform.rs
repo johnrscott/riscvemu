@@ -38,7 +38,7 @@ use self::{
 };
 
 use super::{
-    csr::MachineInterface,
+    csr::{MachineInterface, CsrError},
     machine::Exception,
     memory::{Memory, Wordsize},
     pma::{
@@ -52,6 +52,7 @@ pub mod arch;
 pub mod eei;
 pub mod rv32i;
 pub mod rv32m;
+pub mod rv32zicsr;
 
 pub type ExecuteInstr<Eei> =
     fn(eei: &mut Eei, instr: u32) -> Result<(), Exception>;
@@ -285,6 +286,22 @@ impl Eei for Platform {
                 .expect("memory write should work"),
         };
         Ok(())
+    }
+
+    fn read_csr(&self, addr: u16) -> Result<u32, Exception> {
+	if let Ok(result) = self.machine_interface.read_csr(addr) {
+	    Ok(result)
+	} else {
+	    // csr not present or read-only
+	    Err(Exception::IllegalInstruction)
+	}
+    }
+
+    fn write_csr(&mut self, addr: u16, value: u32) -> Result<(), Exception> {
+	match self.machine_interface.write_csr(addr, value) {
+	    Ok(_) => Ok(()),
+	    Err(_) => Err(Exception::IllegalInstruction),
+	}
     }
 }
 
