@@ -340,6 +340,48 @@ mod tests {
         )
     }
 
+    /// Attempt to take a branch which would cause the pc to become
+    /// misaligned. Expect jump to trap with mcause.
+    #[test]
+    fn check_branch_instruction_address_misaligned() -> Result<(), &'static str>
+    {
+        let mut platform = Platform::new();
+        write_instr(&mut platform, 0, beq!(x1, x2, 15));
+        platform.set_x(1, 2);
+        platform.set_x(2, 2);
+
+        // Attempt execution
+        platform.step_clock();
+
+        // Expect illegal instruction exception
+        assert_eq!(platform.pc(), 0x0000_0008); // exception vector
+        let mcause = platform.machine_interface.machine.trap_ctrl.csr_mcause();
+        assert_eq!(
+            mcause,
+            Trap::Exception(Exception::InstructionAddressMisaligned).mcause()
+        );
+        Ok(())
+    }
+
+    /// Attempt to begin execution directly from a misaligned pc.
+    /// Expect jump to exception with mcause.
+    #[test]
+    fn check_branch_instruction_address_pc() {
+        let mut platform = Platform::new();
+        platform.set_pc(3);
+
+        // Attempt execution
+        platform.step_clock();
+
+        // Expect illegal instruction exception
+        assert_eq!(platform.pc(), 0x0000_0008); // exception vector
+        let mcause = platform.machine_interface.machine.trap_ctrl.csr_mcause();
+        assert_eq!(
+            mcause,
+            Trap::Exception(Exception::InstructionAddressMisaligned).mcause()
+        );
+    }
+    
     #[test]
     fn check_lui() -> Result<(), &'static str> {
         // Check a basic case of lui (result should be placed in
@@ -1104,9 +1146,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, div!(x1, x2, x3));
         platform.set_x(2, 6);
-        platform
-            .registers
-            .write(3, interpret_i32_as_unsigned!(-3).into());
+        platform.set_x(3, interpret_i32_as_unsigned!(-3));
         platform.step_clock();
         let x1 = platform.x(1);
         assert_eq!(x1, interpret_i32_as_unsigned!(-2).into());
@@ -1119,9 +1159,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, div!(x1, x2, x3));
         platform.set_x(2, 10);
-        platform
-            .registers
-            .write(3, interpret_i32_as_unsigned!(-3).into());
+        platform.set_x(3, interpret_i32_as_unsigned!(-3));
         platform.step_clock();
         let x1 = platform.x(1);
         assert_eq!(x1, interpret_i32_as_unsigned!(-3).into());
@@ -1146,9 +1184,7 @@ mod tests {
     fn check_rem() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, rem!(x1, x2, x3));
-        platform
-            .registers
-            .write(2, interpret_i32_as_unsigned!(-10).into());
+        platform.set_x(2, interpret_i32_as_unsigned!(-10));
         platform.set_x(3, 3);
         platform.step_clock();
         let x1 = platform.x(1);
