@@ -67,6 +67,14 @@ pub const FUNCT3_DIVU: u32 = 0b101;
 pub const FUNCT3_REM: u32 = 0b110;
 pub const FUNCT3_REMU: u32 = 0b111;
 
+// Control/status registers
+pub const FUNCT3_CSRRW: u32 = 0b001;
+pub const FUNCT3_CSRRS: u32 = 0b010;
+pub const FUNCT3_CSRRC: u32 = 0b011;
+pub const FUNCT3_CSRRWI: u32 = 0b101;
+pub const FUNCT3_CSRRSI: u32 = 0b110;
+pub const FUNCT3_CSRRCI: u32 = 0b111;
+
 // Register-register opcodes
 pub const FUNCT7_ADD: u32 = 0b0000000;
 pub const FUNCT7_SUB: u32 = 0b0100000;

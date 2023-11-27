@@ -561,3 +561,17 @@ fn write_high_word(target: &mut u64, value: u32) {
     let lower = *target & 0xffff_ffff;
     *target = u64::from(value) << 32 | lower;
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn check_mstatus_read_write() {
+        let mut trap_ctrl = TrapCtrl::default();
+        assert_eq!(trap_ctrl.csr_mstatus(), 0x0000_1800);
+        trap_ctrl.csr_write_mstatus(0xffff_ffff);
+        assert_eq!(trap_ctrl.csr_mstatus(), 0x0000_1888);
+    }
+}

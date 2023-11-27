@@ -74,7 +74,6 @@ pub trait Eei {
     /// If a register is not present, illegal instruction is returned.
     fn read_csr(&self, addr: u16) -> Result<u32, Exception>;
 
-
     /// Write to a control/status register (CSR)
     ///
     /// If a register is not present or is read-only (i.e. the full

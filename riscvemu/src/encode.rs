@@ -312,6 +312,7 @@ rtype_instr!(sraw, 0b0100000, 0b101, OP_32);
 // ebreak
 
 // csrrw
+itype_instr!(csrrw, FUNCT3_CSRRW, OP_SYSTEM);
 // csrrs
 // csrrc
 // csrrwi

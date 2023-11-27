@@ -33,12 +33,12 @@ use crate::{
 };
 
 use self::{
-    arch::{make_rv32i, make_rv32m},
+    arch::{make_rv32i, make_rv32m, make_rv32zicsr},
     eei::Eei,
 };
 
 use super::{
-    csr::{MachineInterface, CsrError},
+    csr::{CsrError, MachineInterface},
     machine::Exception,
     memory::{Memory, Wordsize},
     pma::{
@@ -89,6 +89,7 @@ impl Platform {
         let mut decoder = Decoder::new(mask(7));
         make_rv32i(&mut decoder).expect("adding instructions should work");
         make_rv32m(&mut decoder).expect("adding instructions should work");
+        make_rv32zicsr(&mut decoder).expect("adding instructions should work");
 
         Self {
             decoder,
@@ -289,19 +290,19 @@ impl Eei for Platform {
     }
 
     fn read_csr(&self, addr: u16) -> Result<u32, Exception> {
-	if let Ok(result) = self.machine_interface.read_csr(addr) {
-	    Ok(result)
-	} else {
-	    // csr not present or read-only
-	    Err(Exception::IllegalInstruction)
-	}
+        if let Ok(result) = self.machine_interface.read_csr(addr) {
+            Ok(result)
+        } else {
+            // csr not present or read-only
+            Err(Exception::IllegalInstruction)
+        }
     }
 
     fn write_csr(&mut self, addr: u16, value: u32) -> Result<(), Exception> {
-	match self.machine_interface.write_csr(addr, value) {
-	    Ok(_) => Ok(()),
-	    Err(_) => Err(Exception::IllegalInstruction),
-	}
+        match self.machine_interface.write_csr(addr, value) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(Exception::IllegalInstruction),
+        }
     }
 }
 
@@ -398,7 +399,30 @@ mod tests {
             Trap::Exception(Exception::InstructionAddressMisaligned).mcause()
         );
     }
-    
+
+    /// Expect mstatus to be 0x0000_1800 initially, write 0xffff_ffff
+    /// to mstatus using csrrw, expect 0x0000_1888
+    #[test]
+    fn check_mstatus_write_read() -> Result<(), &'static str> {
+        let mut platform = Platform::new();
+        write_instr(&mut platform, 0, csrrw!(x3, x2, 0x300));
+        write_instr(&mut platform, 4, csrrw!(x5, x2, 0x300));
+        platform.set_x(2, 0xffff_ffff);
+
+        // Initially, mstatus is 0x0000_1800
+        platform.step_clock();
+        let x3 = platform.x(3);
+        assert_eq!(x3, 0x0000_1800);
+
+        // Read new mstatus after writing 0xffff_ffff
+        platform.step_clock();
+        let x5 = platform.x(5);
+        assert_eq!(x5, 0x0000_1888);
+
+        assert_eq!(platform.pc(), 8);
+        Ok(())
+    }
+
     #[test]
     fn check_lui() -> Result<(), &'static str> {
         // Check a basic case of lui (result should be placed in
