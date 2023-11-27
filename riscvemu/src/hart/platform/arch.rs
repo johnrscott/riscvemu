@@ -14,7 +14,7 @@ use super::{
         execute_div, execute_divu, execute_mul, execute_mulh, execute_mulhsu,
         execute_mulhu, execute_rem, execute_remu,
     },
-    rv32zicsr::execute_csrrw,
+    rv32zicsr::{execute_csrrs, execute_csrrw},
     ExecuteInstr,
 };
 use crate::{
@@ -22,16 +22,16 @@ use crate::{
     opcodes::{
         FUNCT3_ADD, FUNCT3_ADDI, FUNCT3_AND, FUNCT3_ANDI, FUNCT3_B, FUNCT3_BEQ,
         FUNCT3_BGE, FUNCT3_BGEU, FUNCT3_BLT, FUNCT3_BLTU, FUNCT3_BNE,
-        FUNCT3_BU, FUNCT3_CSRRW, FUNCT3_DIV, FUNCT3_DIVU, FUNCT3_H, FUNCT3_HU,
-        FUNCT3_JALR, FUNCT3_MUL, FUNCT3_MULH, FUNCT3_MULHSU, FUNCT3_MULHU,
-        FUNCT3_OR, FUNCT3_ORI, FUNCT3_REM, FUNCT3_REMU, FUNCT3_SLL,
-        FUNCT3_SLLI, FUNCT3_SLT, FUNCT3_SLTI, FUNCT3_SLTIU, FUNCT3_SLTU,
-        FUNCT3_SRA, FUNCT3_SRAI, FUNCT3_SRL, FUNCT3_SRLI, FUNCT3_SUB, FUNCT3_W,
-        FUNCT3_XOR, FUNCT3_XORI, FUNCT7_ADD, FUNCT7_AND, FUNCT7_MULDIV,
-        FUNCT7_OR, FUNCT7_SLL, FUNCT7_SLLI, FUNCT7_SLT, FUNCT7_SLTU,
-        FUNCT7_SRA, FUNCT7_SRAI, FUNCT7_SRL, FUNCT7_SRLI, FUNCT7_SUB,
-        FUNCT7_XOR, OP, OP_AUIPC, OP_BRANCH, OP_IMM, OP_JAL, OP_JALR, OP_LOAD,
-        OP_LUI, OP_STORE, OP_SYSTEM,
+        FUNCT3_BU, FUNCT3_CSRRS, FUNCT3_CSRRW, FUNCT3_DIV, FUNCT3_DIVU,
+        FUNCT3_H, FUNCT3_HU, FUNCT3_JALR, FUNCT3_MUL, FUNCT3_MULH,
+        FUNCT3_MULHSU, FUNCT3_MULHU, FUNCT3_OR, FUNCT3_ORI, FUNCT3_REM,
+        FUNCT3_REMU, FUNCT3_SLL, FUNCT3_SLLI, FUNCT3_SLT, FUNCT3_SLTI,
+        FUNCT3_SLTIU, FUNCT3_SLTU, FUNCT3_SRA, FUNCT3_SRAI, FUNCT3_SRL,
+        FUNCT3_SRLI, FUNCT3_SUB, FUNCT3_W, FUNCT3_XOR, FUNCT3_XORI, FUNCT7_ADD,
+        FUNCT7_AND, FUNCT7_MULDIV, FUNCT7_OR, FUNCT7_SLL, FUNCT7_SLLI,
+        FUNCT7_SLT, FUNCT7_SLTU, FUNCT7_SRA, FUNCT7_SRAI, FUNCT7_SRL,
+        FUNCT7_SRLI, FUNCT7_SUB, FUNCT7_XOR, OP, OP_AUIPC, OP_BRANCH, OP_IMM,
+        OP_JAL, OP_JALR, OP_LOAD, OP_LUI, OP_STORE, OP_SYSTEM,
     },
     utils::mask,
 };
@@ -283,5 +283,6 @@ pub fn make_rv32m<E: Eei>(
 pub fn make_rv32zicsr<E: Eei>(
     decoder: &mut Decoder<ExecuteInstr<E>>,
 ) -> Result<(), DecoderError> {
-    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRW, execute_csrrw)
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRW, execute_csrrw)?;
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRS, execute_csrrs)
 }
