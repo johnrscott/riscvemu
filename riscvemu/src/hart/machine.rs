@@ -14,7 +14,7 @@ use crate::utils::mask;
 /// so writes will be masked before writing to mcause.
 pub const MCAUSE_MASK: u32 = 0x8000_08ff;
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Exception {
     InstructionAddressMisaligned,
     InstructionAccessFault,
