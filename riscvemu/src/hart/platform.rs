@@ -311,6 +311,7 @@ mod tests {
 
     use super::*;
     use crate::encode::*;
+    use crate::hart::csr::{CSR_MSTATUS, CSR_MARCHID, CSR_MSCRATCH};
     use crate::hart::machine::{Trap, MSTATUS_MIE};
 
     /// Simple wrapper to load 4 consecutive bytes
@@ -371,7 +372,7 @@ mod tests {
         // Attempt execution
         platform.step_clock();
 
-        // Expect illegal instruction exception
+        // Expect instruction address misaligned
         assert_eq!(platform.pc(), 0x0000_0008); // exception vector
         let mcause = platform.machine_interface.machine.trap_ctrl.csr_mcause();
         assert_eq!(
@@ -405,8 +406,8 @@ mod tests {
     #[test]
     fn check_mstatus_write_read() -> Result<(), &'static str> {
         let mut platform = Platform::new();
-        write_instr(&mut platform, 0, csrrw!(x3, x2, 0x300));
-        write_instr(&mut platform, 4, csrrw!(x5, x2, 0x300));
+        write_instr(&mut platform, 0, csrrw!(x3, x2, CSR_MSTATUS));
+        write_instr(&mut platform, 4, csrrw!(x5, x2, CSR_MSTATUS));
         platform.set_x(2, 0xffff_ffff);
 
         // Initially, mstatus is 0x0000_1800
@@ -423,6 +424,64 @@ mod tests {
         Ok(())
     }
 
+    /// Expect mstatus to be 0x0000_1800 initially, write 0xffff_ffff
+    /// to mstatus using csrrw, expect 0x0000_1888
+    #[test]
+    fn check_csrrw() -> Result<(), &'static str> {
+
+        let mut platform = Platform::new();
+        write_instr(&mut platform, 0, csrrw!(x1, x2, CSR_MSCRATCH));
+        write_instr(&mut platform, 4, csrrw!(x7, x2, CSR_MSCRATCH));
+        platform.set_x(2, 0xabcd_1234);
+
+        // Initially, mstatus is 0x0000_0000
+        platform.step_clock();
+        let x1 = platform.x(1);
+        assert_eq!(x1, 0x0000_0000);
+	
+        // Read new mstatus after writing 0xabcd_1234
+        platform.step_clock();
+        let x7 = platform.x(7);
+        assert_eq!(x7, 0xabcd_1234);
+
+        assert_eq!(platform.pc(), 8);
+        Ok(())
+    }
+
+    
+    #[test]
+    fn check_non_existent_csr_illegal_instruction() -> Result<(), &'static str> {
+        let mut platform = Platform::new();
+        write_instr(&mut platform, 0, csrrw!(x3, x2, 0x3a0)); // pmpcfg0  
+        platform.step_clock();
+	
+        // Expect illegal instruction exception
+        assert_eq!(platform.pc(), 0x0000_0008); // exception vector
+        let mcause = platform.machine_interface.machine.trap_ctrl.csr_mcause();
+        assert_eq!(
+            mcause,
+            Trap::Exception(Exception::IllegalInstruction).mcause()
+        );
+	Ok(())
+    }
+
+    #[test]
+    fn check_read_only_csr_illegal_instruction() -> Result<(), &'static str> {
+        let mut platform = Platform::new();
+        write_instr(&mut platform, 0, csrrw!(x3, x2, CSR_MARCHID));
+        platform.step_clock();
+	
+        // Expect illegal instruction exception
+        assert_eq!(platform.pc(), 0x0000_0008); // exception vector
+        let mcause = platform.machine_interface.machine.trap_ctrl.csr_mcause();
+        assert_eq!(
+            mcause,
+            Trap::Exception(Exception::IllegalInstruction).mcause()
+        );
+	Ok(())
+    }
+
+    
     #[test]
     fn check_lui() -> Result<(), &'static str> {
         // Check a basic case of lui (result should be placed in
