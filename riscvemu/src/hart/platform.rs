@@ -540,8 +540,9 @@ mod tests {
     fn check_lh() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, lh!(x1, x2, 16));
-        platform.set_x(2, 5);
-        platform.store(21, 0xff92, Wordsize::Halfword).unwrap();
+        platform.set_x(2, 0x0002_0000);
+        let addr = 0x0002_0010; // Ensure in main memory
+        platform.store(addr, 0xff92, Wordsize::Halfword).unwrap();
         platform.step_clock();
         assert_eq!(platform.pc, 4);
         assert_eq!(platform.x(1), 0xffff_ff92);
@@ -552,8 +553,9 @@ mod tests {
     fn check_lhu() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, lhu!(x1, x2, 16));
-        platform.set_x(2, 5);
-        platform.store(21, 0xff92, Wordsize::Halfword).unwrap();
+        platform.set_x(2, 0x0002_0000);
+        let addr = 0x0002_0010; // Ensure in main memory
+        platform.store(addr, 0xff92, Wordsize::Halfword).unwrap();
         platform.step_clock();
         assert_eq!(platform.pc, 4);
         assert_eq!(platform.x(1), 0x0000_ff92);
@@ -564,8 +566,9 @@ mod tests {
     fn check_lw() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, lw!(x1, x2, 16));
-        platform.set_x(2, 6);
-        platform.store(22, 0x1234_ff92, Wordsize::Word).unwrap();
+        platform.set_x(2, 0x0002_0000);
+        let addr = 0x0002_0010; // Ensure in main memory
+        platform.store(addr, 0x1234_ff92, Wordsize::Word).unwrap();
         platform.step_clock();
         assert_eq!(platform.pc, 4);
         assert_eq!(platform.x(1), 0x1234_ff92);
@@ -577,10 +580,11 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, sb!(x1, x2, 16));
         platform.set_x(1, 0xfe);
-        platform.set_x(2, 6);
+        platform.set_x(2, 0x0002_0000);
         platform.step_clock();
         assert_eq!(platform.pc, 4);
-        assert_eq!(platform.load(22, Wordsize::Byte).unwrap(), 0xfe);
+        let addr = 0x0002_0010; // Ensure in main memory
+        assert_eq!(platform.load(addr, Wordsize::Byte).unwrap(), 0xfe);
         Ok(())
     }
 
@@ -589,22 +593,24 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, sh!(x1, x2, 16));
         platform.set_x(1, 0xabfe);
-        platform.set_x(2, 7);
+        platform.set_x(2, 0x0002_0000);
         platform.step_clock();
         assert_eq!(platform.pc, 4);
-        assert_eq!(platform.load(23, Wordsize::Halfword).unwrap(), 0xabfe);
+        let addr = 0x0002_0010; // Ensure in main memory
+        assert_eq!(platform.load(addr, Wordsize::Halfword).unwrap(), 0xabfe);
         Ok(())
     }
 
     #[test]
     fn check_sw() -> Result<(), &'static str> {
         let mut platform = Platform::new();
-        write_instr(&mut platform, 0, sw!(x1, x2, -15));
+        write_instr(&mut platform, 0, sw!(x1, x2, -16));
         platform.set_x(1, 0xabcd_ef12);
-        platform.set_x(2, 20);
+        platform.set_x(2, 0x0002_0010);
         platform.step_clock();
         assert_eq!(platform.pc, 4);
-        assert_eq!(platform.load(5, Wordsize::Word).unwrap(), 0xabcd_ef12);
+        let addr = 0x0002_0000; // Ensure in main memory
+        assert_eq!(platform.load(addr, Wordsize::Word).unwrap(), 0xabcd_ef12);
         Ok(())
     }
 
@@ -702,9 +708,7 @@ mod tests {
 
         // Swap src1 and src2
         let mut platform = Platform::new();
-        platform
-            .memory
-            .write(0, sltiu!(x1, x2, 124).into(), Wordsize::Word);
+        write_instr(&mut platform, 0, sltiu!(x1, x2, 124));
         platform.set_x(2, 22);
         platform.step_clock();
         let x1 = platform.x(1);
