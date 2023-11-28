@@ -313,7 +313,7 @@ rtype_instr!(sraw, 0b0100000, 0b101, OP_32);
 
 itype_instr!(csrrw, FUNCT3_CSRRW, OP_SYSTEM);
 itype_instr!(csrrs, FUNCT3_CSRRS, OP_SYSTEM);
-// csrrc
+itype_instr!(csrrc, FUNCT3_CSRRC, OP_SYSTEM);
 // csrrwi
 // csrrsi
 // csrrci

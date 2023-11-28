@@ -476,6 +476,37 @@ mod tests {
     }
 
     #[test]
+    fn check_csrrc() -> Result<(), &'static str> {
+        for n in 0..32 {
+            let mut platform = Platform::new();
+
+            // Set the mscratch register to an arbitrary value
+            platform
+                .machine_interface
+                .write_csr(CSR_MSCRATCH, 0xabcd_0123)
+                .expect("write should succeed");
+
+            write_instr(&mut platform, 0, csrrc!(x1, x2, CSR_MSCRATCH));
+            write_instr(&mut platform, 4, csrrc!(x7, x2, CSR_MSCRATCH));
+            platform.set_x(2, 1 << n);
+
+            // Initially, mstatus is 0x0000_0000
+            platform.step_clock();
+            let x1 = platform.x(1);
+            assert_eq!(x1, 0xabcd_0123);
+
+            // Read new mstatus after writing 0xabcd_1234
+            platform.step_clock();
+            let x7 = platform.x(7);
+            assert_eq!(x7, 0xabcd_0123 & !(1 << n));
+
+            assert_eq!(platform.pc(), 8);
+        }
+        Ok(())
+    }
+
+    
+    #[test]
     fn check_non_existent_csr_illegal_instruction() -> Result<(), &'static str>
     {
         let mut platform = Platform::new();
