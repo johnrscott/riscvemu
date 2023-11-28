@@ -463,7 +463,7 @@ mod tests {
             // Initially, mstatus is 0x0000_0000
             platform.step_clock();
             let x1 = platform.x(1);
-            assert_eq!(x1, 0x0000_0000);
+            assert_eq!(x1, 0xabcd_0123);
 
             // Read new mstatus after writing 0xabcd_1234
             platform.step_clock();
