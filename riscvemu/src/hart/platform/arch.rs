@@ -14,7 +14,7 @@ use super::{
         execute_div, execute_divu, execute_mul, execute_mulh, execute_mulhsu,
         execute_mulhu, execute_rem, execute_remu,
     },
-    rv32zicsr::{execute_csrrs, execute_csrrw, execute_csrrc},
+    rv32zicsr::{execute_csrrs, execute_csrrw, execute_csrrc, execute_csrrwi, execute_csrrsi, execute_csrrci},
     ExecuteInstr,
 };
 use crate::{
@@ -31,7 +31,7 @@ use crate::{
         FUNCT7_AND, FUNCT7_MULDIV, FUNCT7_OR, FUNCT7_SLL, FUNCT7_SLLI,
         FUNCT7_SLT, FUNCT7_SLTU, FUNCT7_SRA, FUNCT7_SRAI, FUNCT7_SRL,
         FUNCT7_SRLI, FUNCT7_SUB, FUNCT7_XOR, OP, OP_AUIPC, OP_BRANCH, OP_IMM,
-        OP_JAL, OP_JALR, OP_LOAD, OP_LUI, OP_STORE, OP_SYSTEM, FUNCT3_CSRRC,
+        OP_JAL, OP_JALR, OP_LOAD, OP_LUI, OP_STORE, OP_SYSTEM, FUNCT3_CSRRC, FUNCT3_CSRRWI, FUNCT3_CSRRSI, FUNCT3_CSRRCI,
     },
     utils::mask,
 };
@@ -285,5 +285,8 @@ pub fn make_rv32zicsr<E: Eei>(
 ) -> Result<(), DecoderError> {
     opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRW, execute_csrrw)?;
     opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRS, execute_csrrs)?;
-    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRC, execute_csrrc)
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRC, execute_csrrc)?;
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRWI, execute_csrrwi)?;
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRSI, execute_csrrsi)?;
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRCI, execute_csrrci)
 }

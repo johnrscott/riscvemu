@@ -460,12 +460,10 @@ mod tests {
             write_instr(&mut platform, 4, csrrs!(x7, x2, CSR_MSCRATCH));
             platform.set_x(2, 1 << n);
 
-            // Initially, mstatus is 0x0000_0000
             platform.step_clock();
             let x1 = platform.x(1);
             assert_eq!(x1, 0xabcd_0123);
 
-            // Read new mstatus after writing 0xabcd_1234
             platform.step_clock();
             let x7 = platform.x(7);
             assert_eq!(x7, 0xabcd_0123 | (1 << n));
@@ -490,12 +488,10 @@ mod tests {
             write_instr(&mut platform, 4, csrrc!(x7, x2, CSR_MSCRATCH));
             platform.set_x(2, 1 << n);
 
-            // Initially, mstatus is 0x0000_0000
             platform.step_clock();
             let x1 = platform.x(1);
             assert_eq!(x1, 0xabcd_0123);
 
-            // Read new mstatus after writing 0xabcd_1234
             platform.step_clock();
             let x7 = platform.x(7);
             assert_eq!(x7, 0xabcd_0123 & !(1 << n));
@@ -505,6 +501,80 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn check_csrrwi() -> Result<(), &'static str> {
+        let mut platform = Platform::new();
+        write_instr(&mut platform, 0, csrrwi!(x1, 0x14, CSR_MSCRATCH));
+        write_instr(&mut platform, 4, csrrwi!(x7, 0x14, CSR_MSCRATCH));
+
+        // Initially, mstatus is 0x0000_0000
+        platform.step_clock();
+        let x1 = platform.x(1);
+        assert_eq!(x1, 0x0000_0000);
+
+        // Read new mstatus after writing 0xabcd_1234
+        platform.step_clock();
+        let x7 = platform.x(7);
+        assert_eq!(x7, 0x14);
+
+        assert_eq!(platform.pc(), 8);
+        Ok(())
+    }
+
+    #[test]
+    fn check_csrrsi() -> Result<(), &'static str> {
+        for n in 0..32 {
+            let mut platform = Platform::new();
+
+            // Set the mscratch register to an arbitrary value
+            platform
+                .machine_interface
+                .write_csr(CSR_MSCRATCH, 0xabcd_0123)
+                .expect("write should succeed");
+
+            write_instr(&mut platform, 0, csrrsi!(x1, n, CSR_MSCRATCH));
+            write_instr(&mut platform, 4, csrrsi!(x7, n, CSR_MSCRATCH));
+
+            platform.step_clock();
+            let x1 = platform.x(1);
+            assert_eq!(x1, 0xabcd_0123);
+
+            platform.step_clock();
+            let x7 = platform.x(7);
+            assert_eq!(x7, 0xabcd_0123 | n);
+
+            assert_eq!(platform.pc(), 8);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn check_csrrci() -> Result<(), &'static str> {
+        for n in 0..32 {
+            let mut platform = Platform::new();
+
+            // Set the mscratch register to an arbitrary value
+            platform
+                .machine_interface
+                .write_csr(CSR_MSCRATCH, 0xabcd_0123)
+                .expect("write should succeed");
+
+            write_instr(&mut platform, 0, csrrci!(x1, n, CSR_MSCRATCH));
+            write_instr(&mut platform, 4, csrrci!(x7, n, CSR_MSCRATCH));
+            platform.set_x(2, 1 << n);
+
+            platform.step_clock();
+            let x1 = platform.x(1);
+            assert_eq!(x1, 0xabcd_0123);
+
+            platform.step_clock();
+            let x7 = platform.x(7);
+            assert_eq!(x7, 0xabcd_0123 & !n);
+
+            assert_eq!(platform.pc(), 8);
+        }
+        Ok(())
+    }
     
     #[test]
     fn check_non_existent_csr_illegal_instruction() -> Result<(), &'static str>

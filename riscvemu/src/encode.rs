@@ -97,6 +97,22 @@ macro_rules! itype_instr {
     };
 }
 
+/// Special variant of the itype instruction where rs1 is
+/// replaced by a 5-bit immediate; used for csr*i instructions.
+macro_rules! csritype_instr {
+    ($instruction:ident, $funct3:expr, $opcode:expr) => {
+        #[macro_export]
+        macro_rules! $instruction {
+            ($rd:ident, $source:expr, $imm:expr) => {{
+                let rd = reg_num!($rd);
+                let imm = imm_as_u32!($imm);
+                itype!(imm, $source, $funct3, rd, $opcode)
+            }};
+        }
+        pub use $instruction;
+    };
+}
+
 /// Here, upper is the only special value, which is always zero
 /// apart from in srai, where it is 0b0100000.
 macro_rules! shift_instr {
@@ -314,9 +330,9 @@ rtype_instr!(sraw, 0b0100000, 0b101, OP_32);
 itype_instr!(csrrw, FUNCT3_CSRRW, OP_SYSTEM);
 itype_instr!(csrrs, FUNCT3_CSRRS, OP_SYSTEM);
 itype_instr!(csrrc, FUNCT3_CSRRC, OP_SYSTEM);
-// csrrwi
-// csrrsi
-// csrrci
+csritype_instr!(csrrwi, FUNCT3_CSRRWI, OP_SYSTEM);
+csritype_instr!(csrrsi, FUNCT3_CSRRSI, OP_SYSTEM);
+csritype_instr!(csrrci, FUNCT3_CSRRCI, OP_SYSTEM);
 
 // === RV32M and RV64M ===
 
