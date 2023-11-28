@@ -108,7 +108,7 @@ impl Platform {
     /// Print the program counter along with the memory region and any
     /// other information (like trap type)
     pub fn pretty_print_pc(&self) {
-        print!("pc=0x{}", self.pc);
+        print!("pc=0x{:x}", self.pc);
         match self.pc {
             RESET_VECTOR => println!(" (reset vector)"),
             NMI_VECTOR => println!(" (NMI vector)"),
@@ -166,6 +166,8 @@ impl Platform {
 	if self.trace {
 	    self.pretty_print_pc();
 	}
+
+	println!("Registers: {:x?}", self.registers);
 	
         // Check for pending interrupts. If an interrupt is pending,
         // set the pc to the interrupt handler vector and return.
@@ -186,7 +188,12 @@ impl Platform {
         let instr = match self.fetch_instruction() {
             Ok(instr) => instr,
             Err(ex) => {
-                // On exception during exception fetch, raise it and return
+
+		if self.trace {
+		    println!("Got exception {ex:?} while fetching instruction");
+		}
+
+		// On exception during exception fetch, raise it and return
                 self.pc = self
                     .machine_interface
                     .machine
@@ -196,11 +203,20 @@ impl Platform {
             }
         };
 
+        if self.trace {
+            println!("Fetched instruction 0x{instr:x}");
+        }
+	
         // Decode the instruction
         let executer = match self.decoder.get_exec(instr) {
             Ok(executer) => executer,
-            Err(_) => {
-                // If instruction is not decoded successfully, return
+            Err(ex) => {
+
+		if self.trace {
+		    println!("Got exception {ex:?} while decoding instruction");
+		}
+
+		// If instruction is not decoded successfully, return
                 // illegal instruction
                 self.pc = self
                     .machine_interface
@@ -213,7 +229,12 @@ impl Platform {
 
         // Execute the instruction
         if let Err(ex) = executer(self, instr) {
-            // If an exception occurred, raise it and return
+
+	    if self.trace {
+		println!("Got exception {ex:?} while executing instruction");
+	    }
+
+	    // If an exception occurred, raise it and return
             self.pc = self
                 .machine_interface
                 .machine
