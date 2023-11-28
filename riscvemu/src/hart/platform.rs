@@ -29,6 +29,9 @@
 use crate::{
     decode::Decoder,
     elf_utils::{ElfLoadError, ElfLoadable},
+    hart::pma::{
+        EXCEPTION_VECTOR, MACHINE_SOFTWARE_INT_VECTOR, NMI_VECTOR, RESET_VECTOR, MACHINE_TIMER_INT_VECTOR, MACHINE_EXTERNAL_INT_VECTOR,
+    },
     utils::mask,
 };
 
@@ -65,6 +68,7 @@ pub struct Platform {
     machine_interface: MachineInterface,
     decoder: Decoder<ExecuteInstr<Platform>>,
     pc: u32,
+    trace: bool,
 }
 
 impl ElfLoadable for Platform {
@@ -97,6 +101,31 @@ impl Platform {
         }
     }
 
+    pub fn set_trace(&mut self, trace: bool) {
+        self.trace = trace;
+    }
+
+    /// Print the program counter along with the memory region and any
+    /// other information (like trap type)
+    pub fn pretty_print_pc(&self) {
+        print!("pc=0x{}", self.pc);
+        match self.pc {
+            RESET_VECTOR => println!(" (reset vector)"),
+            NMI_VECTOR => println!(" (NMI vector)"),
+            EXCEPTION_VECTOR => println!(" (exception vector)"),
+            MACHINE_SOFTWARE_INT_VECTOR => {
+                println!(" (machine software interrupt vector)")
+            }
+            MACHINE_TIMER_INT_VECTOR => {
+                println!(" (machine timer interrupt vector)")
+            }
+            MACHINE_EXTERNAL_INT_VECTOR => {
+                println!(" (machine external interrupt vector)")
+            }
+	    _ => {println!()}
+        }
+    }
+    
     /// Reset the state of the platform. Reset is described in
     /// the privileged spec section 3.4. For this platform:
     ///
@@ -121,10 +150,23 @@ impl Platform {
     /// * increment minstret (i.e. only if instruction was completed)
     ///
     pub fn step_clock(&mut self) {
+        if self.trace {
+	    println!("Begin clock step ---");
+            println!(
+                "mcycle={}, mtime={}",
+                self.machine_interface.machine.mcycle(),
+                self.machine_interface.machine.mtime()
+            )
+        }
+
         // Increment machine counters
         self.machine_interface.machine.increment_mcycle();
         self.machine_interface.machine.trap_ctrl.increment_mtime();
 
+	if self.trace {
+	    self.pretty_print_pc();
+	}
+	
         // Check for pending interrupts. If an interrupt is pending,
         // set the pc to the interrupt handler vector and return.
         if let Some(interrupt_pc) = self
@@ -133,6 +175,9 @@ impl Platform {
             .trap_ctrl
             .trap_interrupt(self.pc)
         {
+            if self.trace {
+                println!("Got interrupt: setting pc=0x{interrupt_pc:x}",)
+            }
             self.pc = interrupt_pc;
             return;
         }
@@ -575,7 +620,7 @@ mod tests {
         }
         Ok(())
     }
-    
+
     #[test]
     fn check_non_existent_csr_illegal_instruction() -> Result<(), &'static str>
     {

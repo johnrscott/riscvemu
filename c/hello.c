@@ -17,8 +17,8 @@ void putchar(char ch) {
     // compiler bug:
     // https://stackoverflow.com/questions/71383351/
     // how-to-avoid-wrong-array-bounds-warning-on-a-pointer-in-g12
-    static volatile char *dev = (char*)0x3f8;
-    *dev = ch;
+    static volatile int *dev = (int*)0x00010018;
+    *dev = (int)ch;
 }
 
 /**

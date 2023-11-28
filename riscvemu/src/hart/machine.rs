@@ -503,6 +503,14 @@ impl Default for Machine {
 }
 
 impl Machine {
+    pub fn mcycle(&self) -> u64 {
+        self.mcycle
+    }
+
+    pub fn mtime(&self) -> u64 {
+        self.trap_ctrl.timer_interrupt.mtime
+    }
+
     pub fn increment_mcycle(&mut self) {
         self.mcycle += 1;
     }

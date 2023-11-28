@@ -130,6 +130,13 @@
 
 use super::machine::Exception;
 
+pub const RESET_VECTOR: u32 = 0x0000_0000;
+pub const NMI_VECTOR: u32 = 0x0000_0004;
+pub const EXCEPTION_VECTOR: u32 = 0x0000_0008;
+pub const MACHINE_SOFTWARE_INT_VECTOR: u32 = 0x0000_0014;
+pub const MACHINE_TIMER_INT_VECTOR: u32 = 0x0000_0024;
+pub const MACHINE_EXTERNAL_INT_VECTOR: u32 = 0x0000_0034;
+
 pub const MTIME_ADDR: u32 = 0x0001_0000;
 pub const MTIMEH_ADDR: u32 = 0x0001_0004;
 pub const MTIMECMP_ADDR: u32 = 0x0001_0008;

@@ -184,16 +184,3 @@ fn ui(frame: &mut Frame, hart: &mut Hart, hart_stdout: &mut String) {
 	inner_layout[1],
     );
 }
-
-/*
-fn press_enter_to_continue() {
-    let mut stdin = io::stdin();
-    let mut stdout = io::stdout();
-
-    write!(stdout, "Press enter to continue...").unwrap();
-    stdout.flush().unwrap();
-
-    // Read a single byte and discard
-    let _ = stdin.read(&mut [0u8]).unwrap();
-}
-*/
