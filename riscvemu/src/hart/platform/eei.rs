@@ -82,4 +82,7 @@ pub trait Eei {
     /// illegal instruction is also returned if an invalid write is
     /// attempted to a WRLR (write-legal read-legal) field.
     fn write_csr(&mut self, addr: u16, value: u32) -> Result<(), Exception>;
+
+    /// Return from trap
+    fn mret(&mut self);
 }

@@ -13,4 +13,3 @@ enable_machine_timer_interrupt:
 	li t0, MIE_MTIE
 	csrrs x0, CSR_MIE, t0
 	ret
-	

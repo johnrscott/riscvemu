@@ -18,9 +18,8 @@ void _software_isr() {
 	;  
 }
 void _timer_isr() {
-    printf("timer");
-    while (1)
-	;
+    //printf("timer");
+    asm("mret");
 }
 
 void _external_isr() {

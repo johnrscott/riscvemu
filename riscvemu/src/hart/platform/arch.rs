@@ -1,4 +1,4 @@
-use super::{eei::Eei, rv32i::*, rv32m::*, rv32zicsr::*, Instr};
+use super::{eei::Eei, rv32i::*, rv32m::*, rv32zicsr::*, rv32priv::*, Instr};
 use crate::{
     decode::{Decoder, DecoderError, MaskWithValue},
     opcodes::{
@@ -14,7 +14,7 @@ use crate::{
         FUNCT7_MULDIV, FUNCT7_OR, FUNCT7_SLL, FUNCT7_SLLI, FUNCT7_SLT,
         FUNCT7_SLTU, FUNCT7_SRA, FUNCT7_SRAI, FUNCT7_SRL, FUNCT7_SRLI,
         FUNCT7_SUB, FUNCT7_XOR, OP, OP_AUIPC, OP_BRANCH, OP_IMM, OP_JAL,
-        OP_JALR, OP_LOAD, OP_LUI, OP_STORE, OP_SYSTEM,
+        OP_JALR, OP_LOAD, OP_LUI, OP_STORE, OP_SYSTEM, FUNCT12_MRET, FUNCT3_PRIV,
     },
     utils::mask,
 };
@@ -67,6 +67,31 @@ pub fn opcode_funct3_funct7_determined<E: Eei>(
         MaskWithValue {
             mask: (mask(7)) << 25,
             value: funct7 << 25,
+        },
+        MaskWithValue {
+            mask: (mask(3)) << 12,
+            value: funct3 << 12,
+        },
+        MaskWithValue {
+            mask: mask(7),
+            value: opcode,
+        },
+    ];
+    decoder.push_instruction(masks_with_values, instr)
+}
+
+/// This covers privileged instructions (mret/sret/wfi)
+pub fn opcode_funct3_funct12_determined<E: Eei>(
+    decoder: &mut Decoder<Instr<E>>,
+    opcode: u32,
+    funct3: u32,
+    funct12: u32,
+    instr: Instr<E>,
+) -> Result<(), DecoderError> {
+    let masks_with_values = vec![
+        MaskWithValue {
+            mask: (mask(12)) << 20,
+            value: funct12 << 20,
         },
         MaskWithValue {
             mask: (mask(3)) << 12,
@@ -264,4 +289,10 @@ pub fn make_rv32zicsr<E: Eei>(
     opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRWI, csrrwi())?;
     opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRSI, csrrsi())?;
     opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRCI, csrrci())
+}
+
+pub fn make_rv32priv<E: Eei>(
+    decoder: &mut Decoder<Instr<E>>,
+) -> Result<(), DecoderError> {    
+    opcode_funct3_funct12_determined(decoder, OP_SYSTEM, FUNCT3_PRIV, FUNCT12_MRET, mret())
 }

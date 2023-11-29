@@ -43,7 +43,7 @@ use crate::{
 };
 
 use self::{
-    arch::{make_rv32i, make_rv32m, make_rv32zicsr},
+    arch::{make_rv32i, make_rv32m, make_rv32zicsr, make_rv32priv},
     eei::Eei,
 };
 
@@ -64,6 +64,7 @@ pub mod print_macros;
 pub mod rv32i;
 pub mod rv32m;
 pub mod rv32zicsr;
+pub mod rv32priv;
 
 /// Stores a function for executing/printing an instruction
 #[derive(Debug)]
@@ -107,6 +108,7 @@ impl Platform {
         make_rv32i(&mut decoder).expect("adding instructions should work");
         make_rv32m(&mut decoder).expect("adding instructions should work");
         make_rv32zicsr(&mut decoder).expect("adding instructions should work");
+        make_rv32priv(&mut decoder).expect("adding instructions should work");
 
         Self {
             decoder,
@@ -409,6 +411,10 @@ impl Eei for Platform {
             Ok(_) => Ok(()),
             Err(_) => Err(Exception::IllegalInstruction),
         }
+    }
+
+    fn mret(&mut self) {
+	self.machine_interface.machine.trap_ctrl.mret();
     }
 }
 
