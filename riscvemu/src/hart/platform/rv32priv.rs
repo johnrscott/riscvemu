@@ -8,7 +8,7 @@ pub fn mret<E: Eei>() -> Instr<E> {
         Ok(())
     }
 
-    fn printer(instr: u32) -> String {
+    fn printer(_instr: u32) -> String {
 	"mret".to_string()
     }
 

@@ -19,8 +19,8 @@ void _software_isr() {
 	;  
 }
 void _timer_isr() {
-    //printf("timer");
-    set_timeout(50);
+    printf("tick\n");
+    set_timeout(2000000);
     asm("mret");
 }
 

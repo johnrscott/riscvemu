@@ -57,7 +57,7 @@ impl<F> NextStep<F> {
 }
 
 /// Represents a node and subsequent edge in the decoder tree
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MaskWithValue {
     pub mask: u32,
     pub value: u32,
@@ -354,10 +354,10 @@ mod tests {
             mask: 0xf0,
             value: 0x20,
         };
-        let masks_with_values = vec![mv2, mv1];
+        let masks_with_values = vec![mv2, mv1.clone()];
         decoder.push_instruction(masks_with_values, exec1).unwrap();
         let exec = decoder.get_exec(0x21).unwrap();
-        assert!(exec == exec1);
+        assert!(*exec == exec1);
 
         // Now insert a new decoding process that shares a single
         // step
@@ -365,13 +365,13 @@ mod tests {
             mask: 0xf0,
             value: 0x30,
         };
-        let masks_with_values = vec![mv2, mv1];
+        let masks_with_values = vec![mv2, mv1.clone()];
         decoder.push_instruction(masks_with_values, exec2).unwrap();
         let exec = decoder.get_exec(0x31).unwrap();
-        assert!(exec == exec2);
+        assert!(*exec == exec2);
         // Check previous decoding still works
         let exec = decoder.get_exec(0x21).unwrap();
-        assert!(exec == exec1);
+        assert!(*exec == exec1);
 
         // Now insert a longer decoding process
         let mv2 = MaskWithValue {
@@ -385,11 +385,11 @@ mod tests {
         let masks_with_values = vec![mv3, mv2, mv1];
         decoder.push_instruction(masks_with_values, exec3).unwrap();
         let exec = decoder.get_exec(0x541).unwrap();
-        assert!(exec == exec3);
+        assert!(*exec == exec3);
         // Check previous decoding still works
         let exec = decoder.get_exec(0x531).unwrap();
-        assert!(exec == exec2);
+        assert!(*exec == exec2);
         let exec = decoder.get_exec(0x521).unwrap();
-        assert!(exec == exec1);
+        assert!(*exec == exec1);
     }
 }

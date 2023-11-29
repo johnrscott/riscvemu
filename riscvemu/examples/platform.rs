@@ -1,6 +1,8 @@
 use riscvemu::{elf_utils::load_elf, hart::platform::Platform};
-use std::io;
+use std::sync::mpsc;
+use std::{io, thread};
 use std::io::{Read, Write};
+
 
 fn press_enter_to_continue() {
     let mut stdin = io::stdin();
@@ -14,17 +16,40 @@ fn press_enter_to_continue() {
 }
 
 fn main() {
-    let mut platform = Platform::new();
-    platform.set_trace(true);
 
-    // Open an executable file
-    let elf_name = "../c/hello.out".to_string();
-    load_elf(&mut platform, &elf_name);
+    let (tx, rx) = mpsc::channel();
 
-    println!("Beginning execution\n");
-    for _ in 0..3000 {
-        platform.step_clock();
-        press_enter_to_continue();
-    }
-    println!("{}", platform.flush_uartout());
+    // Thread running the emulation
+    let ucontroller_handle = thread::spawn(move || {
+
+	let mut platform = Platform::new();
+	//platform.set_trace(true);
+
+	// Open an executable file
+	let elf_name = "../c/hello.out".to_string();
+	load_elf(&mut platform, &elf_name);
+
+	println!("Beginning execution\n");
+	loop {
+            platform.step_clock();
+            //press_enter_to_continue();
+	    tx.send(platform.flush_uartout()).unwrap();
+	}
+    });
+
+    // Thread for printing received UART stdout
+    let uart_host_handle = thread::spawn(move||{
+	loop {
+	    if let Ok(uart_rx) = rx.recv() {
+		print!("{uart_rx}");
+	    } else {
+		println!("UART channel closed");
+		break;
+	    }
+	}
+    });
+
+    uart_host_handle.join().unwrap();
+    ucontroller_handle.join().unwrap();
 }
+    
