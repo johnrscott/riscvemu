@@ -1,4 +1,5 @@
 #include "printf.h"
+#include "interrupts.h" 
 
 void _nmi_handler() {
     printf("nmi");
@@ -19,6 +20,7 @@ void _software_isr() {
 }
 void _timer_isr() {
     //printf("timer");
+    set_timeout(50);
     asm("mret");
 }
 

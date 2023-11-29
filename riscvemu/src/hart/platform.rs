@@ -414,7 +414,7 @@ impl Eei for Platform {
     }
 
     fn mret(&mut self) {
-	self.machine_interface.machine.trap_ctrl.mret();
+	self.pc = self.machine_interface.machine.trap_ctrl.mret();
     }
 }
 

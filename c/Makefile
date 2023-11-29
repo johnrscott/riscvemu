@@ -15,7 +15,7 @@ LDFLAGS=-march=$(ISA) -mabi=ilp32
 # the handlers are placed at low addresses, so that the jumps from the
 # trap vector table are in range.
 hello.out: hello.c trap.c printf.c startup.o interrupts.o linker.ld Makefile
-	$(CC) $(CFLAGS) -T linker.ld -flto -Os -Wall -Wextra -ffreestanding -nostartfiles interrupts.o trap.c printf.c hello.c -o $@
+	$(CC) $(CFLAGS) -T linker.ld -flto -Os -Wall -Wextra -ffreestanding -nostartfiles interrupts.o interrupts.c trap.c printf.c hello.c -o $@
 
 startup.o: startup.S Makefile
 	$(CC) $(CFLAGS) -c $< -o startup.o
