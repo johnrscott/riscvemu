@@ -26,11 +26,18 @@
 //! for this platform must write values to the trap vector table (part
 //! of the EEPROM memory map.
 
+use queues::{IsQueue, Queue};
+
 use crate::{
     decode::Decoder,
     elf_utils::{ElfLoadError, ElfLoadable},
-    hart::pma::{
-        EXCEPTION_VECTOR, MACHINE_SOFTWARE_INT_VECTOR, NMI_VECTOR, RESET_VECTOR, MACHINE_TIMER_INT_VECTOR, MACHINE_EXTERNAL_INT_VECTOR,
+    hart::{
+        csr::{CSR_MIE, CSR_MIP, CSR_MSTATUS},
+        pma::{
+            EXCEPTION_VECTOR, MACHINE_EXTERNAL_INT_VECTOR,
+            MACHINE_SOFTWARE_INT_VECTOR, MACHINE_TIMER_INT_VECTOR, NMI_VECTOR,
+            RESET_VECTOR,
+        },
     },
     utils::mask,
 };
@@ -41,7 +48,7 @@ use self::{
 };
 
 use super::{
-    csr::{CsrError, MachineInterface},
+    csr::MachineInterface,
     machine::Exception,
     memory::{Memory, Wordsize},
     pma::{
@@ -53,12 +60,17 @@ use super::{
 
 pub mod arch;
 pub mod eei;
+pub mod print_macros;
 pub mod rv32i;
 pub mod rv32m;
 pub mod rv32zicsr;
 
-pub type ExecuteInstr<Eei> =
-    fn(eei: &mut Eei, instr: u32) -> Result<(), Exception>;
+/// Stores a function for executing/printing an instruction
+#[derive(Debug)]
+pub struct Instr<E: Eei> {
+    pub executer: fn(eei: &mut E, instr: u32) -> Result<(), Exception>,
+    pub printer: fn(u32) -> String,
+}
 
 #[derive(Debug, Default)]
 pub struct Platform {
@@ -66,9 +78,10 @@ pub struct Platform {
     pma_checker: PmaChecker,
     memory: Memory,
     machine_interface: MachineInterface,
-    decoder: Decoder<ExecuteInstr<Platform>>,
+    decoder: Decoder<Instr<Platform>>,
     pc: u32,
     trace: bool,
+    uart_out: Queue<char>,
 }
 
 impl ElfLoadable for Platform {
@@ -122,10 +135,22 @@ impl Platform {
             MACHINE_EXTERNAL_INT_VECTOR => {
                 println!(" (machine external interrupt vector)")
             }
-	    _ => {println!()}
+            _ => {
+                println!()
+            }
         }
     }
-    
+
+    /// Return the current contents of the uart output buffer and also
+    /// delete the contents of the buffer
+    pub fn flush_uartout(&mut self) -> String {
+        let mut uart_out = String::new();
+        while let Ok(ch) = self.uart_out.remove() {
+            uart_out.push(ch);
+        }
+        uart_out
+    }
+
     /// Reset the state of the platform. Reset is described in
     /// the privileged spec section 3.4. For this platform:
     ///
@@ -151,11 +176,16 @@ impl Platform {
     ///
     pub fn step_clock(&mut self) {
         if self.trace {
-	    println!("Begin clock step ---");
+            println!("\nBegin clock step ---");
             println!(
-                "mcycle={}, mtime={}",
+                "mcycle={}, mtime={}, mtimecmp={}, mstatus={:x}, mie={:x}, mip={:x}", 
                 self.machine_interface.machine.mcycle(),
-                self.machine_interface.machine.mtime()
+                self.machine_interface.machine.mtime(),
+                self.machine_interface.machine.trap_ctrl.mtimecmp(),
+		self.machine_interface.read_csr(CSR_MSTATUS).unwrap(),
+		self.machine_interface.read_csr(CSR_MIE).unwrap(),
+		self.machine_interface.read_csr(CSR_MIP).unwrap()
+
             )
         }
 
@@ -163,12 +193,14 @@ impl Platform {
         self.machine_interface.machine.increment_mcycle();
         self.machine_interface.machine.trap_ctrl.increment_mtime();
 
-	if self.trace {
-	    self.pretty_print_pc();
-	}
+        if self.trace {
+            self.pretty_print_pc();
+        }
 
-	println!("Registers: {:x?}", self.registers);
-	
+        if self.trace {
+            println!("Registers: {:x?}", self.registers);
+        }
+
         // Check for pending interrupts. If an interrupt is pending,
         // set the pc to the interrupt handler vector and return.
         if let Some(interrupt_pc) = self
@@ -188,12 +220,11 @@ impl Platform {
         let instr = match self.fetch_instruction() {
             Ok(instr) => instr,
             Err(ex) => {
+                if self.trace {
+                    println!("Got exception {ex:?} while fetching instruction");
+                }
 
-		if self.trace {
-		    println!("Got exception {ex:?} while fetching instruction");
-		}
-
-		// On exception during exception fetch, raise it and return
+                // On exception during exception fetch, raise it and return
                 self.pc = self
                     .machine_interface
                     .machine
@@ -206,17 +237,19 @@ impl Platform {
         if self.trace {
             println!("Fetched instruction 0x{instr:x}");
         }
-	
+
         // Decode the instruction
-        let executer = match self.decoder.get_exec(instr) {
+        let decoded_instr = match self.decoder.get_exec(instr) {
             Ok(executer) => executer,
             Err(ex) => {
+                if self.trace {
+                    println!(
+                        "Got exception {ex:?} while decoding \
+			     instruction 0x{instr:x}"
+                    );
+                }
 
-		if self.trace {
-		    println!("Got exception {ex:?} while decoding instruction");
-		}
-
-		// If instruction is not decoded successfully, return
+                // If instruction is not decoded successfully, return
                 // illegal instruction
                 self.pc = self
                     .machine_interface
@@ -227,14 +260,17 @@ impl Platform {
             }
         };
 
+        if self.trace {
+            println!("Decoded instruction: {}", (decoded_instr.printer)(instr))
+        }
+
         // Execute the instruction
-        if let Err(ex) = executer(self, instr) {
+        if let Err(ex) = (decoded_instr.executer)(self, instr) {
+            if self.trace {
+                println!("Got exception {ex:?} while executing instruction");
+            }
 
-	    if self.trace {
-		println!("Got exception {ex:?} while executing instruction");
-	    }
-
-	    // If an exception occurred, raise it and return
+            // If an exception occurred, raise it and return
             self.pc = self
                 .machine_interface
                 .machine
@@ -346,7 +382,11 @@ impl Eei for Platform {
                 .mmap_write_mtimecmph(data),
             SOFTINTCTRL_ADDR => todo!("implement store softintctrl"),
             EXTINTCTRL_ADDR => todo!("implement store extintctrl"),
-            UARTTX_ADDR => todo!("implement store uarttx"),
+            UARTTX_ADDR => {
+                self.uart_out
+                    .add(u8::try_from(0xff & data).unwrap() as char)
+                    .expect("insert into queue should work");
+            }
             _ => self
                 .memory
                 .write(addr.into(), data.into(), width)

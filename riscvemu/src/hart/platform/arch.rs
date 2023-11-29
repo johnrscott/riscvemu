@@ -1,25 +1,4 @@
-use super::{
-    eei::Eei,
-    rv32i::{
-        execute_add, execute_addi, execute_and, execute_andi, execute_auipc,
-        execute_beq, execute_bge, execute_bgeu, execute_blt, execute_bltu,
-        execute_bne, execute_jal, execute_jalr, execute_lb, execute_lbu,
-        execute_lh, execute_lhu, execute_lui, execute_lw, execute_or,
-        execute_ori, execute_sb, execute_sh, execute_sll, execute_slli,
-        execute_slt, execute_slti, execute_sltiu, execute_sltu, execute_sra,
-        execute_srai, execute_srl, execute_srli, execute_sub, execute_sw,
-        execute_xor, execute_xori,
-    },
-    rv32m::{
-        execute_div, execute_divu, execute_mul, execute_mulh, execute_mulhsu,
-        execute_mulhu, execute_rem, execute_remu,
-    },
-    rv32zicsr::{
-        execute_csrrc, execute_csrrci, execute_csrrs, execute_csrrsi,
-        execute_csrrw, execute_csrrwi,
-    },
-    ExecuteInstr,
-};
+use super::{eei::Eei, rv32i::*, rv32m::*, rv32zicsr::*, Instr};
 use crate::{
     decode::{Decoder, DecoderError, MaskWithValue},
     opcodes::{
@@ -44,23 +23,23 @@ use crate::{
 /// a way to separate the decoding of the instruction from the actual
 /// implementation of the execution environment
 pub fn opcode_determined<E: Eei>(
-    decoder: &mut Decoder<ExecuteInstr<E>>,
+    decoder: &mut Decoder<Instr<E>>,
     opcode: u32,
-    exec: ExecuteInstr<E>,
+    instr: Instr<E>,
 ) -> Result<(), DecoderError> {
     let masks_with_values = vec![MaskWithValue {
         mask: mask(7),
         value: opcode,
     }];
-    decoder.push_instruction(masks_with_values, exec)
+    decoder.push_instruction(masks_with_values, instr)
 }
 
 /// See comment for opcode_determined
 pub fn opcode_funct3_determined<E: Eei>(
-    decoder: &mut Decoder<ExecuteInstr<E>>,
+    decoder: &mut Decoder<Instr<E>>,
     opcode: u32,
     funct3: u32,
-    exec: ExecuteInstr<E>,
+    instr: Instr<E>,
 ) -> Result<(), DecoderError> {
     let masks_with_values = vec![
         MaskWithValue {
@@ -72,17 +51,17 @@ pub fn opcode_funct3_determined<E: Eei>(
             value: opcode,
         },
     ];
-    decoder.push_instruction(masks_with_values, exec)
+    decoder.push_instruction(masks_with_values, instr)
 }
 
 /// This also covers the shift instructions which use a special version
 /// if I-type.
 pub fn opcode_funct3_funct7_determined<E: Eei>(
-    decoder: &mut Decoder<ExecuteInstr<E>>,
+    decoder: &mut Decoder<Instr<E>>,
     opcode: u32,
     funct3: u32,
     funct7: u32,
-    exec: ExecuteInstr<E>,
+    instr: Instr<E>,
 ) -> Result<(), DecoderError> {
     let masks_with_values = vec![
         MaskWithValue {
@@ -98,39 +77,39 @@ pub fn opcode_funct3_funct7_determined<E: Eei>(
             value: opcode,
         },
     ];
-    decoder.push_instruction(masks_with_values, exec)
+    decoder.push_instruction(masks_with_values, instr)
 }
 
 pub fn make_rv32i<E: Eei>(
-    decoder: &mut Decoder<ExecuteInstr<E>>,
+    decoder: &mut Decoder<Instr<E>>,
 ) -> Result<(), DecoderError> {
     // Opcode determines instruction
-    opcode_determined(decoder, OP_LUI, execute_lui)?;
-    opcode_determined(decoder, OP_AUIPC, execute_auipc)?;
-    opcode_determined(decoder, OP_JAL, execute_jal)?;
+    opcode_determined(decoder, OP_LUI, lui())?;
+    opcode_determined(decoder, OP_AUIPC, auipc())?;
+    opcode_determined(decoder, OP_JAL, jal())?;
 
     // Opcode and funct3 determines instruction
-    opcode_funct3_determined(decoder, OP_JALR, FUNCT3_JALR, execute_jalr)?;
-    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BEQ, execute_beq)?;
-    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BNE, execute_bne)?;
-    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BLT, execute_blt)?;
-    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BGE, execute_bge)?;
-    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BLTU, execute_bltu)?;
-    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BGEU, execute_bgeu)?;
-    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_B, execute_lb)?;
-    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_H, execute_lh)?;
-    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_W, execute_lw)?;
-    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_BU, execute_lbu)?;
-    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_HU, execute_lhu)?;
-    opcode_funct3_determined(decoder, OP_STORE, FUNCT3_B, execute_sb)?;
-    opcode_funct3_determined(decoder, OP_STORE, FUNCT3_H, execute_sh)?;
-    opcode_funct3_determined(decoder, OP_STORE, FUNCT3_W, execute_sw)?;
-    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ADDI, execute_addi)?;
-    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_SLTI, execute_slti)?;
-    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_SLTIU, execute_sltiu)?;
-    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_XORI, execute_xori)?;
-    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ORI, execute_ori)?;
-    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ANDI, execute_andi)?;
+    opcode_funct3_determined(decoder, OP_JALR, FUNCT3_JALR, jalr())?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BEQ, beq())?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BNE, bne())?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BLT, blt())?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BGE, bge())?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BLTU, bltu())?;
+    opcode_funct3_determined(decoder, OP_BRANCH, FUNCT3_BGEU, bgeu())?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_B, lb())?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_H, lh())?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_W, lw())?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_BU, lbu())?;
+    opcode_funct3_determined(decoder, OP_LOAD, FUNCT3_HU, lhu())?;
+    opcode_funct3_determined(decoder, OP_STORE, FUNCT3_B, sb())?;
+    opcode_funct3_determined(decoder, OP_STORE, FUNCT3_H, sh())?;
+    opcode_funct3_determined(decoder, OP_STORE, FUNCT3_W, sw())?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ADDI, addi())?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_SLTI, slti())?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_SLTIU, sltiu())?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_XORI, xori())?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ORI, ori())?;
+    opcode_funct3_determined(decoder, OP_IMM, FUNCT3_ANDI, andi())?;
 
     // Shift instructions (opcode, funct3, and part of immediate determined)
     opcode_funct3_funct7_determined(
@@ -138,21 +117,21 @@ pub fn make_rv32i<E: Eei>(
         OP_IMM,
         FUNCT3_SLLI,
         FUNCT7_SLLI,
-        execute_slli,
+        slli(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP_IMM,
         FUNCT3_SRLI,
         FUNCT7_SRLI,
-        execute_srli,
+        srli(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP_IMM,
         FUNCT3_SRAI,
         FUNCT7_SRAI,
-        execute_srai,
+        srai(),
     )?;
 
     opcode_funct3_funct7_determined(
@@ -160,147 +139,129 @@ pub fn make_rv32i<E: Eei>(
         OP,
         FUNCT3_ADD,
         FUNCT7_ADD,
-        execute_add,
+        add(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_SUB,
         FUNCT7_SUB,
-        execute_sub,
+        sub(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_SLL,
         FUNCT7_SLL,
-        execute_sll,
+        sll(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_SLT,
         FUNCT7_SLT,
-        execute_slt,
+        slt(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_SLTU,
         FUNCT7_SLTU,
-        execute_sltu,
+        sltu(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_XOR,
         FUNCT7_XOR,
-        execute_xor,
+        xor(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_SRL,
         FUNCT7_SRL,
-        execute_srl,
+        srl(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_SRA,
         FUNCT7_SRA,
-        execute_sra,
+        sra(),
     )?;
-    opcode_funct3_funct7_determined(
-        decoder, OP, FUNCT3_OR, FUNCT7_OR, execute_or,
-    )?;
-    opcode_funct3_funct7_determined(
-        decoder,
-        OP,
-        FUNCT3_AND,
-        FUNCT7_AND,
-        execute_and,
-    )
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_OR, FUNCT7_OR, or())?;
+    opcode_funct3_funct7_determined(decoder, OP, FUNCT3_AND, FUNCT7_AND, and())
 }
 
 pub fn make_rv32m<E: Eei>(
-    decoder: &mut Decoder<ExecuteInstr<E>>,
+    decoder: &mut Decoder<Instr<E>>,
 ) -> Result<(), DecoderError> {
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_MUL,
         FUNCT7_MULDIV,
-        execute_mul,
+        mul(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_MULH,
         FUNCT7_MULDIV,
-        execute_mulh,
+        mulh(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_MULHSU,
         FUNCT7_MULDIV,
-        execute_mulhsu,
+        mulhsu(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_MULHU,
         FUNCT7_MULDIV,
-        execute_mulhu,
+        mulhu(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_DIV,
         FUNCT7_MULDIV,
-        execute_div,
+        div(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_DIVU,
         FUNCT7_MULDIV,
-        execute_divu,
+        divu(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_REM,
         FUNCT7_MULDIV,
-        execute_rem,
+        rem(),
     )?;
     opcode_funct3_funct7_determined(
         decoder,
         OP,
         FUNCT3_REMU,
         FUNCT7_MULDIV,
-        execute_remu,
+        remu(),
     )
 }
 
 pub fn make_rv32zicsr<E: Eei>(
-    decoder: &mut Decoder<ExecuteInstr<E>>,
+    decoder: &mut Decoder<Instr<E>>,
 ) -> Result<(), DecoderError> {
-    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRW, execute_csrrw)?;
-    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRS, execute_csrrs)?;
-    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRC, execute_csrrc)?;
-    opcode_funct3_determined(
-        decoder,
-        OP_SYSTEM,
-        FUNCT3_CSRRWI,
-        execute_csrrwi,
-    )?;
-    opcode_funct3_determined(
-        decoder,
-        OP_SYSTEM,
-        FUNCT3_CSRRSI,
-        execute_csrrsi,
-    )?;
-    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRCI, execute_csrrci)
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRW, csrrw())?;
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRS, csrrs())?;
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRC, csrrc())?;
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRWI, csrrwi())?;
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRSI, csrrsi())?;
+    opcode_funct3_determined(decoder, OP_SYSTEM, FUNCT3_CSRRCI, csrrci())
 }

@@ -22,8 +22,9 @@ fn main() {
     load_elf(&mut platform, &elf_name);
 
     println!("Beginning execution\n");
-    loop {
-	platform.step_clock();
-	press_enter_to_continue();
+    for _ in 0..3000 {
+        platform.step_clock();
+        press_enter_to_continue();
     }
+    println!("{}", platform.flush_uartout());
 }

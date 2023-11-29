@@ -28,7 +28,7 @@ pub enum Exception {
 }
 
 /// All machine-level interrupts
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Interrupt {
     Software,
     Timer,
@@ -390,10 +390,21 @@ impl TrapCtrl {
     ///
     pub fn trap_interrupt(&mut self, pc: u32) -> Option<u32> {
         // Do not modify order
-        self.interrupt_should_trap(Interrupt::External, pc)?;
-        self.interrupt_should_trap(Interrupt::Software, pc)?;
-        self.interrupt_should_trap(Interrupt::Timer, pc)?;
-        None
+        if let Some(new_pc) =
+            self.interrupt_should_trap(Interrupt::External, pc)
+        {
+            Some(new_pc)
+        } else if let Some(new_pc) =
+            self.interrupt_should_trap(Interrupt::Software, pc)
+        {
+            Some(new_pc)
+        } else if let Some(new_pc) =
+            self.interrupt_should_trap(Interrupt::Timer, pc)
+        {
+            Some(new_pc)
+        } else {
+            None
+        }
     }
 
     /// Raise an exception
@@ -432,7 +443,7 @@ impl TrapCtrl {
     }
 
     fn interrupt_enabled(&self, int: Interrupt) -> bool {
-        self.interrupts_globally_enabled()
+	self.interrupts_globally_enabled()
             && match int {
                 Interrupt::External => self.meie,
                 Interrupt::Software => self.msie,
@@ -444,7 +455,7 @@ impl TrapCtrl {
         match int {
             Interrupt::External => self.meip,
             Interrupt::Software => self.msip,
-            Interrupt::Timer => self.timer_interrupt.mtip(),
+            Interrupt::Timer => self.timer_interrupt.mtip()
         }
     }
 

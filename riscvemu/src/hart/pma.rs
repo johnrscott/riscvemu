@@ -27,9 +27,9 @@
 //! ### Read/execute (non-volatile memory)
 //!
 //! This region of memory stores the trap vector table
-//! (0x0000_0000-0x0000_0088) and approximately 8 KiB of instructions
-//! (0x0000_0088-0x0000_2000). The interrupt vector table reserves
-//! space for the full set of 32 interrupts.
+//! (0x0000_0000-0x0000_0088), and approximately 8 KiB of instructions
+//! (0x0000_0088-0x0000_2000) and read-only data. The interrupt vector
+//! table reserves space for the full set of 32 interrupts.
 //!
 //! | Address | Width | Description |
 //! |---------|-------|------------|
@@ -42,11 +42,11 @@
 //!
 //! Supported access types (section 3.6.2 privileged spec): execute
 //! (i.e. instruction fetch) word (four bytes) is supported, and must
-//! be four byte aligned. No other read or write is supported.
+//! be four byte aligned. Load of byte, halfword, and word is supported,
+//! with any alignment.
 //!
 //! These errors can be raised:
 //! * Instruction address misaligned (on non-four-byte-aligned access)
-//! * Load access fault (on attempt to load from this region)
 //! * Store access fault (on attempt to store to this region)
 //!
 //! ### Vacant (between non-volatile memory and I/O memory)
@@ -193,11 +193,14 @@ impl PmaChecker {
         }
     }
 
-    /// You can read from the I/O region or main memory. I/O region
-    /// reads must be four-byte aligned, but main memory reads can have
-    /// any alignment.
+    /// You can read from any region that is not vacant. I/O region
+    /// reads must be four-byte aligned, but main memory reads and
+    /// eeprom reads can have any alignment.
     pub fn check_load(&self, addr: u32, width: u32) -> Result<(), Exception> {
-        if self.in_io(addr, width) {
+        if self.in_eeprom(addr, width) {
+            // Any load from the eeprom region is allowed.
+            Ok(())
+        } else if self.in_io(addr, width) {
             // Load is from I/O region
             if width != 4 {
                 // I/O load must have width 4

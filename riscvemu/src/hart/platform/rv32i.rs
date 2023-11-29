@@ -1,4 +1,6 @@
 use crate::{
+    define_branch_printer, define_load_printer, define_reg_imm_printer,
+    define_reg_reg_printer, define_store_printer,
     fields::sign_extend,
     hart::{machine::Exception, memory::Wordsize},
     instr_type::{
@@ -8,7 +10,7 @@ use crate::{
     interpret_i32_as_unsigned, interpret_u32_as_signed,
 };
 
-use super::eei::Eei;
+use super::{eei::Eei, Instr};
 
 fn check_instruction_address_aligned(pc: u32) -> Result<(), Exception> {
     if pc % 4 != 0 {
@@ -47,14 +49,26 @@ fn jump_relative_to_pc<E: Eei>(
 /// Load the u_immediate into the upper 12 bits of the register
 /// dest and fill the lower 20 bits with zeros. Set pc = pc + 4.
 ///
-pub fn execute_lui<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let UJtype {
-        rd: dest,
-        imm: u_immediate,
-    } = decode_utype(instr);
-    eei.set_x(dest, u_immediate << 12);
-    eei.increment_pc();
-    Ok(())
+pub fn lui<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let UJtype {
+            rd: dest,
+            imm: u_immediate,
+        } = decode_utype(instr);
+        eei.set_x(dest, u_immediate << 12);
+        eei.increment_pc();
+        Ok(())
+    }
+
+    fn printer(instr: u32) -> String {
+        let UJtype {
+            rd: dest,
+            imm: u_immediate,
+        } = decode_utype(instr);
+        format!("lui x{dest}, 0x{u_immediate:x}")
+    }
+
+    Instr { executer, printer }
 }
 
 /// Add upper immediate to program counter in 32-bit mode
@@ -64,15 +78,27 @@ pub fn execute_lui<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
 /// the current value of the program counter. Store the
 /// result in the register dest. Set pc = pc + 4.
 ///
-pub fn execute_auipc<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let UJtype {
-        rd: dest,
-        imm: u_immediate,
-    } = decode_utype(instr);
-    let value = eei.pc().wrapping_add(u_immediate << 12);
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn auipc<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let UJtype {
+            rd: dest,
+            imm: u_immediate,
+        } = decode_utype(instr);
+        let value = eei.pc().wrapping_add(u_immediate << 12);
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+
+    fn printer(instr: u32) -> String {
+        let UJtype {
+            rd: dest,
+            imm: u_immediate,
+        } = decode_utype(instr);
+        format!("auipc x{dest}, 0x{u_immediate:x}")
+    }
+
+    Instr { executer, printer }
 }
 
 /// Jump and link in 32-bit mode
@@ -85,16 +111,28 @@ pub fn execute_auipc<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
 /// misaligned exception if the target program counter of
 /// the jump would be misaligned. If this exception is
 /// raised, then the dest register is not modified.
-pub fn execute_jal<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let UJtype {
-        rd: dest,
-        imm: offset,
-    } = decode_jtype(instr);
-    let return_address = eei.pc().wrapping_add(4);
-    let pc_relative_address = sign_extend(offset, 20);
-    jump_relative_to_pc(eei, pc_relative_address)?;
-    eei.set_x(dest, return_address);
-    Ok(())
+pub fn jal<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let UJtype {
+            rd: dest,
+            imm: offset,
+        } = decode_jtype(instr);
+        let return_address = eei.pc().wrapping_add(4);
+        let pc_relative_address = sign_extend(offset, 20);
+        jump_relative_to_pc(eei, pc_relative_address)?;
+        eei.set_x(dest, return_address);
+        Ok(())
+    }
+
+    fn printer(instr: u32) -> String {
+        let UJtype {
+            rd: dest,
+            imm: offset,
+        } = decode_jtype(instr);
+        format!("jal x{dest}, 0x{offset:x}")
+    }
+
+    Instr { executer, printer }
 }
 
 /// Jump and link register in 32-bit mode
@@ -108,19 +146,33 @@ pub fn execute_jal<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
 /// misaligned exception if the target program counter of
 /// the jump would be misaligned. If this exception is
 /// raised, then the dest register is not modified.
-pub fn execute_jalr<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let Itype {
-        rs1: base,
-        imm: offset,
-        rd: dest,
-    } = decode_itype(instr);
-    let return_address = eei.pc().wrapping_add(4);
-    let relative_address = sign_extend(offset, 11);
-    let base_address = eei.x(base);
-    let target_pc = 0xffff_fffe & base_address.wrapping_add(relative_address);
-    jump_to_address(eei, target_pc)?;
-    eei.set_x(dest, return_address);
-    Ok(())
+pub fn jalr<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let Itype {
+            rs1: base,
+            imm: offset,
+            rd: dest,
+        } = decode_itype(instr);
+        let return_address = eei.pc().wrapping_add(4);
+        let relative_address = sign_extend(offset, 11);
+        let base_address = eei.x(base);
+        let target_pc =
+            0xffff_fffe & base_address.wrapping_add(relative_address);
+        jump_to_address(eei, target_pc)?;
+        eei.set_x(dest, return_address);
+        Ok(())
+    }
+
+    fn printer(instr: u32) -> String {
+        let Itype {
+            rs1: base,
+            imm: offset,
+            rd: dest,
+        } = decode_itype(instr);
+        format!("jalr x{dest}, 0x{offset:x}(x{base})")
+    }
+
+    Instr { executer, printer }
 }
 
 fn get_branch_data<E: Eei>(eei: &E, instr: u32) -> (u32, u32, u16) {
@@ -148,176 +200,232 @@ fn do_branch<E: Eei>(
     Ok(())
 }
 
-pub fn execute_beq<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, offset) = get_branch_data(eei, instr);
-    let branch_taken = src1 == src2;
-    do_branch(eei, branch_taken, offset)?;
-    Ok(())
+pub fn beq<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, offset) = get_branch_data(eei, instr);
+        let branch_taken = src1 == src2;
+        do_branch(eei, branch_taken, offset)?;
+        Ok(())
+    }
+    define_branch_printer!("beq");
+    Instr { executer, printer }
 }
 
-pub fn execute_bne<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, offset) = get_branch_data(eei, instr);
-    let branch_taken = src1 != src2;
-    do_branch(eei, branch_taken, offset)?;
-    Ok(())
+pub fn bne<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, offset) = get_branch_data(eei, instr);
+        let branch_taken = src1 != src2;
+        do_branch(eei, branch_taken, offset)?;
+        Ok(())
+    }
+    define_branch_printer!("bne");
+    Instr { executer, printer }
 }
 
-pub fn execute_blt<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, offset) = get_branch_data(eei, instr);
-    let branch_taken = {
-        let src1: i32 = interpret_u32_as_signed!(src1);
-        let src2: i32 = interpret_u32_as_signed!(src2);
-        src1 < src2
-    };
-    do_branch(eei, branch_taken, offset)?;
-    Ok(())
+pub fn blt<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, offset) = get_branch_data(eei, instr);
+        let branch_taken = {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            let src2: i32 = interpret_u32_as_signed!(src2);
+            src1 < src2
+        };
+        do_branch(eei, branch_taken, offset)?;
+        Ok(())
+    }
+    define_branch_printer!("blt");
+    Instr { executer, printer }
 }
 
-pub fn execute_bge<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, offset) = get_branch_data(eei, instr);
-    let branch_taken = {
-        let src1: i32 = interpret_u32_as_signed!(src1);
-        let src2: i32 = interpret_u32_as_signed!(src2);
-        src1 >= src2
-    };
-    do_branch(eei, branch_taken, offset)?;
-    Ok(())
+pub fn bge<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, offset) = get_branch_data(eei, instr);
+        let branch_taken = {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            let src2: i32 = interpret_u32_as_signed!(src2);
+            src1 >= src2
+        };
+        do_branch(eei, branch_taken, offset)?;
+        Ok(())
+    }
+    define_branch_printer!("bge");
+    Instr { executer, printer }
 }
 
-pub fn execute_bltu<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, offset) = get_branch_data(eei, instr);
-    let branch_taken = src1 < src2;
-    do_branch(eei, branch_taken, offset)?;
-    Ok(())
+pub fn bltu<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, offset) = get_branch_data(eei, instr);
+        let branch_taken = src1 < src2;
+        do_branch(eei, branch_taken, offset)?;
+        Ok(())
+    }
+    define_branch_printer!("bltu");
+    Instr { executer, printer }
 }
 
-pub fn execute_bgeu<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, offset) = get_branch_data(eei, instr);
-    let branch_taken = src1 >= src2;
-    do_branch(eei, branch_taken, offset)?;
-    Ok(())
+pub fn bgeu<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, offset) = get_branch_data(eei, instr);
+        let branch_taken = src1 >= src2;
+        do_branch(eei, branch_taken, offset)?;
+        Ok(())
+    }
+    define_branch_printer!("bgeu");
+    Instr { executer, printer }
 }
 
-pub fn execute_lb<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let Itype {
-        rs1: base,
-        imm: offset,
-        rd: dest,
-    } = decode_itype(instr);
-    let base_address = eei.x(base);
-    let offset = sign_extend(offset, 11);
-    let load_address = base_address.wrapping_add(offset);
-    let load_data =
-        sign_extend(eei.load(load_address.into(), Wordsize::Byte)?, 7);
-    eei.set_x(dest, load_data);
-    eei.increment_pc();
-    Ok(())
+pub fn lb<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let Itype {
+            rs1: base,
+            imm: offset,
+            rd: dest,
+        } = decode_itype(instr);
+        let base_address = eei.x(base);
+        let offset = sign_extend(offset, 11);
+        let load_address = base_address.wrapping_add(offset);
+        let load_data =
+            sign_extend(eei.load(load_address.into(), Wordsize::Byte)?, 7);
+        eei.set_x(dest, load_data);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_load_printer!("lb");
+    Instr { executer, printer }
 }
 
-pub fn execute_lh<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let Itype {
-        rs1: base,
-        imm: offset,
-        rd: dest,
-    } = decode_itype(instr);
-    let base_address = eei.x(base);
-    let offset = sign_extend(offset, 11);
-    let load_address = base_address.wrapping_add(offset);
-    let load_data =
-        sign_extend(eei.load(load_address.into(), Wordsize::Halfword)?, 15);
-    eei.set_x(dest, load_data);
-    eei.increment_pc();
-    Ok(())
+pub fn lh<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let Itype {
+            rs1: base,
+            imm: offset,
+            rd: dest,
+        } = decode_itype(instr);
+        let base_address = eei.x(base);
+        let offset = sign_extend(offset, 11);
+        let load_address = base_address.wrapping_add(offset);
+        let load_data =
+            sign_extend(eei.load(load_address.into(), Wordsize::Halfword)?, 15);
+        eei.set_x(dest, load_data);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_load_printer!("lh");
+    Instr { executer, printer }
 }
 
-pub fn execute_lw<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let Itype {
-        rs1: base,
-        imm: offset,
-        rd: dest,
-    } = decode_itype(instr);
-    let base_address = eei.x(base);
-    let offset = sign_extend(offset, 11);
-    let load_address = base_address.wrapping_add(offset);
-    let load_data = eei.load(load_address.into(), Wordsize::Word)?;
-    eei.set_x(dest, load_data);
-    eei.increment_pc();
-    Ok(())
+pub fn lw<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let Itype {
+            rs1: base,
+            imm: offset,
+            rd: dest,
+        } = decode_itype(instr);
+        let base_address = eei.x(base);
+        let offset = sign_extend(offset, 11);
+        let load_address = base_address.wrapping_add(offset);
+        let load_data = eei.load(load_address.into(), Wordsize::Word)?;
+        eei.set_x(dest, load_data);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_load_printer!("lw");
+    Instr { executer, printer }
 }
 
-pub fn execute_lbu<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let Itype {
-        rs1: base,
-        imm: offset,
-        rd: dest,
-    } = decode_itype(instr);
-    let base_address = eei.x(base);
-    let offset = sign_extend(offset, 11);
-    let load_address = base_address.wrapping_add(offset);
-    let load_data = eei.load(load_address.into(), Wordsize::Byte)?;
-    eei.set_x(dest, load_data);
-    eei.increment_pc();
-    Ok(())
+pub fn lbu<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let Itype {
+            rs1: base,
+            imm: offset,
+            rd: dest,
+        } = decode_itype(instr);
+        let base_address = eei.x(base);
+        let offset = sign_extend(offset, 11);
+        let load_address = base_address.wrapping_add(offset);
+        let load_data = eei.load(load_address.into(), Wordsize::Byte)?;
+        eei.set_x(dest, load_data);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_load_printer!("lbu");
+    Instr { executer, printer }
 }
 
-pub fn execute_lhu<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let Itype {
-        rs1: base,
-        imm: offset,
-        rd: dest,
-    } = decode_itype(instr);
-    let base_address = eei.x(base);
-    let offset = sign_extend(offset, 11);
-    let load_address = base_address.wrapping_add(offset);
-    let load_data = eei.load(load_address.into(), Wordsize::Halfword)?;
-    eei.set_x(dest, load_data);
-    eei.increment_pc();
-    Ok(())
+pub fn lhu<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let Itype {
+            rs1: base,
+            imm: offset,
+            rd: dest,
+        } = decode_itype(instr);
+        let base_address = eei.x(base);
+        let offset = sign_extend(offset, 11);
+        let load_address = base_address.wrapping_add(offset);
+        let load_data = eei.load(load_address.into(), Wordsize::Halfword)?;
+        eei.set_x(dest, load_data);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_load_printer!("lhu");
+    Instr { executer, printer }
 }
 
-pub fn execute_sb<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let SBtype {
-        rs1: base,
-        rs2: src,
-        imm: offset,
-    } = decode_stype(instr);
-    let base_address = eei.x(base);
-    let offset = sign_extend(offset, 11);
-    let store_address = base_address.wrapping_add(offset);
-    let store_data = eei.x(src);
-    eei.store(store_address, store_data, Wordsize::Byte)?;
-    eei.increment_pc();
-    Ok(())
+pub fn sb<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let SBtype {
+            rs1: base,
+            rs2: src,
+            imm: offset,
+        } = decode_stype(instr);
+        let base_address = eei.x(base);
+        let offset = sign_extend(offset, 11);
+        let store_address = base_address.wrapping_add(offset);
+        let store_data = eei.x(src);
+        eei.store(store_address, store_data, Wordsize::Byte)?;
+        eei.increment_pc();
+        Ok(())
+    }
+    define_store_printer!("sb");
+    Instr { executer, printer }
 }
 
-pub fn execute_sh<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let SBtype {
-        rs1: base,
-        rs2: src,
-        imm: offset,
-    } = decode_stype(instr);
-    let base_address = eei.x(base);
-    let offset = sign_extend(offset, 11);
-    let store_address = base_address.wrapping_add(offset);
-    let store_data = eei.x(src);
-    eei.store(store_address, store_data, Wordsize::Halfword)?;
-    eei.increment_pc();
-    Ok(())
+pub fn sh<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let SBtype {
+            rs1: base,
+            rs2: src,
+            imm: offset,
+        } = decode_stype(instr);
+        let base_address = eei.x(base);
+        let offset = sign_extend(offset, 11);
+        let store_address = base_address.wrapping_add(offset);
+        let store_data = eei.x(src);
+        eei.store(store_address, store_data, Wordsize::Halfword)?;
+        eei.increment_pc();
+        Ok(())
+    }
+    define_store_printer!("sh");
+    Instr { executer, printer }
 }
 
-pub fn execute_sw<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let SBtype {
-        rs1: base,
-        rs2: src,
-        imm: offset,
-    } = decode_stype(instr);
-    let base_address = eei.x(base);
-    let offset = sign_extend(offset, 11);
-    let store_address = base_address.wrapping_add(offset);
-    let store_data = eei.x(src);
-    eei.store(store_address, store_data, Wordsize::Word)?;
-    eei.increment_pc();
-    Ok(())
+pub fn sw<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let SBtype {
+            rs1: base,
+            rs2: src,
+            imm: offset,
+        } = decode_stype(instr);
+        let base_address = eei.x(base);
+        let offset = sign_extend(offset, 11);
+        let store_address = base_address.wrapping_add(offset);
+        let store_data = eei.x(src);
+        eei.store(store_address, store_data, Wordsize::Word)?;
+        eei.increment_pc();
+        Ok(())
+    }
+    define_store_printer!("sw");
+    Instr { executer, printer }
 }
 
 fn reg_imm_values<E: Eei>(eei: &E, instr: u32) -> (u32, u8, u32) {
@@ -331,83 +439,119 @@ fn reg_imm_values<E: Eei>(eei: &E, instr: u32) -> (u32, u8, u32) {
     (src, dest, i_immediate)
 }
 
-pub fn execute_addi<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src, dest, i_immediate) = reg_imm_values(eei, instr);
-    let value = src.wrapping_add(i_immediate);
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn addi<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src, dest, i_immediate) = reg_imm_values(eei, instr);
+        let value = src.wrapping_add(i_immediate);
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_imm_printer!("addi");
+    Instr { executer, printer }
 }
 
-pub fn execute_slti<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src, dest, i_immediate) = reg_imm_values(eei, instr);
-    let value = {
-        let src: i32 = interpret_u32_as_signed!(src);
-        let i_immediate: i32 = interpret_u32_as_signed!(i_immediate);
-        (src < i_immediate) as u32
-    };
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn slti<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src, dest, i_immediate) = reg_imm_values(eei, instr);
+        let value = {
+            let src: i32 = interpret_u32_as_signed!(src);
+            let i_immediate: i32 = interpret_u32_as_signed!(i_immediate);
+            (src < i_immediate) as u32
+        };
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_imm_printer!("slti");
+    Instr { executer, printer }
 }
 
-pub fn execute_sltiu<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src, dest, i_immediate) = reg_imm_values(eei, instr);
-    let value = (src < i_immediate) as u32;
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn sltiu<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src, dest, i_immediate) = reg_imm_values(eei, instr);
+        let value = (src < i_immediate) as u32;
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_imm_printer!("sltiu");
+    Instr { executer, printer }
 }
 
-pub fn execute_andi<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src, dest, i_immediate) = reg_imm_values(eei, instr);
-    let value = src & i_immediate;
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn andi<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src, dest, i_immediate) = reg_imm_values(eei, instr);
+        let value = src & i_immediate;
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_imm_printer!("andi");
+    Instr { executer, printer }
 }
 
-pub fn execute_ori<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src, dest, i_immediate) = reg_imm_values(eei, instr);
-    let value = src | i_immediate;
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn ori<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src, dest, i_immediate) = reg_imm_values(eei, instr);
+        let value = src | i_immediate;
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_imm_printer!("ori");
+    Instr { executer, printer }
 }
 
-pub fn execute_xori<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src, dest, i_immediate) = reg_imm_values(eei, instr);
-    let value = src ^ i_immediate;
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn xori<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src, dest, i_immediate) = reg_imm_values(eei, instr);
+        let value = src ^ i_immediate;
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_imm_printer!("xori");
+    Instr { executer, printer }
 }
 
-pub fn execute_slli<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src, dest, i_immediate) = reg_imm_values(eei, instr);
-    let value = src << (0x1f & i_immediate);
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn slli<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src, dest, i_immediate) = reg_imm_values(eei, instr);
+        let value = src << (0x1f & i_immediate);
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_imm_printer!("slli");
+    Instr { executer, printer }
 }
 
-pub fn execute_srli<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src, dest, i_immediate) = reg_imm_values(eei, instr);
-    let value = src >> (0x1f & i_immediate);
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn srli<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src, dest, i_immediate) = reg_imm_values(eei, instr);
+        let value = src >> (0x1f & i_immediate);
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_imm_printer!("srli");
+    Instr { executer, printer }
 }
 
-pub fn execute_srai<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src, dest, i_immediate) = reg_imm_values(eei, instr);
-    let value = {
-        let src: i32 = interpret_u32_as_signed!(src);
-        interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
-    };
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn srai<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src, dest, i_immediate) = reg_imm_values(eei, instr);
+        let value = {
+            let src: i32 = interpret_u32_as_signed!(src);
+            interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
+        };
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_imm_printer!("srai");
+    Instr { executer, printer }
 }
 
 fn reg_reg_values<E: Eei>(eei: &E, instr: u32) -> (u32, u32, u8) {
@@ -421,89 +565,129 @@ fn reg_reg_values<E: Eei>(eei: &E, instr: u32) -> (u32, u32, u8) {
     (src1, src2, dest)
 }
 
-pub fn execute_add<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = src1.wrapping_add(src2);
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn add<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = src1.wrapping_add(src2);
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("add");
+    Instr { executer, printer }
 }
 
-pub fn execute_sub<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = src1.wrapping_sub(src2);
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn sub<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = src1.wrapping_sub(src2);
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("sub");
+    Instr { executer, printer }
 }
 
-pub fn execute_slt<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = {
-        let src1: i32 = interpret_u32_as_signed!(src1);
-        let src2: i32 = interpret_u32_as_signed!(src2);
-        (src1 < src2) as u32
-    };
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn slt<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            let src2: i32 = interpret_u32_as_signed!(src2);
+            (src1 < src2) as u32
+        };
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("slt");
+    Instr { executer, printer }
 }
 
-pub fn execute_sltu<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = (src1 < src2) as u32;
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn sltu<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = (src1 < src2) as u32;
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("sltu");
+    Instr { executer, printer }
 }
 
-pub fn execute_and<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = src1 & src2;
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn and<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = src1 & src2;
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("and");
+    Instr { executer, printer }
 }
 
-pub fn execute_or<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = src1 | src2;
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn or<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = src1 | src2;
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("or");
+    Instr { executer, printer }
 }
 
-pub fn execute_xor<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = src1 ^ src2;
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn xor<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = src1 ^ src2;
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("xor");
+    Instr { executer, printer }
 }
 
-pub fn execute_sll<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = src1 << (0x1f & src2);
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn sll<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = src1 << (0x1f & src2);
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("sll");
+    Instr { executer, printer }
 }
 
-pub fn execute_srl<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = src1 >> (0x1f & src2);
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn srl<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = src1 >> (0x1f & src2);
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("srl");
+    Instr { executer, printer }
 }
 
-pub fn execute_sra<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
-    let (src1, src2, dest) = reg_reg_values(eei, instr);
-    let value = {
-        let src1: i32 = interpret_u32_as_signed!(src1);
-        interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
-    };
-    eei.set_x(dest, value);
-    eei.increment_pc();
-    Ok(())
+pub fn sra<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
+        let (src1, src2, dest) = reg_reg_values(eei, instr);
+        let value = {
+            let src1: i32 = interpret_u32_as_signed!(src1);
+            interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
+        };
+        eei.set_x(dest, value);
+        eei.increment_pc();
+        Ok(())
+    }
+    define_reg_reg_printer!("sra");
+    Instr { executer, printer }
 }

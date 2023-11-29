@@ -23,12 +23,12 @@ pub enum DecoderError {
 /// an execution function, because decoding based on at
 /// least the opcode is always required first.
 #[derive(Debug, PartialEq, Eq)]
-enum NextStep<F: Copy> {
+enum NextStep<F> {
     Decode(Decoder<F>),
     Exec(F),
 }
 
-impl<F: Copy> NextStep<F> {
+impl<F> NextStep<F> {
     /// masks_with_values is in reverse order; values at the end of the
     /// vector will get inserted into decoder first. This is because it
     /// is easier to remove items from the end of a vector (for the recursion)
@@ -57,7 +57,7 @@ impl<F: Copy> NextStep<F> {
 }
 
 /// Represents a node and subsequent edge in the decoder tree
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct MaskWithValue {
     pub mask: u32,
     pub value: u32,
@@ -66,12 +66,12 @@ pub struct MaskWithValue {
 /// Used when pushing a new instruction to the decoder to determine
 /// whether there is already a matching decode branch, or whether
 /// a value corresponding to a mask is missing.
-enum NextNode<'a, F: Copy> {
+enum NextNode<'a, F> {
     AnotherDecoder(&'a mut Decoder<F>),
     MissingValue(&'a mut Decoder<F>, u32),
 }
 
-impl<F: Copy> NextNode<'_, F> {
+impl<F> NextNode<'_, F> {
     /// Progress from the current node to the next node using
     /// the value specified. Return variant depending on whether
     /// another decoder is found or whether the value is missing
@@ -123,16 +123,16 @@ impl<F: Copy> NextNode<'_, F> {
 /// The decoder is a tree where nodes store masks and the branches
 /// following nodes are labelled with values obtained after applying
 /// the masks. The leaf nodes store a function that can be executed,
-/// of type F. (F can be any type that implements copy, if you want
-/// to store anything else at the leaf nodes.)
+/// of type F. (F can be any type, which allows you to store any
+/// structure at the leaf nodes.)
 ///
 #[derive(Debug, PartialEq, Eq)]
-pub struct Decoder<F: Copy> {
+pub struct Decoder<F> {
     mask: u32,
     value_map: HashMap<u32, NextStep<F>>,
 }
 
-impl<F: Copy> Default for Decoder<F> {
+impl<F> Default for Decoder<F> {
     /// Implements a default decoder whose root mask is
     /// the RISC-V opcode field
     fn default() -> Self {
@@ -140,7 +140,7 @@ impl<F: Copy> Default for Decoder<F> {
     }
 }
 
-impl<F: Copy> Decoder<F> {
+impl<F> Decoder<F> {
     pub fn new(mask: u32) -> Self {
         Self {
             mask,
@@ -179,10 +179,12 @@ impl<F: Copy> Decoder<F> {
         self.value_map.contains_key(value)
     }
 
-    pub fn get_exec(&self, instr: u32) -> Result<F, DecoderError> {
+    /// Return a constant reference to the leaf node F
+    /// corresponding to the instruction instr.
+    pub fn get_exec(&self, instr: u32) -> Result<&F, DecoderError> {
         match self.next_step_for_instr(instr)? {
             NextStep::Decode(decoder) => decoder.get_exec(instr),
-            NextStep::Exec(exec) => Ok(*exec),
+            NextStep::Exec(exec) => Ok(exec),
         }
     }
 
