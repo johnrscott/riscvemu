@@ -1,6 +1,21 @@
-use std::collections::HashMap;
+use itertools::{Itertools, PeekingNext};
+use riscvemu::elf_utils::{load_elf, ElfLoadable, ElfLoadError};
+use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{prelude::*, BufReader};
+use std::io::{prelude::*, BufReader, LineWriter, Lines};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum TraceFileError {
+    #[error("missing section heading at start of file")]
+    MissingSectionHeading,
+    #[error("section .eeprom is compulsory")]
+    MissingEepromSection,
+    #[error("section {0} is not recognised/implemented")]
+    UnrecognisedSection(String),
+}
+
+pub type Result<T> = std::result::Result<T, TraceFileError>;
 
 /// If the line ends in a comment, remove it. If the
 /// result contains any non-whitespace characters,
@@ -32,22 +47,103 @@ fn get_addr_instr_tuple(non_comment_line: String) -> (u32, u32) {
     }
     let addr = terms[0];
     let instr = terms[1];
-    (addr, instr)    
+    (addr, instr)
+}
+
+#[derive(Debug, Clone)]
+enum Section {
+    Eeprom(BTreeMap<u32, u32>),
+}
+
+impl ElfLoadable for Section {
+    fn write_byte(
+        &mut self,
+        addr: u32,
+        data: u8,
+    ) -> std::result::Result<(), ElfLoadError> {
+	let aligned_addr = 0xffff_fffc & addr;
+	let offset = addr - aligned_addr;
+	match self {
+	    Section::Eeprom(map) => {
+		let instr_part = u32::from(data) << 8*offset;
+		if let Some(instr) = map.get_mut(&aligned_addr) {
+		    *instr |= instr_part;	    
+		} else {
+		    map.insert(aligned_addr, instr_part);
+		}
+	    }
+	    _ => unimplemented!("Cannot load non-eeprom section from elf")
+	}
+	Ok(())
+    }
+}
+
+fn write_section(file: &mut LineWriter<File>, section: Section) {
+    match section {
+        Section::Eeprom(map) => {
+            file.write_all(b".eeprom\n").expect("should work");
+            for (addr, instr) in map.into_iter() {
+                file.write_all(
+                    format!("{addr:0>8x}  {instr:0>8x}  // comment\n")
+                        .as_bytes(),
+                )
+                .expect("should write")
+            }
+        }
+        _ => unimplemented!("Not yet implemented writing that section"),
+    }
+}
+
+fn read_section<I>(lines: &mut I) -> Result<Section>
+where
+    I: Iterator<Item = String> + PeekingNext,
+{
+    if let Some(first_line) = lines.next() {
+        match first_line.as_ref() {
+            ".eeprom" => {
+                let eeprom = lines
+                    .peeking_take_while(|line| !is_section_header(line))
+                    .map(get_addr_instr_tuple)
+                    .collect();
+                Ok(Section::Eeprom(eeprom))
+            }
+            _ => Err(TraceFileError::UnrecognisedSection(first_line)),
+        }
+    } else {
+        Err(TraceFileError::MissingSectionHeading)
+    }
 }
 
 fn main() {
     let file = File::open("test.trace").expect("file should exist");
     let reader = BufReader::new(file);
 
-    let eeprom: HashMap<u32, u32> = reader
+    let mut iter = reader
         .lines()
         .flatten() // note this drops line errors
         .map(get_non_comment)
         .flatten()
-	// This currently ignores section
-        .filter(|non_comment| !is_section_header(&non_comment))
-        .map(get_addr_instr_tuple)
-        .collect();
+        .peekable();
+    while iter.peek().is_some() {
+        match read_section(&mut iter) {
+            Ok(section) => {
+                println!("{section:?}");
+                //sections.push(section);
+            }
+            Err(e) => match e {
+                TraceFileError::UnrecognisedSection(name) => {
+                    println!("Warning: unrecognised section {name}")
+                }
+                _ => panic!("Error {e} occurred"),
+            },
+        }
+    }
 
-    println!("{:?}", eeprom);
+    let mut section = Section::Eeprom(BTreeMap::new());
+    let elf_name = "c/hello.out".to_string();
+    load_elf(&mut section, &elf_name);
+
+    let file = File::create("out.trace").expect("should be able to write");
+    let mut file = LineWriter::new(file);
+    write_section(&mut file, section)
 }
