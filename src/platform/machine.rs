@@ -443,7 +443,7 @@ impl TrapCtrl {
     }
 
     fn interrupt_enabled(&self, int: Interrupt) -> bool {
-	self.interrupts_globally_enabled()
+        self.interrupts_globally_enabled()
             && match int {
                 Interrupt::External => self.meie,
                 Interrupt::Software => self.msie,
@@ -455,7 +455,7 @@ impl TrapCtrl {
         match int {
             Interrupt::External => self.meip,
             Interrupt::Software => self.msip,
-            Interrupt::Timer => self.timer_interrupt.mtip()
+            Interrupt::Timer => self.timer_interrupt.mtip(),
         }
     }
 

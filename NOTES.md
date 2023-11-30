@@ -1,4 +1,17 @@
-### Installing the GNU RISC-V compiler toolchain
+# Notes
+
+## HTML code coverage report
+
+To get an HTML code coverage report, run these commands from the top level of the repository:
+
+```bash
+cargo install cargo-tarpaulin
+cargo run tarpaulin -o Html
+```
+
+The report is saved to `tarpaulin-report.html`.
+
+## Installing the GNU RISC-V compiler toolchain
 
 The RISC-V gcc compiler is used to build the binaries that are used to test the RISC-V virtual machine in this repository.
 

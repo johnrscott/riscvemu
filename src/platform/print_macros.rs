@@ -84,7 +84,7 @@ pub fn get_csr_name(addr: u16) -> String {
 macro_rules! define_csr_reg_printer {
     ($instr_name:expr) => {
         fn printer(instr: u32) -> String {
-            use crate::hart::platform::print_macros::get_csr_name;
+            use crate::platform::print_macros::get_csr_name;
             let Itype {
                 rs1: source,
                 imm: csr,
@@ -101,7 +101,7 @@ pub use define_csr_reg_printer;
 macro_rules! define_csr_imm_printer {
     ($instr_name:expr) => {
         pub fn printer(instr: u32) -> String {
-            use crate::hart::platform::print_macros::get_csr_name;
+            use crate::platform::print_macros::get_csr_name;
             let Itype {
                 rs1: uimm,
                 imm: csr,

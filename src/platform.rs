@@ -31,40 +31,40 @@ use queues::{IsQueue, Queue};
 use crate::{
     decode::Decoder,
     elf_utils::{ElfLoadError, ElfLoadable},
-    hart::{
-        csr::{CSR_MIE, CSR_MIP, CSR_MSTATUS},
-        pma::{
-            EXCEPTION_VECTOR, MACHINE_EXTERNAL_INT_VECTOR,
-            MACHINE_SOFTWARE_INT_VECTOR, MACHINE_TIMER_INT_VECTOR, NMI_VECTOR,
-            RESET_VECTOR,
-        },
-    },
     utils::mask,
 };
 
 use self::{
-    arch::{make_rv32i, make_rv32m, make_rv32zicsr, make_rv32priv},
-    eei::Eei,
-};
-
-use super::{
+    arch::{make_rv32i, make_rv32m, make_rv32priv, make_rv32zicsr},
     csr::MachineInterface,
+    csr::{CSR_MIE, CSR_MIP, CSR_MSTATUS},
+    eei::Eei,
     machine::Exception,
     memory::{Memory, Wordsize},
     pma::{
         PmaChecker, EXTINTCTRL_ADDR, MTIMECMPH_ADDR, MTIMECMP_ADDR,
         MTIMEH_ADDR, MTIME_ADDR, SOFTINTCTRL_ADDR, UARTTX_ADDR,
     },
+    pma::{
+        EXCEPTION_VECTOR, MACHINE_EXTERNAL_INT_VECTOR,
+        MACHINE_SOFTWARE_INT_VECTOR, MACHINE_TIMER_INT_VECTOR, NMI_VECTOR,
+        RESET_VECTOR,
+    },
     registers::Registers,
 };
 
 pub mod arch;
+pub mod csr;
 pub mod eei;
+pub mod machine;
+pub mod memory;
+pub mod pma;
 pub mod print_macros;
+pub mod registers;
 pub mod rv32i;
 pub mod rv32m;
-pub mod rv32zicsr;
 pub mod rv32priv;
+pub mod rv32zicsr;
 
 /// Stores a function for executing/printing an instruction
 #[derive(Debug)]
@@ -162,6 +162,31 @@ impl Platform {
     ///
     pub fn reset(&mut self) {}
 
+    /// Execute an instruction based on the current state of the
+    /// RISC-V core, and then increment cycle and time counters.
+    pub fn step(&mut self) {
+        // To perform a single step, first call execute() and then call
+        // execute(). This ensures that the first execution occurs when
+        // mcycle=0 and mtime=0 (otherwise, the first instruction would
+        // execute when mcycle=1 and mtime=1).
+        self.execute();
+        self.increment_clock();
+    }
+
+    /// Increment clock and time
+    ///
+    /// This is deliberately separated from the execute step so that
+    /// it is possible to increment these counters after performing
+    /// the execute() step, without having complex logic in exeute()
+    /// to handle incrementing the counters on all the early-return
+    /// paths.
+    ///
+    pub fn increment_clock(&mut self) {
+        // Increment machine counters
+        self.machine_interface.machine.increment_mcycle();
+        self.machine_interface.machine.trap_ctrl.increment_mtime();
+    }
+
     /// Single clock cycle step
     ///
     /// On the rising edge of the clock, perform the sequence of
@@ -170,13 +195,12 @@ impl Platform {
     /// subsequent steps (todo: check whether this is valid with
     /// respect to instructions that can trigger multiple exceptions).
     ///
-    /// * increment mcycle and mtime
     /// * check for pending interrupts. If pending, return early
     /// * fetch the instruction located at pc (can raise exception)
     /// * execute the instruction that was fetched (can raise exception)
     /// * increment minstret (i.e. only if instruction was completed)
     ///
-    pub fn step_clock(&mut self) {
+    pub fn execute(&mut self) {
         if self.trace {
             println!("\nBegin clock step ---");
             println!(
@@ -190,10 +214,6 @@ impl Platform {
 
             )
         }
-
-        // Increment machine counters
-        self.machine_interface.machine.increment_mcycle();
-        self.machine_interface.machine.trap_ctrl.increment_mtime();
 
         if self.trace {
             self.pretty_print_pc();
@@ -414,7 +434,7 @@ impl Eei for Platform {
     }
 
     fn mret(&mut self) {
-	self.pc = self.machine_interface.machine.trap_ctrl.mret();
+        self.pc = self.machine_interface.machine.trap_ctrl.mret();
     }
 }
 
@@ -423,8 +443,9 @@ mod tests {
 
     use super::*;
     use crate::encode::*;
-    use crate::hart::csr::{CSR_MARCHID, CSR_MSCRATCH, CSR_MSTATUS};
-    use crate::hart::machine::{Trap, MSTATUS_MIE};
+    use crate::platform::csr::{CSR_MARCHID, CSR_MSCRATCH, CSR_MSTATUS};
+    use crate::platform::machine::{Trap, MSTATUS_MIE};
+    use crate::utils::interpret_i32_as_unsigned;
 
     /// Simple wrapper to load 4 consecutive bytes
     fn write_instr(platform: &mut Platform, mut addr: u32, instr: u32) {
@@ -460,7 +481,7 @@ mod tests {
         write_instr(&mut platform, 0, 0);
 
         // Attempt execution
-        platform.step_clock();
+        platform.step();
 
         // Expect illegal instruction exception
         assert_eq!(platform.pc(), 0x0000_0008); // exception vector
@@ -482,7 +503,7 @@ mod tests {
         platform.set_x(2, 2);
 
         // Attempt execution
-        platform.step_clock();
+        platform.step();
 
         // Expect instruction address misaligned
         assert_eq!(platform.pc(), 0x0000_0008); // exception vector
@@ -502,7 +523,7 @@ mod tests {
         platform.set_pc(3);
 
         // Attempt execution
-        platform.step_clock();
+        platform.step();
 
         // Expect illegal instruction exception
         assert_eq!(platform.pc(), 0x0000_0008); // exception vector
@@ -523,12 +544,12 @@ mod tests {
         platform.set_x(2, 0xffff_ffff);
 
         // Initially, mstatus is 0x0000_1800
-        platform.step_clock();
+        platform.step();
         let x3 = platform.x(3);
         assert_eq!(x3, 0x0000_1800);
 
         // Read new mstatus after writing 0xffff_ffff
-        platform.step_clock();
+        platform.step();
         let x5 = platform.x(5);
         assert_eq!(x5, 0x0000_1888);
 
@@ -544,12 +565,12 @@ mod tests {
         platform.set_x(2, 0xabcd_1234);
 
         // Initially, mstatus is 0x0000_0000
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0x0000_0000);
 
         // Read new mstatus after writing 0xabcd_1234
-        platform.step_clock();
+        platform.step();
         let x7 = platform.x(7);
         assert_eq!(x7, 0xabcd_1234);
 
@@ -572,11 +593,11 @@ mod tests {
             write_instr(&mut platform, 4, csrrs!(x7, x2, CSR_MSCRATCH));
             platform.set_x(2, 1 << n);
 
-            platform.step_clock();
+            platform.step();
             let x1 = platform.x(1);
             assert_eq!(x1, 0xabcd_0123);
 
-            platform.step_clock();
+            platform.step();
             let x7 = platform.x(7);
             assert_eq!(x7, 0xabcd_0123 | (1 << n));
 
@@ -600,11 +621,11 @@ mod tests {
             write_instr(&mut platform, 4, csrrc!(x7, x2, CSR_MSCRATCH));
             platform.set_x(2, 1 << n);
 
-            platform.step_clock();
+            platform.step();
             let x1 = platform.x(1);
             assert_eq!(x1, 0xabcd_0123);
 
-            platform.step_clock();
+            platform.step();
             let x7 = platform.x(7);
             assert_eq!(x7, 0xabcd_0123 & !(1 << n));
 
@@ -620,12 +641,12 @@ mod tests {
         write_instr(&mut platform, 4, csrrwi!(x7, 0x14, CSR_MSCRATCH));
 
         // Initially, mstatus is 0x0000_0000
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0x0000_0000);
 
         // Read new mstatus after writing 0xabcd_1234
-        platform.step_clock();
+        platform.step();
         let x7 = platform.x(7);
         assert_eq!(x7, 0x14);
 
@@ -647,11 +668,11 @@ mod tests {
             write_instr(&mut platform, 0, csrrsi!(x1, n, CSR_MSCRATCH));
             write_instr(&mut platform, 4, csrrsi!(x7, n, CSR_MSCRATCH));
 
-            platform.step_clock();
+            platform.step();
             let x1 = platform.x(1);
             assert_eq!(x1, 0xabcd_0123);
 
-            platform.step_clock();
+            platform.step();
             let x7 = platform.x(7);
             assert_eq!(x7, 0xabcd_0123 | n);
 
@@ -675,11 +696,11 @@ mod tests {
             write_instr(&mut platform, 4, csrrci!(x7, n, CSR_MSCRATCH));
             platform.set_x(2, 1 << n);
 
-            platform.step_clock();
+            platform.step();
             let x1 = platform.x(1);
             assert_eq!(x1, 0xabcd_0123);
 
-            platform.step_clock();
+            platform.step();
             let x7 = platform.x(7);
             assert_eq!(x7, 0xabcd_0123 & !n);
 
@@ -693,7 +714,7 @@ mod tests {
     {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, csrrw!(x3, x2, 0x3a0)); // pmpcfg0
-        platform.step_clock();
+        platform.step();
 
         // Expect illegal instruction exception
         assert_eq!(platform.pc(), 0x0000_0008); // exception vector
@@ -709,7 +730,7 @@ mod tests {
     fn check_read_only_csr_illegal_instruction() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, csrrw!(x3, x2, CSR_MARCHID));
-        platform.step_clock();
+        platform.step();
 
         // Expect illegal instruction exception
         assert_eq!(platform.pc(), 0x0000_0008); // exception vector
@@ -727,7 +748,7 @@ mod tests {
         // upper 20 bits of x2)
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, lui!(x2, 53));
-        platform.step_clock();
+        platform.step();
         let x2 = platform.x(2);
         assert_eq!(x2, 53 << 12);
         assert_eq!(platform.pc(), 4);
@@ -739,7 +760,7 @@ mod tests {
         let mut platform = Platform::new();
         platform.set_pc(8);
         write_instr(&mut platform, 8, auipc!(x4, 53));
-        platform.step_clock();
+        platform.step();
         let x4 = platform.x(4);
         assert_eq!(x4, 8 + (53 << 12));
         assert_eq!(platform.pc(), 12);
@@ -752,7 +773,7 @@ mod tests {
         platform.set_pc(12);
         platform.set_x(6, 20);
         write_instr(&mut platform, 12, jalr!(x4, x6, -4));
-        platform.step_clock();
+        platform.step();
         let x4 = platform.x(4);
         assert_eq!(x4, 16);
         assert_eq!(platform.pc(), 20 - 4);
@@ -765,7 +786,7 @@ mod tests {
         write_instr(&mut platform, 0, beq!(x1, x2, 16));
         platform.set_x(1, 1);
         platform.set_x(2, 2);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc(), 4);
         Ok(())
     }
@@ -776,7 +797,7 @@ mod tests {
         write_instr(&mut platform, 0, beq!(x1, x2, 16));
         platform.set_x(1, 2);
         platform.set_x(2, 2);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc(), 16);
         Ok(())
     }
@@ -787,7 +808,7 @@ mod tests {
         write_instr(&mut platform, 0, bne!(x1, x2, 16));
         platform.set_x(1, 2);
         platform.set_x(2, 2);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc(), 4);
         Ok(())
     }
@@ -798,7 +819,7 @@ mod tests {
         write_instr(&mut platform, 0, bne!(x1, x2, 16));
         platform.set_x(1, 1);
         platform.set_x(2, 2);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc(), 16);
         Ok(())
     }
@@ -809,7 +830,7 @@ mod tests {
         write_instr(&mut platform, 0, blt!(x1, x2, 16));
         platform.set_x(1, 10);
         platform.set_x(2, 0xffff_ffff);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc(), 4);
         Ok(())
     }
@@ -820,7 +841,7 @@ mod tests {
         write_instr(&mut platform, 0, blt!(x1, x2, 16));
         platform.set_x(1, 0xffff_ffff);
         platform.set_x(2, 10);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc(), 16);
         Ok(())
     }
@@ -831,7 +852,7 @@ mod tests {
         write_instr(&mut platform, 0, bltu!(x1, x2, 16));
         platform.set_x(1, 10);
         platform.set_x(2, 1);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc(), 4);
         Ok(())
     }
@@ -842,7 +863,7 @@ mod tests {
         write_instr(&mut platform, 0, bltu!(x1, x2, 16));
         platform.set_x(1, 1);
         platform.set_x(2, 10);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc(), 16);
         Ok(())
     }
@@ -853,7 +874,7 @@ mod tests {
         write_instr(&mut platform, 0, bge!(x1, x2, 16));
         platform.set_x(1, 0xffff_ffff);
         platform.set_x(2, 10);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 4);
         Ok(())
     }
@@ -864,7 +885,7 @@ mod tests {
         write_instr(&mut platform, 0, bge!(x1, x2, 16));
         platform.set_x(1, 10);
         platform.set_x(2, 0xffff_ffff);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 16);
         Ok(())
     }
@@ -875,7 +896,7 @@ mod tests {
         write_instr(&mut platform, 0, bgeu!(x1, x2, 16));
         platform.set_x(1, 1);
         platform.set_x(2, 10);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 4);
         Ok(())
     }
@@ -886,7 +907,7 @@ mod tests {
         write_instr(&mut platform, 0, bgeu!(x1, x2, 16));
         platform.set_x(1, 10);
         platform.set_x(2, 1);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 16);
         Ok(())
     }
@@ -898,7 +919,7 @@ mod tests {
         platform.set_x(2, 0x0002_0000);
         let addr = 0x0002_0010; // Ensure in main memory
         platform.store(addr, 0xff, Wordsize::Byte).unwrap();
-        platform.step_clock();
+        platform.step();
         //assert_eq!(platform.pc(), 4);
         assert_eq!(platform.x(1), 0xffff_ffff);
         Ok(())
@@ -911,7 +932,7 @@ mod tests {
         platform.set_x(2, 0x0002_0000);
         let addr = 0x0002_0010; // Ensure in main memory
         platform.store(addr, 0xff, Wordsize::Byte).unwrap();
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc(), 4);
         assert_eq!(platform.x(1), 0x0000_00ff);
         Ok(())
@@ -924,7 +945,7 @@ mod tests {
         platform.set_x(2, 0x0002_0000);
         let addr = 0x0002_0010; // Ensure in main memory
         platform.store(addr, 0xff92, Wordsize::Halfword).unwrap();
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 4);
         assert_eq!(platform.x(1), 0xffff_ff92);
         Ok(())
@@ -937,7 +958,7 @@ mod tests {
         platform.set_x(2, 0x0002_0000);
         let addr = 0x0002_0010; // Ensure in main memory
         platform.store(addr, 0xff92, Wordsize::Halfword).unwrap();
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 4);
         assert_eq!(platform.x(1), 0x0000_ff92);
         Ok(())
@@ -950,7 +971,7 @@ mod tests {
         platform.set_x(2, 0x0002_0000);
         let addr = 0x0002_0010; // Ensure in main memory
         platform.store(addr, 0x1234_ff92, Wordsize::Word).unwrap();
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 4);
         assert_eq!(platform.x(1), 0x1234_ff92);
         Ok(())
@@ -962,7 +983,7 @@ mod tests {
         write_instr(&mut platform, 0, sb!(x1, x2, 16));
         platform.set_x(1, 0xfe);
         platform.set_x(2, 0x0002_0000);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 4);
         let addr = 0x0002_0010; // Ensure in main memory
         assert_eq!(platform.load(addr, Wordsize::Byte).unwrap(), 0xfe);
@@ -975,7 +996,7 @@ mod tests {
         write_instr(&mut platform, 0, sh!(x1, x2, 16));
         platform.set_x(1, 0xabfe);
         platform.set_x(2, 0x0002_0000);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 4);
         let addr = 0x0002_0010; // Ensure in main memory
         assert_eq!(platform.load(addr, Wordsize::Halfword).unwrap(), 0xabfe);
@@ -988,7 +1009,7 @@ mod tests {
         write_instr(&mut platform, 0, sw!(x1, x2, -16));
         platform.set_x(1, 0xabcd_ef12);
         platform.set_x(2, 0x0002_0010);
-        platform.step_clock();
+        platform.step();
         assert_eq!(platform.pc, 4);
         let addr = 0x0002_0000; // Ensure in main memory
         assert_eq!(platform.load(addr, Wordsize::Word).unwrap(), 0xabcd_ef12);
@@ -1000,7 +1021,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, addi!(x1, x2, -23));
         platform.set_x(2, 22);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0xffff_ffff);
         assert_eq!(platform.pc, 4);
@@ -1012,7 +1033,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, slti!(x1, x2, 22));
         platform.set_x(2, 124);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0);
         assert_eq!(platform.pc, 4);
@@ -1021,7 +1042,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, slti!(x1, x2, 124));
         platform.set_x(2, 22);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
@@ -1033,10 +1054,10 @@ mod tests {
     fn check_slti_both_negative() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, slti!(x1, x2, -5));
-        let v1: u32 = interpret_i32_as_unsigned!(-24).into();
-        let v2: u32 = interpret_i32_as_unsigned!(-5).into();
+        let v1 = interpret_i32_as_unsigned(-24).into();
+        let v2 = interpret_i32_as_unsigned(-5).into();
         platform.set_x(2, v1);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
@@ -1045,7 +1066,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, slti!(x1, x2, -24));
         platform.set_x(2, v2);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0);
         assert_eq!(platform.pc, 4);
@@ -1057,10 +1078,10 @@ mod tests {
     fn check_slti_different_signs() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, slti!(x1, x2, 5));
-        let v1: u32 = interpret_i32_as_unsigned!(-24).into();
+        let v1 = interpret_i32_as_unsigned(-24).into();
         let v2: u32 = 5;
         platform.set_x(2, v1);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
@@ -1069,7 +1090,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, slti!(x1, x2, -24));
         platform.set_x(2, v2);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0);
         assert_eq!(platform.pc, 4);
@@ -1082,7 +1103,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, sltiu!(x1, x2, 22));
         platform.set_x(2, 124);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0);
         assert_eq!(platform.pc, 4);
@@ -1091,7 +1112,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, sltiu!(x1, x2, 124));
         platform.set_x(2, 22);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
@@ -1104,7 +1125,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, andi!(x1, x2, 0xff0));
         platform.set_x(2, 0x00ff_ff00);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         // Note that AND uses the sign-extended 12-bit immediate
         assert_eq!(x1, 0x00ff_ff00);
@@ -1117,7 +1138,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, ori!(x1, x2, 0xff0));
         platform.set_x(2, 0x00ff_ff00);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0xffff_fff0);
         assert_eq!(platform.pc, 4);
@@ -1129,7 +1150,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, xori!(x1, x2, 0xff0));
         platform.set_x(2, 0x00ff_ff00);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0xff00_00f0);
         assert_eq!(platform.pc, 4);
@@ -1141,7 +1162,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, slli!(x1, x2, 2));
         platform.set_x(2, 0b1101);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0b110100);
         assert_eq!(platform.pc, 4);
@@ -1153,7 +1174,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, srli!(x1, x2, 4));
         platform.set_x(2, 0xf000_0f00);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0x0f00_00f0);
         assert_eq!(platform.pc, 4);
@@ -1165,7 +1186,7 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, srai!(x1, x2, 4));
         platform.set_x(2, 0xf000_0f00);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0xff00_00f0);
         assert_eq!(platform.pc, 4);
@@ -1178,7 +1199,7 @@ mod tests {
         write_instr(&mut platform, 0, add!(x1, x2, x3));
         platform.set_x(2, 2);
         platform.set_x(3, 3);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 5);
         assert_eq!(platform.pc, 4);
@@ -1191,7 +1212,7 @@ mod tests {
         write_instr(&mut platform, 0, add!(x1, x2, x3));
         platform.set_x(2, 0xffff_fffe);
         platform.set_x(3, 5);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 3);
         assert_eq!(platform.pc, 4);
@@ -1204,7 +1225,7 @@ mod tests {
         write_instr(&mut platform, 0, sub!(x1, x2, x3));
         platform.set_x(2, 124);
         platform.set_x(3, 22);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 102);
         assert_eq!(platform.pc, 4);
@@ -1217,7 +1238,7 @@ mod tests {
         write_instr(&mut platform, 0, sub!(x1, x2, x3));
         platform.set_x(2, 20);
         platform.set_x(3, 22);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0xffff_fffe);
         assert_eq!(platform.pc, 4);
@@ -1230,7 +1251,7 @@ mod tests {
         write_instr(&mut platform, 0, slt!(x1, x2, x3));
         platform.set_x(2, 124);
         platform.set_x(3, 22);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0);
         assert_eq!(platform.pc, 4);
@@ -1240,7 +1261,7 @@ mod tests {
         write_instr(&mut platform, 0, slt!(x1, x2, x3));
         platform.set_x(3, 124);
         platform.set_x(2, 22);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
@@ -1252,11 +1273,11 @@ mod tests {
     fn check_slt_both_negative() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, slt!(x1, x2, x3));
-        let v1: u32 = interpret_i32_as_unsigned!(-24).into();
-        let v2: u32 = interpret_i32_as_unsigned!(-5).into();
+        let v1 = interpret_i32_as_unsigned(-24).into();
+        let v2 = interpret_i32_as_unsigned(-5).into();
         platform.set_x(2, v1);
         platform.set_x(3, v2);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
@@ -1266,7 +1287,7 @@ mod tests {
         write_instr(&mut platform, 0, slt!(x1, x2, x3));
         platform.set_x(3, v1);
         platform.set_x(2, v2);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0);
         assert_eq!(platform.pc, 4);
@@ -1278,11 +1299,11 @@ mod tests {
     fn check_slt_different_signs() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, slt!(x1, x2, x3));
-        let v1: u32 = interpret_i32_as_unsigned!(-24).into();
+        let v1 = interpret_i32_as_unsigned(-24).into();
         let v2: u32 = 5;
         platform.set_x(2, v1);
         platform.set_x(3, v2);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
@@ -1292,7 +1313,7 @@ mod tests {
         write_instr(&mut platform, 0, slt!(x1, x2, x3));
         platform.set_x(3, v1);
         platform.set_x(2, v2);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0);
         assert_eq!(platform.pc, 4);
@@ -1306,7 +1327,7 @@ mod tests {
         write_instr(&mut platform, 0, sltu!(x1, x2, x3));
         platform.set_x(2, 124);
         platform.set_x(3, 22);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0);
         assert_eq!(platform.pc, 4);
@@ -1316,7 +1337,7 @@ mod tests {
         write_instr(&mut platform, 0, sltu!(x1, x2, x3));
         platform.set_x(3, 124);
         platform.set_x(2, 22);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
@@ -1330,7 +1351,7 @@ mod tests {
         write_instr(&mut platform, 0, and!(x1, x2, x3));
         platform.set_x(2, 0x00ff_ff00);
         platform.set_x(3, 0x0f0f_f0f0);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0x000f_f000);
         assert_eq!(platform.pc, 4);
@@ -1343,7 +1364,7 @@ mod tests {
         write_instr(&mut platform, 0, or!(x1, x2, x3));
         platform.set_x(2, 0x00ff_ff00);
         platform.set_x(3, 0x0f0f_f0f0);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0x0fff_fff0);
         assert_eq!(platform.pc, 4);
@@ -1356,7 +1377,7 @@ mod tests {
         write_instr(&mut platform, 0, xor!(x1, x2, x3));
         platform.set_x(2, 0x00ff_ff00);
         platform.set_x(3, 0x0f0f_f0f0);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0x0ff0_0ff0);
         assert_eq!(platform.pc, 4);
@@ -1369,7 +1390,7 @@ mod tests {
         write_instr(&mut platform, 0, sll!(x1, x2, x3));
         platform.set_x(2, 0b1101);
         platform.set_x(3, 2);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0b110100);
         assert_eq!(platform.pc, 4);
@@ -1382,7 +1403,7 @@ mod tests {
         write_instr(&mut platform, 0, srl!(x1, x2, x3));
         platform.set_x(2, 0xf000_0f00);
         platform.set_x(3, 4);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0x0f00_00f0);
         assert_eq!(platform.pc, 4);
@@ -1395,7 +1416,7 @@ mod tests {
         write_instr(&mut platform, 0, sra!(x1, x2, x3));
         platform.set_x(2, 0xf000_0f00);
         platform.set_x(3, 4);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0xff00_00f0);
         assert_eq!(platform.pc, 4);
@@ -1407,10 +1428,10 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, mul!(x1, x2, x3));
         platform.set_x(2, 5);
-        platform.set_x(3, interpret_i32_as_unsigned!(-4).into());
-        platform.step_clock();
+        platform.set_x(3, interpret_i32_as_unsigned(-4).into());
+        platform.step();
         let x1 = platform.x(1);
-        assert_eq!(x1, interpret_i32_as_unsigned!(-20).into());
+        assert_eq!(x1, interpret_i32_as_unsigned(-20).into());
         assert_eq!(platform.pc, 4);
         Ok(())
     }
@@ -1421,7 +1442,7 @@ mod tests {
         write_instr(&mut platform, 0, mulh!(x1, x2, x3));
         platform.set_x(2, 0x7fff_ffff);
         platform.set_x(3, 4);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
@@ -1434,7 +1455,7 @@ mod tests {
         write_instr(&mut platform, 0, mulh!(x1, x2, x3));
         platform.set_x(2, 0xffff_ffff);
         platform.set_x(3, 4);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0xffff_ffff);
         assert_eq!(platform.pc, 4);
@@ -1447,7 +1468,7 @@ mod tests {
         write_instr(&mut platform, 0, mulhu!(x1, x2, x3));
         platform.set_x(2, 0xffff_ffff);
         platform.set_x(3, 4);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 3);
         assert_eq!(platform.pc, 4);
@@ -1460,7 +1481,7 @@ mod tests {
         write_instr(&mut platform, 0, mulhsu!(x1, x2, x3));
         platform.set_x(2, 0xffff_ffff);
         platform.set_x(3, 4);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0xffff_ffff);
         assert_eq!(platform.pc, 4);
@@ -1473,7 +1494,7 @@ mod tests {
         write_instr(&mut platform, 0, mulhsu!(x1, x2, x3));
         platform.set_x(2, 4);
         platform.set_x(3, 0xffff_ffff);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 3);
         assert_eq!(platform.pc, 4);
@@ -1485,10 +1506,10 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, div!(x1, x2, x3));
         platform.set_x(2, 6);
-        platform.set_x(3, interpret_i32_as_unsigned!(-3));
-        platform.step_clock();
+        platform.set_x(3, interpret_i32_as_unsigned(-3));
+        platform.step();
         let x1 = platform.x(1);
-        assert_eq!(x1, interpret_i32_as_unsigned!(-2).into());
+        assert_eq!(x1, interpret_i32_as_unsigned(-2).into());
         assert_eq!(platform.pc, 4);
         Ok(())
     }
@@ -1498,10 +1519,10 @@ mod tests {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, div!(x1, x2, x3));
         platform.set_x(2, 10);
-        platform.set_x(3, interpret_i32_as_unsigned!(-3));
-        platform.step_clock();
+        platform.set_x(3, interpret_i32_as_unsigned(-3));
+        platform.step();
         let x1 = platform.x(1);
-        assert_eq!(x1, interpret_i32_as_unsigned!(-3).into());
+        assert_eq!(x1, interpret_i32_as_unsigned(-3).into());
         assert_eq!(platform.pc, 4);
         Ok(())
     }
@@ -1512,7 +1533,7 @@ mod tests {
         write_instr(&mut platform, 0, divu!(x1, x2, x3));
         platform.set_x(2, 0xe000_0000);
         platform.set_x(3, 2);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 0x7000_0000);
         assert_eq!(platform.pc, 4);
@@ -1523,11 +1544,11 @@ mod tests {
     fn check_rem() -> Result<(), &'static str> {
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, rem!(x1, x2, x3));
-        platform.set_x(2, interpret_i32_as_unsigned!(-10));
+        platform.set_x(2, interpret_i32_as_unsigned(-10));
         platform.set_x(3, 3);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
-        assert_eq!(x1, interpret_i32_as_unsigned!(-1).into());
+        assert_eq!(x1, interpret_i32_as_unsigned(-1).into());
         assert_eq!(platform.pc, 4);
         Ok(())
     }
@@ -1538,7 +1559,7 @@ mod tests {
         write_instr(&mut platform, 0, remu!(x1, x2, x3));
         platform.set_x(2, 0xe000_0003);
         platform.set_x(3, 2);
-        platform.step_clock();
+        platform.step();
         let x1 = platform.x(1);
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);

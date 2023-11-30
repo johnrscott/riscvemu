@@ -1,7 +1,7 @@
 use crate::{
     define_csr_imm_printer, define_csr_reg_printer,
-    hart::machine::Exception,
     instr_type::{decode_itype, Itype},
+    platform::machine::Exception,
 };
 
 use super::{eei::Eei, Instr};

@@ -25,7 +25,7 @@
 //! architecture. Unprivileged architecture is implemented in terms of
 //! the behaviour exposed by the EEI trait.
 
-use crate::hart::{machine::Exception, memory::Wordsize};
+use super::{machine::Exception, memory::Wordsize};
 
 /// Execution environment interface
 pub trait Eei {

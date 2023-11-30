@@ -1,31 +1,19 @@
-pub use super::fields::*;
+use crate::utils::{extract_field, interpret_i32_as_unsigned};
+
 pub use super::opcodes::*;
 
-/// Make an I-type instruction
-#[macro_export]
-macro_rules! itype {
-    ($imm:expr, $rs1:expr, $funct3:expr, $rd:expr, $opcode:expr) => {
-        mask_and_shift!($imm, 12, 20)
-            | mask_and_shift!($rs1, 5, 15)
-            | mask_and_shift!($funct3, 3, 12)
-            | mask_and_shift!($rd, 5, 7)
-            | mask_and_shift!($opcode, 7, 0)
-    };
+/// Make an I-type instruction. Only produces a valid I-type
+/// instruction if the arguments are in range.
+pub fn itype(imm: u32, rs1: u32, funct3: u32, rd: u32, opcode: u32) -> u32 {
+    imm << 20 | rs1 << 15 | funct3 << 12 | rd << 7 | opcode
 }
-pub use itype;
 
 /// Make an U- or J-type instruction (if you are making
 /// a J-type instruction, make sure to construct the
 /// immediate field correctly using jtype_imm_fields)
-#[macro_export]
-macro_rules! ujtype {
-    ($imm:expr, $rd:expr, $opcode:expr) => {
-        mask_and_shift!($imm, 20, 12)
-            | mask_and_shift!($rd, 5, 7)
-            | mask_and_shift!($opcode, 7, 0)
-    };
+pub fn ujtype(imm: u32, rd: u32, opcode: u32) -> u32 {
+    imm << 12 | rd << 7 | opcode
 }
-pub use ujtype;
 
 /// Make an R- or S-type instruction. These instructions
 /// have the same number of fields of the same size. The meaning
@@ -33,23 +21,19 @@ pub use ujtype;
 ///
 /// R-type: a = funct7, b = rd
 /// S-type: a = imm[11:5], b = imm[4:0]
-#[macro_export]
-macro_rules! rstype {
-    ($a:expr, $rs2:expr, $rs1:expr, $funct3:expr, $b:expr, $opcode:expr) => {
-        mask_and_shift!($a, 7, 25)
-            | mask_and_shift!($rs2, 5, 20)
-            | mask_and_shift!($rs1, 5, 15)
-            | mask_and_shift!($funct3, 3, 12)
-            | mask_and_shift!($b, 5, 7)
-            | mask_and_shift!($opcode, 7, 0)
-    };
+pub fn rstype(
+    a: u32,
+    rs2: u32,
+    rs1: u32,
+    funct3: u32,
+    b: u32,
+    opcode: u32,
+) -> u32 {
+    a << 25 | rs2 << 20 | rs1 << 15 | funct3 << 12 | b << 7 | opcode
 }
-pub use rstype;
 
-/// Convert a RISC-V register name (e.g. x3) to the register
-/// value (e.g. 3)
-///
-///
+/// Convert a RISC-V register name (e.g. x3) to the register value
+/// (e.g. 3)
 pub fn reg_num_impl(reg_name: &str) -> Result<u32, &'static str> {
     if reg_name.len() != 2 && reg_name.len() != 3 {
         return Err("register name must be exactly two or three characters");
@@ -73,24 +57,16 @@ macro_rules! reg_num {
 }
 pub use reg_num;
 
-#[macro_export]
-macro_rules! imm_as_u32 {
-    ($imm:expr) => {{
-        let imm_as_u32 = u32::from_ne_bytes(i32::from($imm).to_ne_bytes());
-        imm_as_u32
-    }};
-}
-pub use imm_as_u32;
-
 macro_rules! itype_instr {
     ($instruction:ident, $funct3:expr, $opcode:expr) => {
         #[macro_export]
         macro_rules! $instruction {
             ($rd:ident, $rs1:expr, $imm:expr) => {{
+                use crate::utils::interpret_i32_as_unsigned;
                 let rd = reg_num!($rd);
                 let rs1 = reg_num!($rs1);
-                let imm = imm_as_u32!($imm);
-                itype!(imm, rs1, $funct3, rd, $opcode)
+                let imm = interpret_i32_as_unsigned($imm.into());
+                itype(imm, rs1, $funct3, rd, $opcode)
             }};
         }
         pub use $instruction;
@@ -104,9 +80,10 @@ macro_rules! csritype_instr {
         #[macro_export]
         macro_rules! $instruction {
             ($rd:ident, $source:expr, $imm:expr) => {{
+                use crate::utils::interpret_i32_as_unsigned;
                 let rd = reg_num!($rd);
-                let imm = imm_as_u32!($imm);
-                itype!(imm, $source, $funct3, rd, $opcode)
+                let imm = interpret_i32_as_unsigned($imm.into());
+                itype(imm, $source, $funct3, rd, $opcode)
             }};
         }
         pub use $instruction;
@@ -122,8 +99,8 @@ macro_rules! shift_instr {
             ($rd:ident, $rs1:expr, $imm:expr) => {{
                 let rd = reg_num!($rd);
                 let rs1 = reg_num!($rs1);
-                let imm = shifts_imm_field!($imm, $upper);
-                itype!(imm, rs1, $funct3, rd, $opcode)
+                let imm = shifts_imm_field($imm, $upper);
+                itype(imm, rs1, $funct3, rd, $opcode)
             }};
         }
         pub use $instruction;
@@ -138,7 +115,7 @@ macro_rules! rtype_instr {
                 let rd = reg_num!($rd);
                 let rs1 = reg_num!($rs1);
                 let rs2 = reg_num!($rs2);
-                rstype!($funct7, rs2, rs1, $funct3, rd, $opcode)
+                rstype($funct7, rs2, rs1, $funct3, rd, $opcode)
             }};
         }
         pub use $instruction;
@@ -150,12 +127,13 @@ macro_rules! stype_instr {
         #[macro_export]
         macro_rules! $instruction {
             ($rs2:expr, $rs1:expr, $imm:expr) => {{
+                use crate::utils::{extract_field, interpret_i32_as_unsigned};
                 let rs1 = reg_num!($rs1);
                 let rs2 = reg_num!($rs2);
-                let imm = imm_as_u32!($imm);
-                let imm11_5 = extract_field!(imm, 11, 5);
-                let imm4_0 = extract_field!(imm, 4, 0);
-                rstype!(imm11_5, rs2, rs1, $funct3, imm4_0, $opcode)
+                let imm = interpret_i32_as_unsigned($imm);
+                let imm11_5 = extract_field(imm, 11, 5);
+                let imm4_0 = extract_field(imm, 4, 0);
+                rstype(imm11_5, rs2, rs1, $funct3, imm4_0, $opcode)
             }};
         }
         pub use $instruction;
@@ -167,47 +145,35 @@ macro_rules! stype_instr {
 /// uses the lower 5 bits for the shift amount (shamt)
 /// and the upper 7 bits to distinguish between arithmetical
 /// and logical right shift
-#[macro_export]
-macro_rules! shifts_imm_field {
-    ($shamt:expr, $upper:expr) => {{
-        let shamt = extract_field!($shamt, 4, 0);
-        ($upper << 5) | shamt
-    }};
+pub fn shifts_imm_field(shamt: u32, upper: u32) -> u32 {
+    let shamt = extract_field(shamt, 4, 0);
+    (upper << 5) | shamt
 }
-pub use shifts_imm_field;
 
 /// Takes an immediate and shuffles it into the
 /// format required for the 20-bit field of the
 /// U-type instruction (making it J-type)
-#[macro_export]
-macro_rules! jtype_imm_field {
-    ($imm:expr) => {{
-        let imm = imm_as_u32!($imm);
-        let imm20 = extract_field!(imm, 20, 20);
-        let imm19_12 = extract_field!(imm, 19, 12);
-        let imm11 = extract_field!(imm, 11, 11);
-        let imm10_1 = extract_field!(imm, 10, 1);
-        (imm20 << 19) | (imm10_1 << 9) | (imm11 << 8) | imm19_12
-    }};
+pub fn jtype_imm_field(imm: i32) -> u32 {
+    let imm = interpret_i32_as_unsigned(imm);
+    let imm20 = extract_field(imm, 20, 20);
+    let imm19_12 = extract_field(imm, 19, 12);
+    let imm11 = extract_field(imm, 11, 11);
+    let imm10_1 = extract_field(imm, 10, 1);
+    (imm20 << 19) | (imm10_1 << 9) | (imm11 << 8) | imm19_12
 }
-pub use jtype_imm_field;
 
 /// Returns (a, b) suitable for use with rstype for
 /// the conditional branch instructions (btype)
-#[macro_export]
-macro_rules! btype_imm_fields {
-    ($imm:expr) => {{
-        let imm = imm_as_u32!($imm);
-        let imm12 = extract_field!(imm, 12, 12);
-        let imm11 = extract_field!(imm, 11, 11);
-        let imm10_5 = extract_field!(imm, 10, 5);
-        let imm4_1 = extract_field!(imm, 4, 1);
-        let a = (imm12 << 6) | imm10_5;
-        let b = (imm4_1 << 1) | imm11;
-        (a, b)
-    }};
+pub fn btype_imm_fields(imm: i32) -> (u32, u32) {
+    let imm = interpret_i32_as_unsigned(imm);
+    let imm12 = extract_field(imm, 12, 12);
+    let imm11 = extract_field(imm, 11, 11);
+    let imm10_5 = extract_field(imm, 10, 5);
+    let imm4_1 = extract_field(imm, 4, 1);
+    let a = (imm12 << 6) | imm10_5;
+    let b = (imm4_1 << 1) | imm11;
+    (a, b)
 }
-pub use btype_imm_fields;
 
 macro_rules! btype_instr {
     ($instruction:ident, $funct3:expr, $opcode:expr) => {
@@ -216,8 +182,8 @@ macro_rules! btype_instr {
             ($rs1:expr, $rs2:expr, $imm:expr) => {{
                 let rs1 = reg_num!($rs1);
                 let rs2 = reg_num!($rs2);
-                let (a, b) = btype_imm_fields!($imm);
-                rstype!(a, rs2, rs1, $funct3, b, $opcode)
+                let (a, b) = btype_imm_fields($imm);
+                rstype(a, rs2, rs1, $funct3, b, $opcode)
             }};
         }
         pub use $instruction;
@@ -228,8 +194,8 @@ macro_rules! btype_instr {
 macro_rules! jal {
     ($rd:expr, $imm:expr) => {{
         let rd = reg_num!($rd);
-        let imm = jtype_imm_field!($imm);
-        ujtype!(imm, rd, 0b1101111)
+        let imm = jtype_imm_field($imm);
+        ujtype(imm, rd, 0b1101111)
     }};
 }
 pub use jal;
@@ -242,9 +208,10 @@ macro_rules! utype_instr {
         #[macro_export]
         macro_rules! $instruction {
             ($rd:expr, $imm:expr) => {{
+                use crate::utils::interpret_i32_as_unsigned;
                 let rd = reg_num!($rd);
-                let imm = imm_as_u32!($imm);
-                ujtype!(imm, rd, $opcode)
+                let imm = interpret_i32_as_unsigned($imm);
+                ujtype(imm, rd, $opcode)
             }};
         }
         pub use $instruction;

@@ -1,13 +1,12 @@
 use crate::{
     define_branch_printer, define_load_printer, define_reg_imm_printer,
     define_reg_reg_printer, define_store_printer,
-    fields::sign_extend,
-    hart::{machine::Exception, memory::Wordsize},
     instr_type::{
         decode_btype, decode_itype, decode_jtype, decode_rtype, decode_stype,
         decode_utype, Itype, Rtype, SBtype, UJtype,
     },
-    interpret_i32_as_unsigned, interpret_u32_as_signed,
+    platform::{machine::Exception, memory::Wordsize},
+    utils::{interpret_i32_as_unsigned, interpret_u32_as_signed, sign_extend},
 };
 
 use super::{eei::Eei, Instr};
@@ -226,8 +225,8 @@ pub fn blt<E: Eei>() -> Instr<E> {
     fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src1, src2, offset) = get_branch_data(eei, instr);
         let branch_taken = {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
+            let src1 = interpret_u32_as_signed(src1);
+            let src2 = interpret_u32_as_signed(src2);
             src1 < src2
         };
         do_branch(eei, branch_taken, offset)?;
@@ -241,8 +240,8 @@ pub fn bge<E: Eei>() -> Instr<E> {
     fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src1, src2, offset) = get_branch_data(eei, instr);
         let branch_taken = {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
+            let src1 = interpret_u32_as_signed(src1);
+            let src2 = interpret_u32_as_signed(src2);
             src1 >= src2
         };
         do_branch(eei, branch_taken, offset)?;
@@ -455,8 +454,8 @@ pub fn slti<E: Eei>() -> Instr<E> {
     fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src, dest, i_immediate) = reg_imm_values(eei, instr);
         let value = {
-            let src: i32 = interpret_u32_as_signed!(src);
-            let i_immediate: i32 = interpret_u32_as_signed!(i_immediate);
+            let src = interpret_u32_as_signed(src);
+            let i_immediate = interpret_u32_as_signed(i_immediate);
             (src < i_immediate) as u32
         };
         eei.set_x(dest, value);
@@ -543,8 +542,8 @@ pub fn srai<E: Eei>() -> Instr<E> {
     fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src, dest, i_immediate) = reg_imm_values(eei, instr);
         let value = {
-            let src: i32 = interpret_u32_as_signed!(src);
-            interpret_i32_as_unsigned!(src >> (0x1f & i_immediate))
+            let src = interpret_u32_as_signed(src);
+            interpret_i32_as_unsigned(src >> (0x1f & i_immediate))
         };
         eei.set_x(dest, value);
         eei.increment_pc();
@@ -593,8 +592,8 @@ pub fn slt<E: Eei>() -> Instr<E> {
     fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src1, src2, dest) = reg_reg_values(eei, instr);
         let value = {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
+            let src1 = interpret_u32_as_signed(src1);
+            let src2 = interpret_u32_as_signed(src2);
             (src1 < src2) as u32
         };
         eei.set_x(dest, value);
@@ -681,8 +680,8 @@ pub fn sra<E: Eei>() -> Instr<E> {
     fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src1, src2, dest) = reg_reg_values(eei, instr);
         let value = {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            interpret_i32_as_unsigned!(src1 >> (0x1f & src2))
+            let src1 = interpret_u32_as_signed(src1);
+            interpret_i32_as_unsigned(src1 >> (0x1f & src2))
         };
         eei.set_x(dest, value);
         eei.increment_pc();

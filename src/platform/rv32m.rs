@@ -1,8 +1,8 @@
 use crate::{
     define_reg_reg_printer,
-    hart::machine::Exception,
     instr_type::{decode_rtype, Rtype},
-    interpret_u32_as_signed,
+    platform::machine::Exception,
+    utils::interpret_u32_as_signed,
 };
 
 use super::{eei::Eei, Instr};
@@ -22,8 +22,8 @@ pub fn mul<E: Eei>() -> Instr<E> {
     fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src1, src2, dest) = reg_reg_values(eei, instr);
         let value = {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
+            let src1 = interpret_u32_as_signed(src1);
+            let src2 = interpret_u32_as_signed(src2);
             src1.wrapping_mul(src2) as u32
         };
         eei.set_x(dest, value);
@@ -38,8 +38,8 @@ pub fn mulh<E: Eei>() -> Instr<E> {
     fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src1, src2, dest) = reg_reg_values(eei, instr);
         let value = {
-            let src1: i64 = interpret_u32_as_signed!(src1).into();
-            let src2: i64 = interpret_u32_as_signed!(src2).into();
+            let src1: i64 = interpret_u32_as_signed(src1).into();
+            let src2: i64 = interpret_u32_as_signed(src2).into();
             (0xffff_ffff & (src1.wrapping_mul(src2) >> 32))
                 .try_into()
                 .unwrap()
@@ -56,7 +56,7 @@ pub fn mulhsu<E: Eei>() -> Instr<E> {
     fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src1, src2, dest) = reg_reg_values(eei, instr);
         let value = {
-            let src1: i64 = interpret_u32_as_signed!(src1).into();
+            let src1: i64 = interpret_u32_as_signed(src1).into();
             let src2: i64 = src2.into();
             (0xffff_ffff & (src1.wrapping_mul(src2) >> 32))
                 .try_into()
@@ -92,8 +92,8 @@ pub fn div<E: Eei>() -> Instr<E> {
     pub fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src1, src2, dest) = reg_reg_values(eei, instr);
         let value = {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
+            let src1 = interpret_u32_as_signed(src1);
+            let src2 = interpret_u32_as_signed(src2);
             // Put wrapping_div for consistency, but not sure what
             // wrapping div means for ints (same comment for rem)
             src1.wrapping_div(src2) as u32
@@ -122,8 +122,8 @@ pub fn rem<E: Eei>() -> Instr<E> {
     pub fn executer<E: Eei>(eei: &mut E, instr: u32) -> Result<(), Exception> {
         let (src1, src2, dest) = reg_reg_values(eei, instr);
         let value = {
-            let src1: i32 = interpret_u32_as_signed!(src1);
-            let src2: i32 = interpret_u32_as_signed!(src2);
+            let src1 = interpret_u32_as_signed(src1);
+            let src2 = interpret_u32_as_signed(src2);
             src1.wrapping_rem(src2) as u32
         };
         eei.set_x(dest, value);
