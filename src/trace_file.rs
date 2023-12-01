@@ -195,7 +195,7 @@ pub trait TraceLoadable {
 }
 
 /// Load a trace file from file
-fn load_trace<L: TraceLoadable>(loadable: &mut L, trace_file_path: String) -> Result<(), TraceFileError>{
+pub fn load_trace<L: TraceLoadable>(loadable: &mut L, trace_file_path: String) -> Result<(), TraceFileError>{
 
     let file = File::open("out.trace").expect("file should exist");
     let reader = BufReader::new(file);

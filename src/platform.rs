@@ -26,14 +26,12 @@
 //! for this platform must write values to the trap vector table (part
 //! of the EEPROM memory map.
 
-use std::collections::HashMap;
-
 use queues::{IsQueue, Queue};
 
 use crate::{
     decode::Decoder,
     elf_utils::{ElfError, ElfLoadable, FullSymbol},
-    utils::mask,
+    utils::mask, trace_file::{TraceLoadable, Section},
 };
 
 use self::{
@@ -103,6 +101,23 @@ impl ElfLoadable for Platform {
 
     /// Ignore symbols
     fn load_symbols(&mut self, _symbols: Vec<FullSymbol>) {}
+}
+
+impl TraceLoadable for Platform {
+
+    /// Load the .eeprom section into memory
+    fn push(&mut self, section: &Section) {
+	match section {
+	    Section::Eeprom { section_data, .. } => {
+		for (addr, instr) in section_data.iter() {
+		    self.memory
+			.write((*addr).into(), (*instr).into(), Wordsize::Word)
+			.expect("should work, address is 32-bit");
+		}
+	    }
+	    // Ignore all other sections (put _ here when there are more)
+	}
+    }
 }
 
 impl Platform {
@@ -446,10 +461,13 @@ impl Eei for Platform {
 #[cfg(test)]
 mod tests {
 
+    use std::path::PathBuf;
+
     use super::*;
     use crate::encode::*;
     use crate::platform::csr::{CSR_MARCHID, CSR_MSCRATCH, CSR_MSTATUS};
     use crate::platform::machine::{Trap, MSTATUS_MIE};
+    use crate::trace_file::load_trace;
     use crate::utils::interpret_i32_as_unsigned;
 
     /// Simple wrapper to load 4 consecutive bytes
@@ -1569,5 +1587,16 @@ mod tests {
         assert_eq!(x1, 1);
         assert_eq!(platform.pc, 4);
         Ok(())
+    }
+
+    #[test]
+    fn check_hello_trace() {
+	let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+	d.push("test_traces/hello.trace");
+	let trace_file_path = d.into_os_string().into_string().unwrap();
+        let mut platform = Platform::new();
+	load_trace(&mut platform, trace_file_path).expect("should work");
+	println!("{:?}", platform);
+	assert!(false);
     }
 }
