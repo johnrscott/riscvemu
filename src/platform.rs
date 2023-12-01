@@ -26,11 +26,13 @@
 //! for this platform must write values to the trap vector table (part
 //! of the EEPROM memory map.
 
+use std::collections::HashMap;
+
 use queues::{IsQueue, Queue};
 
 use crate::{
     decode::Decoder,
-    elf_utils::{ElfLoadError, ElfLoadable},
+    elf_utils::{ElfError, ElfLoadable, FullSymbol},
     utils::mask,
 };
 
@@ -88,9 +90,9 @@ pub struct Platform {
 impl ElfLoadable for Platform {
     /// Write a byte to the EEPROM region of the platform. Returns an
     /// error on an attempt to write anything other than the eeprom region
-    fn write_byte(&mut self, addr: u32, data: u8) -> Result<(), ElfLoadError> {
+    fn write_byte(&mut self, addr: u32, data: u8) -> Result<(), ElfError> {
         if !self.pma_checker.in_eeprom(addr, 1) {
-            Err(ElfLoadError::NonWritable(addr))
+            Err(ElfError::NonWritable(addr))
         } else {
             self.memory
                 .write(addr.into(), data.into(), Wordsize::Byte)
@@ -98,6 +100,9 @@ impl ElfLoadable for Platform {
             Ok(())
         }
     }
+
+    /// Ignore symbols
+    fn load_symbols(&mut self, _symbols: Vec<FullSymbol>) {}
 }
 
 impl Platform {

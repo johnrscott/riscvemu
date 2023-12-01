@@ -6,5 +6,6 @@ pub mod encode;
 pub mod instr_type;
 pub mod opcodes;
 pub mod platform;
+pub mod trace_file;
 
 pub mod utils;

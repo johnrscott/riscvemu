@@ -1,9 +1,7 @@
 	.text
 	.section .text.startup
 
-	// _start symbol will be placed at memory address 0,
-	// which is where execution will begin
-	.global _start
+	.global _vector_table
 _vector_table:
 	j _setup_stack // reset vector
 	j _nmi_handler // NMI vector
@@ -21,6 +19,7 @@ _vector_table:
 	j _external_isr // machine external interrupt vector
 	
 
+	.global _setup_stack
 _setup_stack:
 	// Full memory is 8 kiB long (first invalid address is
 	// 0x0002_2000), stack pointer sp must be 16-byte aligned
