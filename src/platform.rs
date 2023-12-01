@@ -31,7 +31,8 @@ use queues::{IsQueue, Queue};
 use crate::{
     decode::Decoder,
     elf_utils::{ElfError, ElfLoadable, FullSymbol},
-    utils::mask, trace_file::{TraceLoadable, Section},
+    trace_file::{Section, TraceLoadable},
+    utils::mask,
 };
 
 use self::{
@@ -104,19 +105,19 @@ impl ElfLoadable for Platform {
 }
 
 impl TraceLoadable for Platform {
-
     /// Load the .eeprom section into memory
     fn push(&mut self, section: &Section) {
-	match section {
-	    Section::Eeprom { section_data, .. } => {
-		for (addr, instr) in section_data.iter() {
-		    self.memory
-			.write((*addr).into(), (*instr).into(), Wordsize::Word)
-			.expect("should work, address is 32-bit");
-		}
-	    }
-	    // Ignore all other sections (put _ here when there are more)
-	}
+        match section {
+            Section::Eeprom { section_data, .. } => {
+                for (addr, instr) in section_data.iter() {
+                    self.memory
+                        .write((*addr).into(), (*instr).into(), Wordsize::Word)
+                        .expect("should work, address is 32-bit");
+                }
+            }
+            // Ignore all other sections (put _ here when there are more)
+            _ => (),
+        }
     }
 }
 
@@ -1591,12 +1592,13 @@ mod tests {
 
     #[test]
     fn check_hello_trace() {
-	let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-	d.push("test_traces/hello.trace");
-	let trace_file_path = d.into_os_string().into_string().unwrap();
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_traces/hello.trace");
+        let trace_file_path = d.into_os_string().into_string().unwrap();
         let mut platform = Platform::new();
-	load_trace(&mut platform, trace_file_path).expect("should work");
-	println!("{:?}", platform);
-	assert!(false);
+        let trace_points =
+            load_trace(&mut platform, trace_file_path).expect("should work");
+        println!("{trace_points:?}");
+        assert!(false);
     }
 }

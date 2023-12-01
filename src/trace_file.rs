@@ -1,4 +1,3 @@
-use itertools::{Itertools, PeekingNext};
 use crate::decode::Decoder;
 use crate::elf_utils::{load_elf, ElfError, ElfLoadable, FullSymbol};
 use crate::platform::arch::{
@@ -6,7 +5,8 @@ use crate::platform::arch::{
 };
 use crate::platform::{Instr, Platform};
 use crate::utils::mask;
-use std::collections::BTreeMap;
+use itertools::{Itertools, PeekingNext};
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader, LineWriter};
 use thiserror::Error;
@@ -22,18 +22,18 @@ pub enum TraceFileError {
     #[error("error processing ELF file: {0}")]
     ElfError(ElfError),
     #[error("Trace file I/O error: {0}")]
-    IoError(String)
+    IoError(String),
 }
 
 impl From<ElfError> for TraceFileError {
     fn from(e: ElfError) -> Self {
-	Self::ElfError(e)
+        Self::ElfError(e)
     }
 }
 
 impl From<io::Error> for TraceFileError {
     fn from(e: io::Error) -> Self {
-	Self::IoError(e.to_string())
+        Self::IoError(e.to_string())
     }
 }
 
@@ -71,10 +71,21 @@ fn get_addr_instr_tuple(non_comment_line: String) -> (u32, u32) {
 }
 
 #[derive(Debug)]
+pub enum TraceData {
+    String(String),
+    Integer(u32),
+}
+
+#[derive(Debug)]
 pub enum Section {
     Eeprom {
         section_data: BTreeMap<u32, u32>,
         symbols: Vec<FullSymbol>,
+    },
+    Trace {
+	/// The value of mcycle at which this trace data is valid
+	cycle: u64,
+        data: HashMap<String, TraceData>,
     },
 }
 
@@ -121,9 +132,7 @@ fn get_symbol_at_address(
     addr: u32,
     symbols: &Vec<FullSymbol>,
 ) -> Option<&FullSymbol> {
-    symbols
-        .iter()
-        .find(|&symbol| symbol.value == addr)
+    symbols.iter().find(|&symbol| symbol.value == addr)
 }
 
 fn write_section(file: &mut LineWriter<File>, section: Section) {
@@ -140,15 +149,12 @@ fn write_section(file: &mut LineWriter<File>, section: Section) {
         } => {
             file.write_all(b".eeprom\n").expect("should work");
             for (addr, instr) in section_data.into_iter() {
-
                 // Check for a function label at this address
                 if let Some(symbol) = get_symbol_at_address(addr, &symbols) {
                     let name = symbol.name.clone().unwrap();
-                    file.write_all(
-                        format!("\n# {name}\n").as_bytes(),
-                    )
-                    .expect("should write");
-                }		
+                    file.write_all(format!("\n# {name}\n").as_bytes())
+                        .expect("should write");
+                }
 
                 let asm = if let Ok(Instr { printer, .. }) =
                     decoder.get_exec(instr)
@@ -172,19 +178,22 @@ where
     I: Iterator<Item = String> + PeekingNext,
 {
     if let Some(first_line) = lines.next() {
-        match first_line.as_ref() {
-            ".eeprom" => {
-                let section_data = lines
-                    .peeking_take_while(|line| !is_section_header(line))
-                    .map(get_addr_instr_tuple)
-                    .collect();
-                Ok(Section::Eeprom {
-                    section_data,
-                    symbols: Vec::new(),
-                })
-            }
-            _ => Err(TraceFileError::UnrecognisedSection(first_line)),
-        }
+        if first_line == ".eeprom" {
+            let section_data = lines
+                .peeking_take_while(|line| !is_section_header(line))
+                .map(get_addr_instr_tuple)
+                .collect();
+            Ok(Section::Eeprom {
+                section_data,
+                symbols: Vec::new(),
+            })
+	} else if first_line.starts_with(".trace") {
+	    let cycle = 0;
+	    let data = HashMap::new();
+	    Ok(Section::Trace { cycle, data })
+	} else {
+            Err(TraceFileError::UnrecognisedSection(first_line))
+	}
     } else {
         Err(TraceFileError::MissingSectionHeading)
     }
@@ -194,11 +203,16 @@ pub trait TraceLoadable {
     fn push(&mut self, section: &Section);
 }
 
-/// Load a trace file from file
-pub fn load_trace<L: TraceLoadable>(loadable: &mut L, trace_file_path: String) -> Result<(), TraceFileError>{
-
-    let file = File::open("out.trace").expect("file should exist");
+/// Load a trace file from file. Returns the set of trace points (the
+/// sections that are not the .eeprom section)
+pub fn load_trace<L: TraceLoadable>(
+    loadable: &mut L,
+    trace_file_path: String,
+) -> Result<Vec<Section>, TraceFileError> {
+    let file = File::open(trace_file_path)?;
     let reader = BufReader::new(file);
+
+    let mut trace_points = Vec::new();
 
     let mut iter = reader
         .lines()
@@ -209,8 +223,10 @@ pub fn load_trace<L: TraceLoadable>(loadable: &mut L, trace_file_path: String) -
     while iter.peek().is_some() {
         match read_section(&mut iter) {
             Ok(section) => {
-                println!("{section:?}");
-                loadable.push(&section);
+                match section {
+                    Section::Eeprom { .. } => loadable.push(&section),
+                    Section::Trace { .. } => trace_points.push(section),
+                }
             }
             Err(e) => match e {
                 TraceFileError::UnrecognisedSection(name) => {
@@ -220,12 +236,14 @@ pub fn load_trace<L: TraceLoadable>(loadable: &mut L, trace_file_path: String) -
             },
         }
     }
-    
-    
-    Ok(())
+
+    Ok(trace_points)
 }
 
-pub fn elf_to_trace_file(elf_path_in: String, trace_path_out: String) -> Result<(), TraceFileError> {
+pub fn elf_to_trace_file(
+    elf_path_in: String,
+    trace_path_out: String,
+) -> Result<(), TraceFileError> {
     let mut section = Section::new_eeprom();
     load_elf(&mut section, &elf_path_in)?;
 

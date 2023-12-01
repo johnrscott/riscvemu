@@ -1,5 +1,5 @@
-use riscvemu::trace_file::elf_to_trace_file;
 use clap::Parser;
+use riscvemu::trace_file::elf_to_trace_file;
 
 /// Program to convert an ELF executable file to a trace image file
 ///
@@ -22,12 +22,34 @@ use clap::Parser;
 /// ADDR INSTR # optional comment
 ///
 /// Addresses where the memory is zero can be omitted. All numbers in
-/// the file are in hexadecimal, and are not prefixed by 0x. Numbers
-/// may be padded to 8 characters.
+/// the .eeprom section are in hexadecimal, and are not prefixed by
+/// 0x. Numbers may be padded to 8 characters.
+///
+/// The other sections in the file are trace points, which describe
+/// the state of the core at a particular cycle. The sections are
+/// called .trace.<cycle>, where <cycle> is the value of the 64-bit
+/// mcycle register. The execution model assumes mcycle is incremented
+/// after each instruction is executed; for example, mcycle=0
+/// corresponds to the reset state of the processor (after no
+/// instructions have been retired), and mcycle=1 is the state after
+/// one instruction has executed.
+///
+/// Lines in the .trace.* section have the format:
+///
+/// KEY VALUE # optional comment
+///
+/// The key names a property of the processor, without quotes (for
+/// example x3 represents a register, pc means the program counter,
+/// and uart means the characters received over the debug UART). The
+/// value is the expected state of the property. Strings are contained
+/// in quotes (for example, uart "Hello World"), and integers are
+/// decimal by default (and may be signed), or hexademical (and
+/// unsigned) if they are prefixed by 0x.
+///
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
 struct Args {
-    /// Path to input ELF file 
+    /// Path to input ELF file
     #[arg(short, long)]
     input: String,
 
@@ -39,7 +61,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
     match elf_to_trace_file(args.input.clone(), args.output) {
-	Err(e) => println!("{e}"),
-	Ok(_) => ()
+        Err(e) => println!("{e}"),
+        Ok(_) => (),
     }
 }
