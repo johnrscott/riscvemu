@@ -1,4 +1,8 @@
 use itertools::{Itertools, PeekingNext};
+use riscvemu::decode::Decoder;
+use riscvemu::platform::{Instr, Platform};
+use riscvemu::platform::arch::{make_rv32i, make_rv32m, make_rv32zicsr, make_rv32priv};
+use riscvemu::utils::mask;
 use riscvemu::elf_utils::{load_elf, ElfLoadable, ElfLoadError};
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -79,12 +83,21 @@ impl ElfLoadable for Section {
 }
 
 fn write_section(file: &mut LineWriter<File>, section: Section) {
+
+    let mut decoder = Decoder::<Instr<Platform>>::new(mask(7));
+    make_rv32i(&mut decoder).expect("adding instructions should work");
+    make_rv32m(&mut decoder).expect("adding instructions should work");
+    make_rv32zicsr(&mut decoder).expect("adding instructions should work");
+    make_rv32priv(&mut decoder).expect("adding instructions should work");
+
     match section {
         Section::Eeprom(map) => {
             file.write_all(b".eeprom\n").expect("should work");
             for (addr, instr) in map.into_iter() {
+		let Instr { printer, .. } = decoder.get_exec(instr).unwrap();
+		let asm = printer(instr);
                 file.write_all(
-                    format!("{addr:0>8x}  {instr:0>8x}  // comment\n")
+                    format!("{addr:0>8x}  {instr:0>8x}  # {asm}\n")
                         .as_bytes(),
                 )
                 .expect("should write")
@@ -115,7 +128,7 @@ where
 }
 
 fn main() {
-    let file = File::open("test.trace").expect("file should exist");
+    let file = File::open("out.trace").expect("file should exist");
     let reader = BufReader::new(file);
 
     let mut iter = reader
