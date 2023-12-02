@@ -19,6 +19,10 @@ pub enum TraceFileError {
     MissingEepromSection,
     #[error("section {0} is not recognised/implemented")]
     UnrecognisedSection(String),
+    #[error("error parsing cycle in .trace section {0}")]
+    ParseTraceCycleFailed(String),
+    #[error("error parsing integer value {0}")]
+    ParseTraceIntFailed(String),
     #[error("error processing ELF file: {0}")]
     ElfError(ElfError),
     #[error("Trace file I/O error: {0}")]
@@ -70,10 +74,33 @@ fn get_addr_instr_tuple(non_comment_line: String) -> (u32, u32) {
     (addr, instr)
 }
 
+fn get_trace_key_value_tuple(non_comment_line: String) -> Result<(String, TraceData), TraceFileError> {
+    let terms: Vec<&str> = non_comment_line.split_whitespace().collect();
+    if terms.len() != 2 {
+        panic!("Line length should be 2")
+    }
+    ;
+    let key = terms[0];
+    let value = TraceData::from(terms[1])?;
+    Ok((key.to_string(), value))
+}
+
 #[derive(Debug)]
 pub enum TraceData {
     String(String),
     Integer(u32),
+}
+
+impl TraceData {
+    fn from(string: &str) -> Result<Self, TraceFileError> {
+	if string.starts_with("\"") && string.ends_with("\"") {
+	    // It is a string
+	    Ok(Self::String(string.to_string()))
+	} else {
+	    let value: u32 = string.parse().map_err(|_| TraceFileError::ParseTraceIntFailed(string.to_string()))?;
+	    Ok(Self::Integer(value))
+	}
+    }
 }
 
 #[derive(Debug)]
@@ -83,8 +110,8 @@ pub enum Section {
         symbols: Vec<FullSymbol>,
     },
     Trace {
-	/// The value of mcycle at which this trace data is valid
-	cycle: u64,
+        /// The value of mcycle at which this trace data is valid
+        cycle: u64,
         data: HashMap<String, TraceData>,
     },
 }
@@ -187,13 +214,22 @@ where
                 section_data,
                 symbols: Vec::new(),
             })
-	} else if first_line.starts_with(".trace") {
-	    let cycle = 0;
-	    let data = HashMap::new();
-	    Ok(Section::Trace { cycle, data })
-	} else {
+        } else if first_line.starts_with(".trace") {
+            let cycle: u64 = first_line
+                .strip_prefix(".trace.")
+                .expect("prefix is present")
+                .parse()
+                .map_err(|_| {
+                    TraceFileError::ParseTraceCycleFailed(first_line)
+                })?;
+            let data = lines
+                .peeking_take_while(|line| !is_section_header(line))
+                .map(get_trace_key_value_tuple)
+                .collect();
+            Ok(Section::Trace { cycle, data })
+        } else {
             Err(TraceFileError::UnrecognisedSection(first_line))
-	}
+        }
     } else {
         Err(TraceFileError::MissingSectionHeading)
     }
@@ -222,12 +258,10 @@ pub fn load_trace<L: TraceLoadable>(
         .peekable();
     while iter.peek().is_some() {
         match read_section(&mut iter) {
-            Ok(section) => {
-                match section {
-                    Section::Eeprom { .. } => loadable.push(&section),
-                    Section::Trace { .. } => trace_points.push(section),
-                }
-            }
+            Ok(section) => match section {
+                Section::Eeprom { .. } => loadable.push(&section),
+                Section::Trace { .. } => trace_points.push(section),
+            },
             Err(e) => match e {
                 TraceFileError::UnrecognisedSection(name) => {
                     println!("Warning: unrecognised section {name}")
