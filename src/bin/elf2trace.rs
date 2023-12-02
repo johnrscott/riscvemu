@@ -46,6 +46,14 @@ use riscvemu::trace_file::elf_to_trace_file;
 /// decimal by default (and may be signed), or hexademical (and
 /// unsigned) if they are prefixed by 0x.
 ///
+/// Strings may contains standard ASCII escape characters. The list
+/// of supported escape sequences is as follows:
+/// * \n: newline character
+///
+/// Trace points do not need to be listed in cycle order, but they
+/// will be checked in cycle order during emulation.
+
+///
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
 struct Args {

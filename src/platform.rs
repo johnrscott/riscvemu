@@ -32,7 +32,7 @@ use crate::{
     decode::Decoder,
     elf_utils::{ElfError, ElfLoadable, FullSymbol},
     trace_file::{
-        ExpectedProperty, Section, TraceCheck, TraceCheckFailed, TraceLoadable,
+        Property, Section, TraceCheck, TraceCheckFailed, TraceLoadable,
         TracePoint,
     },
     utils::mask,
@@ -108,27 +108,31 @@ impl TraceCheck for Platform {
             // Check the properties
             for property in trace_point.properties {
                 match &property {
-                    ExpectedProperty::Pc(pc) => {
+                    Property::Pc(pc) => {
                         if self.pc() != *pc {
                             return Err(TraceCheckFailed::FailedCheck {
                                 cycle: current,
-                                property,
+				found: Property::Pc(self.pc()),
+                                expected: property,
                             });
                         }
                     }
-                    ExpectedProperty::Reg { index, value } => {
+                    Property::Reg { index, value } => {
                         if self.x(*index) != *value {
                             return Err(TraceCheckFailed::FailedCheck {
                                 cycle: current,
-                                property,
+				found: Property::Reg{index: *index, value: *value},
+                                expected: property,
                             });
                         }
                     }
-		    ExpectedProperty::Uart(string) => {
-			if self.flush_uartout() != *string {
+		    Property::Uart(string) => {
+			let found = self.flush_uartout();
+			if found != *string {
                             return Err(TraceCheckFailed::FailedCheck {
                                 cycle: current,
-                                property
+				found: Property::Uart(found),
+                                expected: property,
                             });			    
 			}
 		    }

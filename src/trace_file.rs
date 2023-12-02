@@ -74,7 +74,7 @@ fn get_addr_instr_tuple(non_comment_line: String) -> (u32, u32) {
 
 fn get_trace_key_value_tuple(
     non_comment_line: String,
-) -> Result<ExpectedProperty, TraceFileError> {
+) -> Result<Property, TraceFileError> {
     let (key, value) = non_comment_line.split_once(char::is_whitespace).ok_or(
         TraceFileError::ParseTraceSectionFailed(non_comment_line.to_string()),
     )?;
@@ -83,14 +83,15 @@ fn get_trace_key_value_tuple(
         let pc: u32 = value.parse().map_err(|_| {
             TraceFileError::ParseTraceSectionFailed(value.to_string())
         })?;
-        Ok(ExpectedProperty::Pc(pc))
+        Ok(Property::Pc(pc))
     } else if key == "uart" {
         // Remove first and last quotes/speech marks characters
         // Note: no check is performed.
+	let value = value.replace("\\n", "\n");
         let mut chars = value.chars();
         chars.next();
         chars.next_back();
-        Ok(ExpectedProperty::Uart(chars.collect()))
+        Ok(Property::Uart(chars.collect()))
     } else {
         Err(TraceFileError::ParseTraceSectionFailed(value.to_string()))
     }
@@ -101,11 +102,12 @@ pub enum TraceCheckFailed {
     #[error("Cannot advance to cycle {required} from current value {current}")]
     CannotAdvanceToCycle { current: u64, required: u64 },
     #[error(
-        "Expected property {property:?} was not satisfied at cycle {cycle}"
+        "Expected property {expected:?}, found {found:?} at cycle {cycle}"
     )]
     FailedCheck {
         cycle: u64,
-        property: ExpectedProperty,
+        expected: Property,
+	found: Property 
     },
 }
 
@@ -123,7 +125,7 @@ pub trait TraceCheck {
 }
 
 #[derive(Debug)]
-pub enum ExpectedProperty {
+pub enum Property {
     /// Value of the program counter
     Pc(u32),
     /// The state of a register x{index} should be {value}
@@ -147,7 +149,7 @@ pub enum ExpectedProperty {
 #[derive(Debug)]
 pub struct TracePoint {
     pub cycle: u64,
-    pub properties: Vec<ExpectedProperty>,
+    pub properties: Vec<Property>,
 }
 
 #[derive(Debug)]
