@@ -112,7 +112,7 @@ impl TraceCheck for Platform {
                         if self.pc() != *pc {
                             return Err(TraceCheckFailed::FailedCheck {
                                 cycle: current,
-				found: Property::Pc(self.pc()),
+                                found: Property::Pc(self.pc()),
                                 expected: property,
                             });
                         }
@@ -121,21 +121,24 @@ impl TraceCheck for Platform {
                         if self.x(*index) != *value {
                             return Err(TraceCheckFailed::FailedCheck {
                                 cycle: current,
-				found: Property::Reg{index: *index, value: *value},
+                                found: Property::Reg {
+                                    index: *index,
+                                    value: *value,
+                                },
                                 expected: property,
                             });
                         }
                     }
-		    Property::Uart(string) => {
-			let found = self.flush_uartout();
-			if found != *string {
+                    Property::Uart(string) => {
+                        let found = self.flush_uartout();
+                        if found != *string {
                             return Err(TraceCheckFailed::FailedCheck {
                                 cycle: current,
-				found: Property::Uart(found),
+                                found: Property::Uart(found),
                                 expected: property,
-                            });			    
-			}
-		    }
+                            });
+                        }
+                    }
                 }
             }
 
@@ -1650,17 +1653,23 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn check_hello_trace() {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_traces/hello.trace");
-        let trace_file_path = d.into_os_string().into_string().unwrap();
-        let mut platform = Platform::new();
-        let trace_points =
-            load_trace(&mut platform, trace_file_path).expect("should work");
+    macro_rules! make_trace_test {
+        ($test_name:ident, $trace_file:expr) => {
+            #[test]
+            fn $test_name() {
+                let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+                d.push(format!("test_traces/{}", $trace_file));
+                let trace_file_path = d.into_os_string().into_string().unwrap();
+                let mut platform = Platform::new();
+                let trace_points = load_trace(&mut platform, trace_file_path)
+                    .expect("should work");
 
-        for trace_point in trace_points.into_iter() {
-            platform.check_trace_point(trace_point).unwrap()
+                for trace_point in trace_points.into_iter() {
+                    platform.check_trace_point(trace_point).unwrap()
+                }
+            }
         }
     }
+
+    make_trace_test!(check_reset_trace, "reset.trace");
 }

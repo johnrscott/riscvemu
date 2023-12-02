@@ -84,10 +84,23 @@ fn get_trace_key_value_tuple(
             TraceFileError::ParseTraceSectionFailed(value.to_string())
         })?;
         Ok(Property::Pc(pc))
+    } else if key.starts_with("x") {
+	// Remove first character and interpret number as register
+	// index
+	let mut chars = key.chars();
+	chars.next();
+        let reg_index_string: String = chars.collect();
+	let index: u8 = reg_index_string.parse().map_err(|_| {
+            TraceFileError::ParseTraceSectionFailed(value.to_string())
+	})?;
+	let value: u32 = value.parse().map_err(|_| {
+            TraceFileError::ParseTraceSectionFailed(value.to_string())
+	})?;
+        Ok(Property::Reg { index, value })
     } else if key == "uart" {
         // Remove first and last quotes/speech marks characters
         // Note: no check is performed.
-	let value = value.replace("\\n", "\n");
+        let value = value.replace("\\n", "\n");
         let mut chars = value.chars();
         chars.next();
         chars.next_back();
@@ -107,7 +120,7 @@ pub enum TraceCheckFailed {
     FailedCheck {
         cycle: u64,
         expected: Property,
-	found: Property 
+        found: Property,
     },
 }
 
