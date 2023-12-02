@@ -243,5 +243,9 @@
 00000364  656d6974  # unknown/not instruction
 00000368  000a2172  # unknown/not instruction
 
-.trace.100000
+#.trace.100000
 uart  "Hello World!"
+
+# Reset state
+.trace.0
+pc  1

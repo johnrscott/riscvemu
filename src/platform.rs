@@ -31,7 +31,10 @@ use queues::{IsQueue, Queue};
 use crate::{
     decode::Decoder,
     elf_utils::{ElfError, ElfLoadable, FullSymbol},
-    trace_file::{Section, TraceLoadable},
+    trace_file::{
+        ExpectedProperty, Section, TraceCheck, TraceCheckFailed, TraceLoadable,
+        TracePoint,
+    },
     utils::mask,
 };
 
@@ -84,6 +87,57 @@ pub struct Platform {
     pc: u32,
     trace: bool,
     uart_out: Queue<char>,
+}
+
+impl TraceCheck for Platform {
+    fn check_trace_point(
+        &mut self,
+        trace_point: TracePoint,
+    ) -> Result<(), TraceCheckFailed> {
+        let mut current = self.machine_interface.machine.mcycle();
+        let required = trace_point.cycle;
+        if current > required {
+            Err(TraceCheckFailed::CannotAdvanceToCycle { current, required })
+        } else {
+            // Advance to required trace point
+            while current < required {
+                self.step();
+                current = self.machine_interface.machine.mcycle();
+            }
+
+            // Check the properties
+            for property in trace_point.properties {
+                match &property {
+                    ExpectedProperty::Pc(pc) => {
+                        if self.pc() != *pc {
+                            return Err(TraceCheckFailed::FailedCheck {
+                                cycle: current,
+                                property,
+                            });
+                        }
+                    }
+                    ExpectedProperty::Reg { index, value } => {
+                        if self.x(*index) != *value {
+                            return Err(TraceCheckFailed::FailedCheck {
+                                cycle: current,
+                                property,
+                            });
+                        }
+                    }
+		    ExpectedProperty::Uart(string) => {
+			if self.flush_uartout() != *string {
+                            return Err(TraceCheckFailed::FailedCheck {
+                                cycle: current,
+                                property
+                            });			    
+			}
+		    }
+                }
+            }
+
+            Ok(())
+        }
+    }
 }
 
 impl ElfLoadable for Platform {
@@ -463,6 +517,8 @@ impl Eei for Platform {
 mod tests {
 
     use std::path::PathBuf;
+
+    use itertools::Itertools;
 
     use super::*;
     use crate::encode::*;
@@ -1598,7 +1654,9 @@ mod tests {
         let mut platform = Platform::new();
         let trace_points =
             load_trace(&mut platform, trace_file_path).expect("should work");
-        println!("{trace_points:?}");
-        assert!(false);
+
+        for trace_point in trace_points.into_iter() {
+            platform.check_trace_point(trace_point).unwrap()
+        }
     }
 }

@@ -19,10 +19,8 @@ pub enum TraceFileError {
     MissingEepromSection,
     #[error("section {0} is not recognised/implemented")]
     UnrecognisedSection(String),
-    #[error("error parsing cycle in .trace section {0}")]
-    ParseTraceCycleFailed(String),
-    #[error("error parsing integer value {0}")]
-    ParseTraceIntFailed(String),
+    #[error("error parsing entry {0} in .trace section")]
+    ParseTraceSectionFailed(String),
     #[error("error processing ELF file: {0}")]
     ElfError(ElfError),
     #[error("Trace file I/O error: {0}")]
@@ -74,33 +72,82 @@ fn get_addr_instr_tuple(non_comment_line: String) -> (u32, u32) {
     (addr, instr)
 }
 
-fn get_trace_key_value_tuple(non_comment_line: String) -> Result<(String, TraceData), TraceFileError> {
-    let terms: Vec<&str> = non_comment_line.split_whitespace().collect();
-    if terms.len() != 2 {
-        panic!("Line length should be 2")
+fn get_trace_key_value_tuple(
+    non_comment_line: String,
+) -> Result<ExpectedProperty, TraceFileError> {
+    let (key, value) = non_comment_line.split_once(char::is_whitespace).ok_or(
+        TraceFileError::ParseTraceSectionFailed(non_comment_line.to_string()),
+    )?;
+    let value = value.trim();
+    if key == "pc" {
+        let pc: u32 = value.parse().map_err(|_| {
+            TraceFileError::ParseTraceSectionFailed(value.to_string())
+        })?;
+        Ok(ExpectedProperty::Pc(pc))
+    } else if key == "uart" {
+        // Remove first and last quotes/speech marks characters
+        // Note: no check is performed.
+        let mut chars = value.chars();
+        chars.next();
+        chars.next_back();
+        Ok(ExpectedProperty::Uart(chars.collect()))
+    } else {
+        Err(TraceFileError::ParseTraceSectionFailed(value.to_string()))
     }
-    ;
-    let key = terms[0];
-    let value = TraceData::from(terms[1])?;
-    Ok((key.to_string(), value))
+}
+
+#[derive(Debug, Error)]
+pub enum TraceCheckFailed {
+    #[error("Cannot advance to cycle {required} from current value {current}")]
+    CannotAdvanceToCycle { current: u64, required: u64 },
+    #[error(
+        "Expected property {property:?} was not satisfied at cycle {cycle}"
+    )]
+    FailedCheck {
+        cycle: u64,
+        property: ExpectedProperty,
+    },
+}
+
+/// Check where a property is satisfied at a particular clock cycle
+pub trait TraceCheck {
+    /// Check whether a property is satisfied
+    ///
+    /// This function advances to the specified cycle and then checks
+    /// the expected property is satisfied. If it is, Ok is returned;
+    /// otherwise, the reason for failure is returned
+    fn check_trace_point(
+        &mut self,
+        trace_point: TracePoint,
+    ) -> Result<(), TraceCheckFailed>;
 }
 
 #[derive(Debug)]
-pub enum TraceData {
-    String(String),
-    Integer(u32),
+pub enum ExpectedProperty {
+    /// Value of the program counter
+    Pc(u32),
+    /// The state of a register x{index} should be {value}
+    Reg { index: u8, value: u32 },
+    /// The UART buffer should have received this string
+    Uart(String),
 }
 
-impl TraceData {
-    fn from(string: &str) -> Result<Self, TraceFileError> {
-	if string.starts_with("\"") && string.ends_with("\"") {
-	    // It is a string
-	    Ok(Self::String(string.to_string()))
-	} else {
-	    let value: u32 = string.parse().map_err(|_| TraceFileError::ParseTraceIntFailed(string.to_string()))?;
-	    Ok(Self::Integer(value))
-	}
-    }
+/// This defines a check that should occur at a particular clock cycle
+///
+/// The clock cycle corresponds to the mcycle 64-bit register. If the
+/// device being modelled takes action on a rising clock edge
+/// (i.e. registers and flip-flops are rising-edge-triggered), then
+/// the state of the device under test is tested on clock falling
+/// edges. The mcycle register contains the number of rising edges
+/// that have occurred at this point since reset. Note that any
+/// computation performed on a rising edge of the clock uses the value
+/// of mcycle at the previous falling edge.
+///
+/// The properties to be tested are stored in the properties item.
+#[derive(Debug)]
+pub struct TracePoint {
+    pub cycle: u64,
+    pub properties: Vec<ExpectedProperty>,
 }
 
 #[derive(Debug)]
@@ -109,11 +156,7 @@ pub enum Section {
         section_data: BTreeMap<u32, u32>,
         symbols: Vec<FullSymbol>,
     },
-    Trace {
-        /// The value of mcycle at which this trace data is valid
-        cycle: u64,
-        data: HashMap<String, TraceData>,
-    },
+    Trace(TracePoint),
 }
 
 impl Section {
@@ -220,13 +263,15 @@ where
                 .expect("prefix is present")
                 .parse()
                 .map_err(|_| {
-                    TraceFileError::ParseTraceCycleFailed(first_line)
+                    TraceFileError::ParseTraceSectionFailed(first_line)
                 })?;
-            let data = lines
+            let properties_result: Result<Vec<_>, _> = lines
                 .peeking_take_while(|line| !is_section_header(line))
                 .map(get_trace_key_value_tuple)
                 .collect();
-            Ok(Section::Trace { cycle, data })
+            let properties = properties_result?;
+            let trace_point = TracePoint { cycle, properties };
+            Ok(Section::Trace(trace_point))
         } else {
             Err(TraceFileError::UnrecognisedSection(first_line))
         }
@@ -244,7 +289,7 @@ pub trait TraceLoadable {
 pub fn load_trace<L: TraceLoadable>(
     loadable: &mut L,
     trace_file_path: String,
-) -> Result<Vec<Section>, TraceFileError> {
+) -> Result<Vec<TracePoint>, TraceFileError> {
     let file = File::open(trace_file_path)?;
     let reader = BufReader::new(file);
 
@@ -260,7 +305,7 @@ pub fn load_trace<L: TraceLoadable>(
         match read_section(&mut iter) {
             Ok(section) => match section {
                 Section::Eeprom { .. } => loadable.push(&section),
-                Section::Trace { .. } => trace_points.push(section),
+                Section::Trace(trace_point) => trace_points.push(trace_point),
             },
             Err(e) => match e {
                 TraceFileError::UnrecognisedSection(name) => {
@@ -271,7 +316,12 @@ pub fn load_trace<L: TraceLoadable>(
         }
     }
 
-    Ok(trace_points)
+    let in_cycle_order = trace_points
+        .into_iter()
+        .sorted_by_key(|trace_point| trace_point.cycle)
+        .collect();
+
+    Ok(in_cycle_order)
 }
 
 pub fn elf_to_trace_file(
