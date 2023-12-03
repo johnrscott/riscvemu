@@ -1,18 +1,20 @@
 /* startup.S contains the code that runs first */
 STARTUP(startup.o)
 
-MEMORY {
-	instr : ORIGIN = 0x0, LENGTH = 4M,
-	io : ORIGIN = 0x10000, LENGTH = 0x80,
-	data : ORIGIN = 0x20000, LENGTH = 4M
-}
-
-
 SECTIONS {
-	 .text : {
-	       	 *(.text.startup)
-		 *(.text)
-		 } > instr
-    	 .data : { *(.data) } > data
-    	 .bss : { *(.bss) } > data
+	 .text : { *(.text) }
+
+	 . = 0x20000000;
+	 PROVIDE(__bss_start = .);
+	 .bss : { *(.bss) }
+	 .data : { *(.data) }
+
+	 /*
+	 See https://sourceware.org/newlib/ for the
+	 meaning of _end -- defined in sbrk_ stub,
+	 marks the end of the heap.
+	 */
+	 . = . + 1M;
+	 PROVIDE(_end = .);	
+	 PROVIDE(__global_pointer$ = 0);
 }

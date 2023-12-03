@@ -141,7 +141,6 @@ impl TraceCheck for Platform {
                     }
                 }
             }
-
             Ok(())
         }
     }

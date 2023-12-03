@@ -4,7 +4,7 @@ use std::io;
 use elf::abi::{
     SHF_ALLOC, SHN_COMMON, SHN_UNDEF, STB_GLOBAL, STB_HIPROC, STB_LOCAL,
     STB_LOPROC, STB_WEAK, STT_FILE, STT_FUNC, STT_HIPROC, STT_LOPROC,
-    STT_NOTYPE, STT_OBJECT, STT_SECTION,
+    STT_NOTYPE, STT_OBJECT, STT_SECTION, SHF_WRITE,
 };
 use elf::endian::AnyEndian;
 use elf::section::{SectionHeader, SectionHeaderTable};
@@ -305,6 +305,14 @@ pub trait ElfLoadable {
     fn load_symbols(&mut self, symbols: Vec<FullSymbol>);
 }
 
+fn alloc(section_flags: u64) -> bool {
+    section_flags & u64::from(SHF_ALLOC) != 0
+}
+
+fn write(section_flags: u64) -> bool {
+    section_flags & u64::from(SHF_WRITE) != 0
+}
+
 /// Read an ELF file from disk and load the alloc section (the ones
 /// meant to be present during program execution) into memory. Prints
 /// what it is doing.
@@ -316,9 +324,12 @@ pub fn load_elf<L: ElfLoadable>(
     let section_headers = elf_file.section_header_table()?;
 
     for header in section_headers.iter() {
-        // We are looking for executable sections to load into memory
+        // We are looking for executable sections to load into memory.
+	// For now, ignore the bss section (currently identified as
+	// anything that is writable, but this is probably not quite
+	// right). 
         let flags = header.sh_flags;
-        if flags & u64::from(SHF_ALLOC) != 0 {
+        if alloc(flags) && !write(flags) {
             let data = elf_file.section_data(&header)?;
             let section_load_address = header.sh_addr;
 
@@ -326,8 +337,7 @@ pub fn load_elf<L: ElfLoadable>(
                 let addr =
                     section_load_address + u64::try_from(offset).unwrap();
                 loadable
-                    .write_byte(addr.try_into().unwrap(), (*byte).into())
-                    .unwrap()
+                    .write_byte(addr.try_into().unwrap(), (*byte).into())?;
             }
         }
     }

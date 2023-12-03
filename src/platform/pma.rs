@@ -119,13 +119,13 @@ pub const MACHINE_SOFTWARE_INT_VECTOR: u32 = 0x0000_0014;
 pub const MACHINE_TIMER_INT_VECTOR: u32 = 0x0000_0024;
 pub const MACHINE_EXTERNAL_INT_VECTOR: u32 = 0x0000_0034;
 
-pub const MTIME_ADDR: u32 = 0x0001_0000;
-pub const MTIMEH_ADDR: u32 = 0x0001_0004;
-pub const MTIMECMP_ADDR: u32 = 0x0001_0008;
-pub const MTIMECMPH_ADDR: u32 = 0x0001_000c;
-pub const SOFTINTCTRL_ADDR: u32 = 0x0001_0010;
-pub const EXTINTCTRL_ADDR: u32 = 0x0001_0014;
-pub const UARTTX_ADDR: u32 = 0x0001_0018;
+pub const MTIME_ADDR: u32 = 0x1000_0000;
+pub const MTIMEH_ADDR: u32 = 0x1000_0004;
+pub const MTIMECMP_ADDR: u32 = 0x1000_0008;
+pub const MTIMECMPH_ADDR: u32 = 0x1000_000c;
+pub const SOFTINTCTRL_ADDR: u32 = 0x1000_0010;
+pub const EXTINTCTRL_ADDR: u32 = 0x1000_0014;
+pub const UARTTX_ADDR: u32 = 0x1000_0018;
 
 /// Models the PMA checker (section 3.6 privileged spec)
 ///

@@ -14,8 +14,14 @@ LDFLAGS=-march=$(ISA) -mabi=ilp32
 # for full information. trap.c is near the start of the list so that
 # the handlers are placed at low addresses, so that the jumps from the
 # trap vector table are in range.
-main.out: main.c trap.c startup.o interrupts.o linker.ld Makefile
-	$(CC) $(CFLAGS) -T linker.ld -flto -Os -Wall -Wextra -ffreestanding -nostartfiles interrupts.o interrupts.c trap.c main.c -o $@
+#
+# See https://gnu-mcu-eclipse.github.io/arch/riscv/programmer/ for a
+# description of the global pointer, which enables a memory
+# optimisation. Pass -Wl,--no-relax to disable it (you still need to
+# define __global_pointer$, but it can be zero)
+main.out: main.c trap.c startup.o newlib.c linker.ld Makefile
+	$(CC) $(CFLAGS) -T linker.ld -flto -Os -Wall -Wextra \
+		-Wl,--no-relax -ffreestanding main.c newlib.c -o $@
 
 startup.o: startup.S Makefile
 	$(CC) $(CFLAGS) -c $< -o startup.o
