@@ -27,8 +27,8 @@
 //! ### Read/execute (non-volatile memory)
 //!
 //! This region of memory stores the trap vector table
-//! (0x0000_0000-0x0000_0088), and approximately 8 KiB of instructions
-//! (0x0000_0088-0x0000_2000) and read-only data. The interrupt vector
+//! (0x0000_0000-0x0000_0088), and approximately 4 MiB of instructions
+//! (0x0000_0088-0x0040_0000) and read-only data. The interrupt vector
 //! table reserves space for the full set of 32 interrupts.
 //!
 //! | Address | Width | Description |
@@ -51,14 +51,14 @@
 //!
 //! ### Vacant (between non-volatile memory and I/O memory)
 //!
-//! The region 0x0000_2000-0x0001_0000 is vacant (no read/write/execute).
+//! The region 0x0040_0000-0x1000_0000 is vacant (no read/write/execute).
 //!
 //! These errors can be raised:
 //! * Instruction access fault (on attempt to fetch instruction from this region)
 //! * Load access fault (on attempt to load from this region)
 //! * Store access fault (on attempt to store to this region)
 //!
-//! ### Input/output and memory mapped registers (0x0001_0000-0x0001_0080)
+//! ### Input/output and memory mapped registers (0x1000_0000-0x1000_0080)
 //!
 //! This region has space for 32 4-byte memory mapped input/output
 //! devices (SPI and UART), memory mapped time registers, and
@@ -90,11 +90,11 @@
 //!
 //! ### Vacant (between  I/O memory and RAM)
 //!
-//! The region 0x0001_0080-0x0002_0000 is vacant (no
+//! The region 0x1000_0080-0x2000_0000 is vacant (no
 //! read/write/execute). The same errors as listed above in the
 //! previous vacant section are raised.
 //!
-//! ### 8 KiB Main memory (0x0002_0000-0x0002_2000)
+//! ### 4 MiB Main memory (0x2000_0000-0x2040_0000)
 //!
 //! Main memory supports read/write of byte, halfword (2 bytes), and
 //! word (4 bytes) access widths. Any alignment is valid.
@@ -104,29 +104,11 @@
 //! * Load address misaligned
 //! * Store address misaligned
 //!
-//! ### Vacant (above 0x0002_2000)
+//! ### Vacant (above 0x2040_0000)
 //!
 //! This is the region above RAM, and generates the same errors as the
 //! vacant regions above.
 //!
-
-//use thiserror::Error;
-
-// #[derive(Debug, Error)]
-// pub enum Exception {
-//     #[error("Attempted to fetch instruction from non-execute region")]
-//     InstructionAccessFault,
-//     #[error("Attempted to fetch instruction from non-four-byte-aligned address")]
-//     InstructionAddressMisaligned,
-//     #[error("Attempted to load data from region not supporting read access")]
-//     LoadAccessFault,
-//     #[error("Attempted to load data using an unaligned address")]
-//     LoadAddressMisaligned,
-//     #[error("Attempted to store data to region not supporting write access")]
-//     StoreAccessFault,
-//     #[error("Attempted to store data using an unaligned address")]
-//     StoreAddressMisaligned,
-// }
 
 use super::machine::Exception;
 
@@ -163,9 +145,9 @@ pub struct PmaChecker {
 }
 
 impl Default for PmaChecker {
-    /// Defaults to 8 KiB EEPROM device size and 8 KiB RAM device size
+    /// Defaults to 4 MiB EEPROM device size and 4 MiB RAM device size
     fn default() -> Self {
-        Self::new(8 * 1024, 8 * 1024)
+        Self::new(4 * 1024 * 1024, 4 * 1024 * 1024)
     }
 }
 
@@ -263,12 +245,12 @@ impl PmaChecker {
 
     /// True if address (and width) is fully in I/O region
     fn in_io(&self, addr: u32, width: u32) -> bool {
-        address_in_region(addr, width, 0x0001_0000, 0x0001_0080)
+        address_in_region(addr, width, 0x1000_0000, 0x1000_0080)
     }
 
     /// True if address (and width) is fully in main memory
     fn in_main_memory(&self, addr: u32, width: u32) -> bool {
-        address_in_region(addr, width, 0x0002_0000, 0x0002_0000 + self.ram_size)
+        address_in_region(addr, width, 0x2000_0000, 0x2000_0000 + self.ram_size)
     }
 }
 
