@@ -52,7 +52,6 @@ use riscvemu::trace_file::elf_to_trace_file;
 ///
 /// Trace points do not need to be listed in cycle order, but they
 /// will be checked in cycle order during emulation.
-
 ///
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
