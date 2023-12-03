@@ -21,7 +21,7 @@ LDFLAGS=-march=$(ISA) -mabi=ilp32
 # define __global_pointer$, but it can be zero)
 main.out: main.c trap.c startup.o newlib.c linker.ld Makefile
 	$(CC) $(CFLAGS) -T linker.ld -flto -Os -Wall -Wextra \
-		-Wl,--no-relax -ffreestanding main.c newlib.c -o $@
+		-ffreestanding main.c newlib.c -o $@
 
 startup.o: startup.S Makefile
 	$(CC) $(CFLAGS) -c $< -o startup.o

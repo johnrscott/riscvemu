@@ -7,7 +7,17 @@ SECTIONS {
 	 . = 0x20000000;
 	 PROVIDE(__bss_start = .);
 	 .bss : { *(.bss) }
-	 .data : { *(.data) }
+
+	 .data : {
+	 	 /*
+	 	 See https://gnu-mcu-eclipse.github.io/arch/riscv/programmer/ 
+	 	 for the meaning of __global_pointer$.
+	 	 */
+	 	 PROVIDE( __global_pointer$ = . + (4K / 2) );
+	 	 *(.sdata .sdata.*)
+
+		 *(.data)
+	 }
 
 	 /*
 	 See https://sourceware.org/newlib/ for the
@@ -16,5 +26,4 @@ SECTIONS {
 	 */
 	 . = . + 1M;
 	 PROVIDE(_end = .);	
-	 PROVIDE(__global_pointer$ = 0);
 }
