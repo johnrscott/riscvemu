@@ -1,6 +1,7 @@
 use clap::Parser;
 use clap_num::maybe_hex;
 use riscvemu::platform::eei::Eei;
+use riscvemu::platform::memory::Wordsize;
 use riscvemu::{elf_utils::load_elf, platform::Platform};
 use std::io::{Read, Write};
 use std::sync::mpsc;
@@ -34,6 +35,12 @@ struct Args {
     /// for hexadecimal)
     #[arg(short, long, value_parser=maybe_hex::<u64>)]
     cycle_breakpoint: Option<u64>,
+
+    /// Print the 8-word memory region starting from this address
+    /// along with debugging
+    #[arg(short, long, value_parser=maybe_hex::<u32>)]
+    memory: Option<u32>,
+
 }
 
 fn press_enter_to_continue() {
@@ -45,6 +52,14 @@ fn press_enter_to_continue() {
 
     // Read a single byte and discard
     let _ = stdin.read(&mut [0u8]).unwrap();
+}
+
+fn print_memory(platform: &Platform, base: u32) {
+    for n in 0..8 {
+	let addr = base + 4*n;
+	let word = platform.load(addr, Wordsize::Word).unwrap();
+	println!("{addr:x}: {word:x}");
+    }
 }
 
 fn main() {
@@ -72,6 +87,11 @@ fn main() {
                         platform.mcycle()
                     );
 		    return;
+		}
+
+		if let Some(base) = args.memory {
+		    println!("Memory:");
+		    print_memory(&platform, base)
 		}
 		
 		press_enter_to_continue();
@@ -102,8 +122,16 @@ fn main() {
 		    return;
 		}
 
+
+		
                 if step {
-                    press_enter_to_continue();
+
+		    if let Some(base) = args.memory {
+			println!("Memory:");
+			print_memory(&platform, base)
+		    }
+
+		    press_enter_to_continue();
                 }
             }
         }
