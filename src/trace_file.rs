@@ -6,7 +6,7 @@ use crate::platform::arch::{
 use crate::platform::{Instr, Platform};
 use crate::utils::mask;
 use itertools::{Itertools, PeekingNext};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader, LineWriter};
 use thiserror::Error;
@@ -85,17 +85,17 @@ fn get_trace_key_value_tuple(
         })?;
         Ok(Property::Pc(pc))
     } else if key.starts_with("x") {
-	// Remove first character and interpret number as register
-	// index
-	let mut chars = key.chars();
-	chars.next();
+        // Remove first character and interpret number as register
+        // index
+        let mut chars = key.chars();
+        chars.next();
         let reg_index_string: String = chars.collect();
-	let index: u8 = reg_index_string.parse().map_err(|_| {
+        let index: u8 = reg_index_string.parse().map_err(|_| {
             TraceFileError::ParseTraceSectionFailed(value.to_string())
-	})?;
-	let value: u32 = value.parse().map_err(|_| {
+        })?;
+        let value: u32 = value.parse().map_err(|_| {
             TraceFileError::ParseTraceSectionFailed(value.to_string())
-	})?;
+        })?;
         Ok(Property::Reg { index, value })
     } else if key == "uart" {
         // Remove first and last quotes/speech marks characters

@@ -1,10 +1,9 @@
-use std::collections::HashMap;
 use std::io;
 
 use elf::abi::{
-    SHF_ALLOC, SHN_COMMON, SHN_UNDEF, STB_GLOBAL, STB_HIPROC, STB_LOCAL,
-    STB_LOPROC, STB_WEAK, STT_FILE, STT_FUNC, STT_HIPROC, STT_LOPROC,
-    STT_NOTYPE, STT_OBJECT, STT_SECTION, SHF_WRITE,
+    SHF_ALLOC, SHF_WRITE, SHN_COMMON, SHN_UNDEF, STB_GLOBAL, STB_HIPROC,
+    STB_LOCAL, STB_LOPROC, STB_WEAK, STT_FILE, STT_FUNC, STT_HIPROC,
+    STT_LOPROC, STT_NOTYPE, STT_OBJECT, STT_SECTION,
 };
 use elf::endian::AnyEndian;
 use elf::section::{SectionHeader, SectionHeaderTable};
@@ -282,7 +281,6 @@ impl ElfFile {
     /// are ignored).
     fn symbols(&self) -> Result<Vec<FullSymbol>, ElfError> {
         let symtab = self.symbol_table()?;
-        let strtab = self.string_table()?;
 
         let mut symbols = Vec::new();
         for entry in symtab.iter() {
@@ -325,9 +323,9 @@ pub fn load_elf<L: ElfLoadable>(
 
     for header in section_headers.iter() {
         // We are looking for executable sections to load into memory.
-	// For now, ignore the bss section (currently identified as
-	// anything that is writable, but this is probably not quite
-	// right). 
+        // For now, ignore the bss section (currently identified as
+        // anything that is writable, but this is probably not quite
+        // right).
         let flags = header.sh_flags;
         if alloc(flags) && !write(flags) {
             let data = elf_file.section_data(&header)?;

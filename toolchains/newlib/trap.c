@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "interrupts.h" 
+#include "interrupts.h"
 
 void _nmi_handler() {
     printf("nmi");

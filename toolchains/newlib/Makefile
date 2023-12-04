@@ -2,8 +2,8 @@ ISA=rv32imzicsr
 
 # See NOTES.md on installing this compiler
 CC=riscv64-unknown-elf-gcc
-CFLAGS=-march=$(ISA) -mabi=ilp32
-LDFLAGS=-march=$(ISA) -mabi=ilp32
+CFLAGS=-Wall -Wextra -O2 -march=$(ISA) -mabi=ilp32
+LDFLAGS=-Wall -Wextra -O2 -march=$(ISA) -mabi=ilp32
 
 # Note startup.o is added by the linker.ld script.  -ffreestanding
 # enables the C freestanding (i.e. not hosted in an OS) environment,
@@ -19,17 +19,15 @@ LDFLAGS=-march=$(ISA) -mabi=ilp32
 # description of the global pointer, which enables a memory
 # optimisation. Pass -Wl,--no-relax to disable it (you still need to
 # define __global_pointer$, but it can be zero)
-main.out: main.c trap.c startup.o newlib.c linker.ld Makefile
-	$(CC) $(CFLAGS) -T linker.ld -flto -Os -Wall -Wextra \
-		-ffreestanding main.c newlib.c -o $@
+main.out: linker.ld main.o interrupts.o init_data.c trap.o vector.o newlib.o
+	$(CC) $(LDFLAGS) -T $^ -o $@
 
-startup.o: startup.S Makefile
-	$(CC) $(CFLAGS) -c $< -o startup.o
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
-interrupts.o: interrupts.S Makefile
-	$(CC) $(CFLAGS) -c $< -o interrupts.o
+%.o: %.S
+	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean
-
 clean:
 	rm -rf *.o main.out

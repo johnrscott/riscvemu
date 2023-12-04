@@ -8,7 +8,7 @@ use std::{io, thread};
 
 /// Emulate a 32-bit RISC-V processor
 ///
-/// 
+///
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
 struct Args {
@@ -19,20 +19,27 @@ struct Args {
     #[arg(short, long)]
     debug: bool,
 
+    /// If an exception is encountered, print the exception along with
+    /// the program counter and mcycle of the instruction causing the
+    /// exception
+    #[arg(short, long)]
+    exceptions_are_errors: bool,
+
     /// Break on program counter match and begin debug stepping (use
     /// 0x prefix for hexadecimal)
     #[arg(short, long, value_parser=maybe_hex::<u32>)]
-    breakpoint: Option<u32>,
-    
-    /// The number of clock cycles to be emulated
-    #[arg(short, long, default_value_t = 1_000_000)]
-    cycles: usize,
+    pc_breakpoint: Option<u32>,
+
+    /// Break on mcycle match and begin debug stepping (use 0x prefix
+    /// for hexadecimal)
+    #[arg(short, long, value_parser=maybe_hex::<u64>)]
+    cycle_breakpoint: Option<u64>,
 }
 
 fn press_enter_to_continue() {
     let mut stdin = io::stdin();
     let mut stdout = io::stdout();
-    
+
     write!(stdout, "Press enter to continue...").unwrap();
     stdout.flush().unwrap();
 
@@ -41,73 +48,109 @@ fn press_enter_to_continue() {
 }
 
 fn main() {
-
     let args = Args::parse();
-    
-    if args.debug || args.breakpoint.is_some() {
 
+    if args.debug
+        || args.pc_breakpoint.is_some()
+        || args.cycle_breakpoint.is_some()
+    {
         let mut platform = Platform::new();
+        platform.set_exceptions_are_errors(args.exceptions_are_errors);
 
         // Open an executable file
         let elf_name = args.input.to_string();
         load_elf(&mut platform, &elf_name).unwrap();
-	
-	if args.debug {
+
+        if args.debug {
             platform.set_trace(true);
             loop {
-		platform.step();
+
+                if let Err(ex) = platform.step() {
+                    println!(
+                        "Got exception {ex:?} at pc=0x{:x}, mcycle={}",
+                        platform.pc(),
+                        platform.mcycle()
+                    );
+		    return;
+		}
+		
 		press_enter_to_continue();
             }
-	} else {
-	    let mut step = false;
+        } else {
+            let mut step = false;
             loop {
-		if platform.pc() == args.breakpoint.unwrap() {
-		    platform.set_trace(true);
-		    step = true;
-		}
-		platform.step();
-		if step {
-		    press_enter_to_continue();
-		}
-            }	    
-	}
-	
-    } else {
-	
-	let (uart_tx, uart_rx) = mpsc::channel();
+                if let Some(pc_breakpoint) = args.pc_breakpoint {
+                    if platform.pc() == pc_breakpoint {
+                        platform.set_trace(true);
+                        step = true;
+                    }
+                }
 
-	// Thread running the emulation
-	let emulator_handle = thread::spawn(move || {
+                if let Some(cycle_breakpoint) = args.cycle_breakpoint {
+                    if platform.mcycle() == cycle_breakpoint {
+                        platform.set_trace(true);
+                        step = true;
+                    }
+                }
+
+                if let Err(ex) = platform.step() {
+                    println!(
+                        "Got exception {ex:?} at pc=0x{:x}, mcycle={}",
+                        platform.pc(),
+                        platform.mcycle()
+                    );
+		    return;
+		}
+
+                if step {
+                    press_enter_to_continue();
+                }
+            }
+        }
+    } else {
+        let (uart_tx, uart_rx) = mpsc::channel();
+
+        // Thread running the emulation
+        let emulator_handle = thread::spawn(move || {
             let mut platform = Platform::new();
-            //platform.set_trace(true);
+            platform.set_exceptions_are_errors(args.exceptions_are_errors);
 
             // Open an executable file
             let elf_name = args.input.to_string();
-	    
+
             if let Err(e) = load_elf(&mut platform, &elf_name) {
-		println!("Error loading elf: {e}");
-		return;
-	    }
+                println!("Error loading elf: {e}");
+                return;
+            }
 
             println!("Beginning execution\n");
             loop {
-		platform.step();
-		//press_enter_to_continue();
-		uart_tx.send(platform.flush_uartout()).unwrap();
-            }
-	});
 
-	// Thread for printing received UART stdout
-	let uart_host_handle = thread::spawn(move || loop {
-	    if let Ok(uart_rx) = uart_rx.recv() {
-		print!("{uart_rx}");
+		if let Err(ex) = platform.step() {
+                    println!(
+                        "Got exception {ex:?} at pc=0x{:x}, mcycle={}",
+                        platform.pc(),
+                        platform.mcycle()
+                    );
+		    return;
+		}
+
+		
+                uart_tx.send(platform.flush_uartout()).unwrap();
+            }
+        });
+
+        // Thread for printing received UART stdout
+        let uart_host_handle = thread::spawn(move || loop {
+            if let Ok(uart_rx) = uart_rx.recv() {
+                print!("{uart_rx}");
             } else {
-		println!("UART channel closed");
-		break;
+                println!("UART channel closed");
+                break;
             }
-	});
+        });
 
-	uart_host_handle.join().unwrap();
-	emulator_handle.join().unwrap();
+        uart_host_handle.join().unwrap();
+        emulator_handle.join().unwrap();
     }
 }

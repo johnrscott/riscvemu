@@ -86,6 +86,7 @@ pub struct Platform {
     decoder: Decoder<Instr<Platform>>,
     pc: u32,
     trace: bool,
+    exceptions_are_errors: bool,
     uart_out: Queue<char>,
 }
 
@@ -101,7 +102,7 @@ impl TraceCheck for Platform {
         } else {
             // Advance to required trace point
             while current < required {
-                self.step();
+                self.step().unwrap();
                 current = self.machine_interface.machine.mcycle();
             }
 
@@ -201,6 +202,14 @@ impl Platform {
         self.trace = trace;
     }
 
+    pub fn set_exceptions_are_errors(&mut self, exceptions_are_errors: bool) {
+        self.exceptions_are_errors = exceptions_are_errors;
+    }
+
+    pub fn mcycle(&self) -> u64 {
+        self.machine_interface.machine.mcycle()
+    }
+
     /// Print the program counter along with the memory region and any
     /// other information (like trap type)
     pub fn pretty_print_pc(&self) {
@@ -245,13 +254,14 @@ impl Platform {
 
     /// Execute an instruction based on the current state of the
     /// RISC-V core, and then increment cycle and time counters.
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> Result<(), Exception> {
         // To perform a single step, first call execute() and then call
         // execute(). This ensures that the first execution occurs when
         // mcycle=0 and mtime=0 (otherwise, the first instruction would
         // execute when mcycle=1 and mtime=1).
-        self.execute();
+        let maybe_exception = self.execute();
         self.increment_clock();
+        maybe_exception
     }
 
     /// Increment clock and time
@@ -281,7 +291,7 @@ impl Platform {
     /// * execute the instruction that was fetched (can raise exception)
     /// * increment minstret (i.e. only if instruction was completed)
     ///
-    pub fn execute(&mut self) {
+    pub fn execute(&mut self) -> Result<(), Exception> {
         if self.trace {
             println!("\nBegin clock step ---");
             println!(
@@ -316,7 +326,7 @@ impl Platform {
                 println!("Got interrupt: setting pc=0x{interrupt_pc:x}",)
             }
             self.pc = interrupt_pc;
-            return;
+            return Ok(());
         }
 
         // Fetch the instruction at the current pc.
@@ -328,12 +338,7 @@ impl Platform {
                 }
 
                 // On exception during exception fetch, raise it and return
-                self.pc = self
-                    .machine_interface
-                    .machine
-                    .trap_ctrl
-                    .raise_exception(self.pc, ex);
-                return;
+                return self.raise_exception(ex);
             }
         };
 
@@ -354,12 +359,7 @@ impl Platform {
 
                 // If instruction is not decoded successfully, return
                 // illegal instruction
-                self.pc = self
-                    .machine_interface
-                    .machine
-                    .trap_ctrl
-                    .raise_exception(self.pc, Exception::IllegalInstruction);
-                return;
+                return self.raise_exception(Exception::IllegalInstruction);
             }
         };
 
@@ -374,17 +374,33 @@ impl Platform {
             }
 
             // If an exception occurred, raise it and return
-            self.pc = self
-                .machine_interface
-                .machine
-                .trap_ctrl
-                .raise_exception(self.pc, ex);
-            return;
+            return self.raise_exception(ex);
         }
 
         // If instruction completed successfully, increment count
         // of retired instructions
         self.machine_interface.machine.increment_minstret();
+
+        Ok(())
+    }
+
+    /// Raise an exception. If exceptions are treated as errors, then
+    /// return the exception as an Err variant, without modifying the
+    /// state of the platform (so that the program counter still
+    /// points to the instruction causing the exception). If
+    /// exceptions are not treated as errors, jump to the exception
+    /// vector and return Ok.
+    fn raise_exception(&mut self, ex: Exception) -> Result<(), Exception> {
+        if self.exceptions_are_errors {
+            Err(ex)
+        } else {
+            self.pc = self
+		.machine_interface
+		.machine
+		.trap_ctrl
+		.raise_exception(self.pc, ex);
+	    Ok(())
+        }
     }
 
     fn fetch_instruction(&self) -> Result<u32, Exception> {
@@ -1667,7 +1683,7 @@ mod tests {
                     platform.check_trace_point(trace_point).unwrap()
                 }
             }
-        }
+        };
     }
 
     make_trace_test!(check_reset_trace, "reset.trace");
