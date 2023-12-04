@@ -2,6 +2,8 @@ use clap::Parser;
 use clap_num::maybe_hex;
 use riscvemu::platform::eei::Eei;
 use riscvemu::{elf_utils::load_elf, platform::Platform};
+use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
 use std::io::{Read, Write};
 use std::sync::mpsc;
 use std::{io, thread};
@@ -50,6 +52,33 @@ fn press_enter_to_continue() {
 fn main() {
     let args = Args::parse();
 
+    // `()` can be used when no completer is required
+    let mut rl = DefaultEditor::new().unwrap();
+    
+    loop {
+        let readline = rl.readline("(db) ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(line.as_str());
+                println!("Line: {}", line);
+            }
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                break
+            }
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                break
+            },
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break
+            }
+        }
+    }
+    
+    /*
+    
     if args.debug
         || args.pc_breakpoint.is_some()
         || args.cycle_breakpoint.is_some()
@@ -153,4 +182,5 @@ fn main() {
         uart_host_handle.join().unwrap();
         emulator_handle.join().unwrap();
     }
+*/
 }
