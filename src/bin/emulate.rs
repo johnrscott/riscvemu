@@ -40,7 +40,6 @@ struct Args {
     /// along with debugging
     #[arg(short, long, value_parser=maybe_hex::<u32>)]
     memory: Option<u32>,
-
 }
 
 fn press_enter_to_continue() {
@@ -56,9 +55,9 @@ fn press_enter_to_continue() {
 
 fn print_memory(platform: &Platform, base: u32) {
     for n in 0..8 {
-	let addr = base + 4*n;
-	let word = platform.load(addr, Wordsize::Word).unwrap();
-	println!("{addr:x}: {word:x}");
+        let addr = base + 4 * n;
+        let word = platform.load(addr, Wordsize::Word).unwrap();
+        println!("{addr:x}: {word:x}");
     }
 }
 
@@ -79,22 +78,21 @@ fn main() {
         if args.debug {
             platform.set_trace(true);
             loop {
-
                 if let Err(ex) = platform.step() {
                     println!(
                         "Got exception {ex:?} at pc=0x{:x}, mcycle={}",
                         platform.pc(),
                         platform.mcycle()
                     );
-		    return;
-		}
+                    return;
+                }
 
-		if let Some(base) = args.memory {
-		    println!("Memory:");
-		    print_memory(&platform, base)
-		}
-		
-		press_enter_to_continue();
+                if let Some(base) = args.memory {
+                    println!("Memory:");
+                    print_memory(&platform, base)
+                }
+
+                press_enter_to_continue();
             }
         } else {
             let mut step = false;
@@ -119,19 +117,16 @@ fn main() {
                         platform.pc(),
                         platform.mcycle()
                     );
-		    return;
-		}
+                    return;
+                }
 
-
-		
                 if step {
+                    if let Some(base) = args.memory {
+                        println!("Memory:");
+                        print_memory(&platform, base)
+                    }
 
-		    if let Some(base) = args.memory {
-			println!("Memory:");
-			print_memory(&platform, base)
-		    }
-
-		    press_enter_to_continue();
+                    press_enter_to_continue();
                 }
             }
         }
@@ -153,17 +148,15 @@ fn main() {
 
             println!("Beginning execution\n");
             loop {
-
-		if let Err(ex) = platform.step() {
+                if let Err(ex) = platform.step() {
                     println!(
                         "Got exception {ex:?} at pc=0x{:x}, mcycle={}",
                         platform.pc(),
                         platform.mcycle()
                     );
-		    return;
-		}
+                    return;
+                }
 
-		
                 uart_tx.send(platform.flush_uartout()).unwrap();
             }
         });

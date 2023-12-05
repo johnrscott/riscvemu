@@ -4,7 +4,7 @@
 
 int main() {
 
-    iprintf("Hello\n");
+    iprintf("Hello world\n");
     while (1)
 	;
 }

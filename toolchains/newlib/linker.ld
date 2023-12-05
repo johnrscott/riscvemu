@@ -20,6 +20,16 @@ MEMORY
 
 STACK_SIZE = 0x2000;
 
+/*
+Note that you cannot assume the .data section will be placed at the
+end of .text section directly after .rodata*. For example, the section
+.srodata.cst8 appeared before .data, meaning that starting copying
+initialised data from the end of the text section is an
+error. Instead, LOADADDR is used to identify the LMA of the .data
+section, which provides a reliable way to identify the load address.
+*/
+_data_load_address = LOADADDR(.data);
+
 SECTIONS
 {
     /* top of stack is at the end of RAM */
@@ -30,19 +40,7 @@ SECTIONS
         KEEP(*(.vectors .vectors.*))
         *(.text*)
         *(.rodata*)
-	/*
-	Note that _etext marks the end of instructions and read-only
-	data, and so marks the start of the initialised data section
-	(which is stored in the eeprom section below). To initialise
-	data, copy the block starting at _etext to the region
-	[_sdata, _edata) (taking the size from that block). Aligned
-	to ensure that _etext really is the start of the initialised
-	data (and padding is not added by the linker)
-	*/
-	. = ALIGN(16);
-	_etext = .;
     } > eeprom
-
 
     .data :
     {
@@ -62,10 +60,18 @@ SECTIONS
     .bss (NOLOAD):
     {
 	__bss_start = .;
-        *(.bss*)
-	_end = .;
+	/* 
+	This feels like a hack -- needed to add in .sbss here because
+	the linker was outputting it as a separate section, which was
+	messing up _end. Really want a robust way to identify the end
+	of _all_ uninitialised data sections.
+	*/
+        *(.bss* .sbss*)
         *(COMMON)
+	_end = .;
     } > ram
+
+
 
     /* stack section */
     /*

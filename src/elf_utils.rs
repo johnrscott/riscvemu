@@ -7,6 +7,7 @@ use elf::abi::{
 };
 use elf::endian::AnyEndian;
 use elf::section::{SectionHeader, SectionHeaderTable};
+use elf::segment::{ProgramHeader, SegmentTable};
 use elf::string_table::StringTable;
 use elf::symbol::{Symbol, SymbolTable};
 use elf::{ElfBytes, ParseError};
@@ -33,6 +34,8 @@ pub enum ElfError {
     InvalidSymbolInfoBind(u8),
     #[error("st_type value has invalid value {0}")]
     InvalidSymbolInfoType(u8),
+    #[error("missing program segment table")]
+    MissingSegmentTable,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -267,6 +270,22 @@ impl ElfFile {
         Ok(section_header_table)
     }
 
+    fn segments(&self) -> Result<SegmentTable<AnyEndian>, ElfError> {
+        let elf_bytes = self.elf_bytes()?;
+        if let Some(segment_table) = elf_bytes.segments() {
+            Ok(segment_table)
+        } else {
+            Err(ElfError::MissingSegmentTable)
+        }
+    }
+
+    /// Get the data in the section corresponding to a program header
+    fn segment_data(&self, header: &ProgramHeader) -> Result<&[u8], ElfError> {
+        let elf_bytes = self.elf_bytes()?;
+        let data = elf_bytes.segment_data(header);
+        data.map_err(|e| ElfError::ParseError(e.to_string()))
+    }
+
     /// Get the data in the section corresponding to a section header
     fn section_data(&self, header: &SectionHeader) -> Result<&[u8], ElfError> {
         let elf_bytes = self.elf_bytes()?;
@@ -319,24 +338,16 @@ pub fn load_elf<L: ElfLoadable>(
     elf_file_path: &String,
 ) -> Result<(), ElfError> {
     let elf_file = ElfFile::from_file(elf_file_path)?;
-    let section_headers = elf_file.section_header_table()?;
+    let segments = elf_file.segments()?;
 
-    for header in section_headers.iter() {
-        // We are looking for executable sections to load into memory.
-        // For now, ignore the bss section (currently identified as
-        // anything that is writable, but this is probably not quite
-        // right).
-        let flags = header.sh_flags;
-        if alloc(flags) && !write(flags) {
-            let data = elf_file.section_data(&header)?;
-            let section_load_address = header.sh_addr;
+    for program_header in segments.iter() {
+        let data = elf_file.segment_data(&program_header)?;
+        let section_load_address = program_header.p_paddr;
+        println!("{:x?}", program_header);
 
-            for (offset, byte) in data.iter().enumerate() {
-                let addr =
-                    section_load_address + u64::try_from(offset).unwrap();
-                loadable
-                    .write_byte(addr.try_into().unwrap(), (*byte).into())?;
-            }
+        for (offset, byte) in data.iter().enumerate() {
+            let addr = section_load_address + u64::try_from(offset).unwrap();
+            loadable.write_byte(addr.try_into().unwrap(), (*byte).into())?;
         }
     }
 

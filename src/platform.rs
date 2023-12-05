@@ -395,11 +395,11 @@ impl Platform {
             Err(ex)
         } else {
             self.pc = self
-		.machine_interface
-		.machine
-		.trap_ctrl
-		.raise_exception(self.pc, ex);
-	    Ok(())
+                .machine_interface
+                .machine
+                .trap_ctrl
+                .raise_exception(self.pc, ex);
+            Ok(())
         }
     }
 
