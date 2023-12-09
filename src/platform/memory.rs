@@ -52,7 +52,6 @@ pub enum Xlen {
 pub struct Memory {
     xlen: Xlen,
     data: HashMap<u64, u8>,
-    stdout: Queue<char>,
 }
 
 #[derive(Error, PartialEq, Eq, Debug)]
@@ -105,24 +104,9 @@ impl Memory {
         }
     }
 
-    /// Return the current contents of the stdout buffer as a
-    /// and also delete the contents of the buffer
-    pub fn flush_stdout(&mut self) -> String {
-        let mut stdout = String::new();
-        while let Ok(ch) = self.stdout.remove() {
-            stdout.push(ch);
-        }
-        stdout
-    }
-
     fn write_byte(&mut self, addr: u64, value: u8, xlen: Xlen) {
         let addr = wrap_address(addr, xlen);
-        // Char output device
-        if addr == 0x3f8 {
-            self.stdout
-                .add(value as char)
-                .expect("insert into queue should work");
-        } else if value == 0 {
+        if value == 0 {
             self.data.remove(&addr);
         } else {
             self.data.insert(addr, value);
