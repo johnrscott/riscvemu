@@ -3,7 +3,7 @@ use std::io;
 use elf::abi::{
     SHF_ALLOC, SHF_WRITE, SHN_COMMON, SHN_UNDEF, STB_GLOBAL, STB_HIPROC,
     STB_LOCAL, STB_LOPROC, STB_WEAK, STT_FILE, STT_FUNC, STT_HIPROC,
-    STT_LOPROC, STT_NOTYPE, STT_OBJECT, STT_SECTION,
+    STT_LOPROC, STT_NOTYPE, STT_OBJECT, STT_SECTION, PT_LOAD,
 };
 use elf::endian::AnyEndian;
 use elf::section::{SectionHeader, SectionHeaderTable};
@@ -343,15 +343,15 @@ pub fn load_elf<L: ElfLoadable>(
     for program_header in segments.iter() {
         let data = elf_file.segment_data(&program_header)?;
         let section_load_address = program_header.p_paddr;
-        println!("{:x?}", program_header);
 
-        for (offset, byte) in data.iter().enumerate() {
-            let addr = section_load_address + u64::try_from(offset).unwrap();
-            loadable.write_byte(addr.try_into().unwrap(), (*byte).into())?;
-	    println!("{addr:x},{byte:x}");
-        }
+	if program_header.p_type == PT_LOAD {
+            for (offset, byte) in data.iter().enumerate() {
+		let addr = section_load_address + u64::try_from(offset).unwrap();
+		loadable.write_byte(addr.try_into().unwrap(), (*byte).into())?;
+            }
+	}
     }
-
+	
     loadable.load_symbols(elf_file.symbols()?);
     Ok(())
 }
