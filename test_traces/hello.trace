@@ -1,3 +1,17 @@
+# Hello world program using newlib printf
+#
+# Generated from toolchains/newlib/main.c at commit 20c5b9e14
+#
+# Should print "Hello world\n" and be finished executing (i.e.
+# looping in _exit) by mcycle=3000. Main looks like this:
+#
+# #include <stdio.h>
+#
+# int main() {
+#     printf("Hello world\n");
+# }
+#
+
 .eeprom
 00000000  21c0006f  # jal x0, 0x21c
 00000004  1640006f  # jal x0, 0x164
@@ -18155,6 +18169,8 @@
 
 .trace.3000
 
+# Check stdout
 uart "Hello world\n"
 
+# Check the program gets to the end of _exit
 pc 0xb9dc
