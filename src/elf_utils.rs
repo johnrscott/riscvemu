@@ -348,6 +348,7 @@ pub fn load_elf<L: ElfLoadable>(
         for (offset, byte) in data.iter().enumerate() {
             let addr = section_load_address + u64::try_from(offset).unwrap();
             loadable.write_byte(addr.try_into().unwrap(), (*byte).into())?;
+	    println!("{addr:x},{byte:x}");
         }
     }
 

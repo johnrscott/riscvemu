@@ -72,6 +72,15 @@ fn get_addr_instr_tuple(non_comment_line: String) -> (u32, u32) {
     (addr, instr)
 }
 
+fn parse_dec_or_hex(value: &str) -> Result<u32, TraceFileError> {
+    if value.len() > 2 && &value[0..2] == "0x" {
+	// Value is hexadecimal
+	u32::from_str_radix(&value[2..], 16)
+    } else {
+	value.parse()
+    }.map_err(|_| TraceFileError::ParseTraceSectionFailed(value.to_string()))
+}
+
 fn get_trace_key_value_tuple(
     non_comment_line: String,
 ) -> Result<Property, TraceFileError> {
@@ -80,9 +89,7 @@ fn get_trace_key_value_tuple(
     )?;
     let value = value.trim();
     if key == "pc" {
-        let pc: u32 = value.parse().map_err(|_| {
-            TraceFileError::ParseTraceSectionFailed(value.to_string())
-        })?;
+        let pc = parse_dec_or_hex(value)?;
         Ok(Property::Pc(pc))
     } else if key.starts_with("x") {
         // Remove first character and interpret number as register
@@ -93,9 +100,7 @@ fn get_trace_key_value_tuple(
         let index: u8 = reg_index_string.parse().map_err(|_| {
             TraceFileError::ParseTraceSectionFailed(value.to_string())
         })?;
-        let value: u32 = value.parse().map_err(|_| {
-            TraceFileError::ParseTraceSectionFailed(value.to_string())
-        })?;
+        let value = parse_dec_or_hex(value)?;
         Ok(Property::Reg { index, value })
     } else if key == "uart" {
         // Remove first and last quotes/speech marks characters
@@ -194,8 +199,9 @@ impl ElfLoadable for Section {
         match self {
             Section::Eeprom { section_data, .. } => {
                 let instr_part = u32::from(data) << 8 * offset;
+		let mask = !(mask(8) << 8*offset);
                 if let Some(instr) = section_data.get_mut(&aligned_addr) {
-                    *instr |= instr_part;
+                    *instr = (mask & *instr) | instr_part;
                 } else {
                     section_data.insert(aligned_addr, instr_part);
                 }

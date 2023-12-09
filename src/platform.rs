@@ -1689,5 +1689,6 @@ mod tests {
     }
 
     make_trace_test!(check_reset_trace, "reset.trace");
+    make_trace_test!(check_hello_trace, "hello.trace");
 
 }

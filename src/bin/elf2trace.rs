@@ -48,6 +48,7 @@ use riscvemu::trace_file::elf_to_trace_file;
 ///
 /// Strings may contains standard ASCII escape characters. The list
 /// of supported escape sequences is as follows:
+///
 /// * \n: newline character
 ///
 /// Trace points do not need to be listed in cycle order, but they
