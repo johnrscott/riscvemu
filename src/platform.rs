@@ -1016,11 +1016,11 @@ mod tests {
 
     #[test]
     fn check_lb() -> Result<(), &'static str> {
+	const TEST_ADDR: u32 = 0x2000_0010; // Ensure in main memory
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, lb!(x1, x2, 16));
-        platform.set_x(2, 0x0002_0000);
-        let addr = 0x0002_0010; // Ensure in main memory
-        platform.store(addr, 0xff, Wordsize::Byte).unwrap();
+        platform.set_x(2, TEST_ADDR - 0x10);
+        platform.store(TEST_ADDR, 0xff, Wordsize::Byte).unwrap();
         platform.step();
         //assert_eq!(platform.pc(), 4);
         assert_eq!(platform.x(1), 0xffff_ffff);
@@ -1029,11 +1029,11 @@ mod tests {
 
     #[test]
     fn check_lbu() -> Result<(), &'static str> {
+	const TEST_ADDR: u32 = 0x2000_0010; // Ensure in main memory
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, lbu!(x1, x2, 16));
-        platform.set_x(2, 0x0002_0000);
-        let addr = 0x0002_0010; // Ensure in main memory
-        platform.store(addr, 0xff, Wordsize::Byte).unwrap();
+        platform.set_x(2, TEST_ADDR - 0x10);
+        platform.store(TEST_ADDR, 0xff, Wordsize::Byte).unwrap();
         platform.step();
         assert_eq!(platform.pc(), 4);
         assert_eq!(platform.x(1), 0x0000_00ff);
@@ -1042,11 +1042,11 @@ mod tests {
 
     #[test]
     fn check_lh() -> Result<(), &'static str> {
+	const TEST_ADDR: u32 = 0x2000_0010; // Ensure in main memory
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, lh!(x1, x2, 16));
-        platform.set_x(2, 0x0002_0000);
-        let addr = 0x0002_0010; // Ensure in main memory
-        platform.store(addr, 0xff92, Wordsize::Halfword).unwrap();
+        platform.set_x(2, TEST_ADDR - 0x10);
+        platform.store(TEST_ADDR, 0xff92, Wordsize::Halfword).unwrap();
         platform.step();
         assert_eq!(platform.pc, 4);
         assert_eq!(platform.x(1), 0xffff_ff92);
@@ -1055,11 +1055,11 @@ mod tests {
 
     #[test]
     fn check_lhu() -> Result<(), &'static str> {
+	const TEST_ADDR: u32 = 0x2000_0010; // Ensure in main memory
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, lhu!(x1, x2, 16));
-        platform.set_x(2, 0x0002_0000);
-        let addr = 0x0002_0010; // Ensure in main memory
-        platform.store(addr, 0xff92, Wordsize::Halfword).unwrap();
+        platform.set_x(2, TEST_ADDR - 0x10);
+        platform.store(TEST_ADDR, 0xff92, Wordsize::Halfword).unwrap();
         platform.step();
         assert_eq!(platform.pc, 4);
         assert_eq!(platform.x(1), 0x0000_ff92);
@@ -1068,11 +1068,11 @@ mod tests {
 
     #[test]
     fn check_lw() -> Result<(), &'static str> {
+	const TEST_ADDR: u32 = 0x2000_0010; // Ensure in main memory
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, lw!(x1, x2, 16));
-        platform.set_x(2, 0x0002_0000);
-        let addr = 0x0002_0010; // Ensure in main memory
-        platform.store(addr, 0x1234_ff92, Wordsize::Word).unwrap();
+        platform.set_x(2, TEST_ADDR - 0x10);
+        platform.store(TEST_ADDR, 0x1234_ff92, Wordsize::Word).unwrap();
         platform.step();
         assert_eq!(platform.pc, 4);
         assert_eq!(platform.x(1), 0x1234_ff92);
@@ -1081,40 +1081,40 @@ mod tests {
 
     #[test]
     fn check_sb() -> Result<(), &'static str> {
+	const TEST_ADDR: u32 = 0x2000_0010; // Ensure in main memory
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, sb!(x1, x2, 16));
         platform.set_x(1, 0xfe);
-        platform.set_x(2, 0x0002_0000);
+        platform.set_x(2, TEST_ADDR - 0x10);
         platform.step();
         assert_eq!(platform.pc, 4);
-        let addr = 0x0002_0010; // Ensure in main memory
-        assert_eq!(platform.load(addr, Wordsize::Byte).unwrap(), 0xfe);
+        assert_eq!(platform.load(TEST_ADDR, Wordsize::Byte).unwrap(), 0xfe);
         Ok(())
     }
 
     #[test]
     fn check_sh() -> Result<(), &'static str> {
+	const TEST_ADDR: u32 = 0x2000_0010; // Ensure in main memory
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, sh!(x1, x2, 16));
         platform.set_x(1, 0xabfe);
-        platform.set_x(2, 0x0002_0000);
+        platform.set_x(2, TEST_ADDR - 0x10);
         platform.step();
         assert_eq!(platform.pc, 4);
-        let addr = 0x0002_0010; // Ensure in main memory
-        assert_eq!(platform.load(addr, Wordsize::Halfword).unwrap(), 0xabfe);
+        assert_eq!(platform.load(TEST_ADDR, Wordsize::Halfword).unwrap(), 0xabfe);
         Ok(())
     }
 
     #[test]
     fn check_sw() -> Result<(), &'static str> {
+	const TEST_ADDR: u32 = 0x2000_0000; // Ensure in main memory
         let mut platform = Platform::new();
         write_instr(&mut platform, 0, sw!(x1, x2, -16));
         platform.set_x(1, 0xabcd_ef12);
-        platform.set_x(2, 0x0002_0010);
+        platform.set_x(2, TEST_ADDR + 0x10);
         platform.step();
         assert_eq!(platform.pc, 4);
-        let addr = 0x0002_0000; // Ensure in main memory
-        assert_eq!(platform.load(addr, Wordsize::Word).unwrap(), 0xabcd_ef12);
+        assert_eq!(platform.load(TEST_ADDR, Wordsize::Word).unwrap(), 0xabcd_ef12);
         Ok(())
     }
 
