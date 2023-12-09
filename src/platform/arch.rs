@@ -15,7 +15,7 @@ use crate::{
         FUNCT7_SLLI, FUNCT7_SLT, FUNCT7_SLTU, FUNCT7_SRA, FUNCT7_SRAI,
         FUNCT7_SRL, FUNCT7_SRLI, FUNCT7_SUB, FUNCT7_XOR, OP, OP_AUIPC,
         OP_BRANCH, OP_IMM, OP_JAL, OP_JALR, OP_LOAD, OP_LUI, OP_STORE,
-        OP_SYSTEM,
+        OP_SYSTEM, FUNCT12_ECALL, FUNCT12_EBREAK,
     },
     utils::mask,
 };
@@ -301,5 +301,21 @@ pub fn make_rv32priv<E: Eei>(
         FUNCT3_PRIV,
         FUNCT12_MRET,
         mret(),
+    )?;
+
+    opcode_funct3_funct12_determined(
+        decoder,
+        OP_SYSTEM,
+        FUNCT3_PRIV,
+        FUNCT12_ECALL,
+        ecall(),
+    )?;
+
+    opcode_funct3_funct12_determined(
+        decoder,
+        OP_SYSTEM,
+        FUNCT3_PRIV,
+        FUNCT12_EBREAK,
+        ebreak()
     )
 }

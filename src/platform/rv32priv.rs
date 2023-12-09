@@ -14,3 +14,27 @@ pub fn mret<E: Eei>() -> Instr<E> {
 
     Instr { executer, printer }
 }
+
+pub fn ecall<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(_eei: &mut E, _instr: u32) -> Result<(), Exception> {
+        Err(Exception::MmodeEcall)
+    }
+
+    fn printer(_instr: u32) -> String {
+        "ecall".to_string()
+    }
+
+    Instr { executer, printer }
+}
+
+pub fn ebreak<E: Eei>() -> Instr<E> {
+    fn executer<E: Eei>(_eei: &mut E, _instr: u32) -> Result<(), Exception> {
+        Err(Exception::Breakpoint)
+    }
+
+    fn printer(_instr: u32) -> String {
+        "ebreak".to_string()
+    }
+
+    Instr { executer, printer }
+}

@@ -378,7 +378,9 @@ impl Platform {
         }
 
         // If instruction completed successfully, increment count
-        // of retired instructions
+        // of retired instructions. Instructions causing synchronous
+	// exceptions are not considered to be retired (see 3.3.1
+	// privileged spec).
         self.machine_interface.machine.increment_minstret();
 
         Ok(())
@@ -1687,4 +1689,5 @@ mod tests {
     }
 
     make_trace_test!(check_reset_trace, "reset.trace");
+
 }

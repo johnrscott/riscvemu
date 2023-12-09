@@ -409,8 +409,8 @@ impl TrapCtrl {
 
     /// Raise an exception
     ///
-    /// Unlike an interrupt, an exception occurs as a result of an
-    /// attempted action by an instruction, while the instruction is
+    /// Unlike an interrupt, an exception occurs as a result of some
+    /// attempted action by an instruction while the instruction is
     /// mid-execution. If an exceptional condition is detected, call
     /// this function to store the current program counter (of the
     /// instruction causing the exception) to mepc, set the mcause
