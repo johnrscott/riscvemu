@@ -2,8 +2,8 @@ ISA=rv32imzicsr
 
 # See NOTES.md on installing this compiler
 CC=riscv64-unknown-elf-gcc
-CFLAGS=-Wall -Wextra -O2 -march=$(ISA) -mabi=ilp32
-LDFLAGS=-Wall -Wextra -O2 -march=$(ISA) -mabi=ilp32
+CFLAGS=-Wall -Wextra -O2 -march=$(ISA) -mabi=ilp32 -g
+LDFLAGS=-Wall -Wextra -O2 -march=$(ISA) -mabi=ilp32 -g
 
 # Note startup.o is added by the linker.ld script.  -ffreestanding
 # enables the C freestanding (i.e. not hosted in an OS) environment,
