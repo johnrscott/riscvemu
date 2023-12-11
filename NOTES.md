@@ -23,12 +23,16 @@ cd riscv-gnu-toolchain
 sudo apt install autoconf automake autotools-dev curl python3 python3-pip libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev libexpat-dev ninja-build git cmake libglib2.0-dev
 ```
 
-Next, build the compiler for the integer instruction set with multiplication, division and atomics (no floating point), and without the compressed instructions. Use the `lp64` ABI:
+Next, build the compiler with newlib (the default C library) with debugging symbols including (the `-g` flag). Add `--enable-multilib` to build a compiler for both 32-bit and 64-bit RISC-V targets.
 
 ```bash
 mkdir -p $HOME/opt/
-./configure --prefix=$HOME/opt/ --with-arch=rv64imda --with-abi=lp64
-make -j32 linux
+./configure --prefix=$HOME/opt/riscv --enable-multilib CFLAGS=-g
+make -j32
 ```
 
-Make sure that `$HOME/opt/bin/` is in the path. The C compiler is called `riscv64-unknown-linux-gnu-gcc`.
+If you get errors like `error: RPC failed; curl 56 GnuTLS recv error (-54): Error in the pull function` while the `make` script is cloning repositories (like `gcc`, `binutils`, etc.), then wait and try again later (see  [here](https://github.com/riscv-collab/riscv-gnu-toolchain/issues/480)).
+
+Make sure that `$HOME/opt/riscv/bin/` is in the path.
+
+To uninstall the toolchain, run `rm -rf $HOME/opt/riscv`.
